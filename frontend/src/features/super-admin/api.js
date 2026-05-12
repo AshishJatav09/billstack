@@ -1,5 +1,6 @@
 import axios from "axios";
 import { superAdminStore } from "../../store/superAdminStore";
+import { uiStore } from "../../store/uiStore";
 
 const superAdminApi = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api",
@@ -14,6 +15,26 @@ superAdminApi.interceptors.request.use((config) => {
 
   return config;
 });
+
+superAdminApi.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      superAdminStore.getState().clearSession();
+      uiStore.getState().pushToast({
+        tone: "error",
+        title: "Super admin session expired",
+        message: "Please sign in again to continue.",
+      });
+
+      if (typeof window !== "undefined" && !window.location.pathname.includes("/super-admin/login")) {
+        window.location.assign("/super-admin/login");
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 export const superAdminLoginRequest = async (payload) => {
   const response = await superAdminApi.post("/super-admin/login", payload);

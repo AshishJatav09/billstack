@@ -107,6 +107,7 @@ const buildAuthPayload = async ({ user, business, accessToken }) => {
     name: user.name,
     email: user.email,
     role: user.role,
+    isActive: user.isActive,
     businessId: user.businessId,
   },
   business: serializeBusinessWithPlan(business, subscription),

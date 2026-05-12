@@ -4,7 +4,7 @@
   "description": "Backend API for BillStack",
   "main": "src/server.js",
   "scripts": {
-    "dev": "nodemon src/server.js",
+    "dev": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-local.ps1",
     "start": "node src/server.js",
     "seed": "node src/scripts/seed.js",
     "test": "node tests/run-tests.js"
@@ -32,8 +32,5 @@
     "nodemailer": "^6.10.1",
     "pdfmake": "^0.2.20",
     "razorpay": "^2.9.6"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.10"
   }
 }

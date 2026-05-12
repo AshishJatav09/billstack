@@ -7,23 +7,40 @@ const buildInvoiceTotals = ({
   const normalizedItems = lineItems.map((item) => {
     const quantity = Number(item.quantity || 0);
     const rate = Number(item.rate || 0);
-    const tax = Number(item.tax || 0);
-    const discount = Number(item.discount || 0);
-    const itemTotal = quantity * rate + tax - discount;
+    const lineBase = quantity * rate;
+    const taxRate = Number(item.taxRate || 0);
+    const discountType = item.discountType === "amount" ? "amount" : "percent";
+    const discountValue = Number(
+      item.discountValue !== undefined ? item.discountValue : item.discount || 0
+    );
+    const discountAmount =
+      discountType === "percent"
+        ? Math.min(lineBase, (lineBase * Math.max(discountValue, 0)) / 100)
+        : Math.min(lineBase, Math.max(discountValue, 0));
+    const taxableAmount = Math.max(lineBase - discountAmount, 0);
+    const taxAmount = (taxableAmount * Math.max(taxRate, 0)) / 100;
+    const itemTotal = taxableAmount + taxAmount;
 
     return {
       ...item,
       quantity,
       rate,
-      tax,
-      discount,
+      taxRate,
+      discountType,
+      discountValue,
+      lineBase,
+      discount: discountAmount,
+      discountAmount,
+      taxableAmount,
+      tax: taxAmount,
+      taxAmount,
       itemTotal,
     };
   });
 
-  const subtotal = normalizedItems.reduce((sum, item) => sum + item.quantity * item.rate, 0);
-  const totalTax = normalizedItems.reduce((sum, item) => sum + item.tax, 0);
-  const totalDiscount = normalizedItems.reduce((sum, item) => sum + item.discount, 0);
+  const subtotal = normalizedItems.reduce((sum, item) => sum + item.lineBase, 0);
+  const totalTax = normalizedItems.reduce((sum, item) => sum + item.taxAmount, 0);
+  const totalDiscount = normalizedItems.reduce((sum, item) => sum + item.discountAmount, 0);
   const normalizedShipping = Number(shippingCharges || 0);
   const normalizedRoundOff = Number(roundOff || 0);
   const grandTotal =
@@ -64,4 +81,3 @@ module.exports = {
   buildInvoiceNumber,
   buildInvoiceTotals,
 };
-

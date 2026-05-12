@@ -236,10 +236,10 @@ const BusinessSettingsPage = () => {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-brand-600 via-brand-700 to-slate-900 p-6 sm:p-8">
-        <p className="text-sm uppercase tracking-[0.3em] text-brand-100">Business Settings</p>
-        <h2 className="mt-3 text-3xl font-semibold text-white">Profile, billing defaults, and plan control</h2>
-        <p className="mt-3 max-w-3xl text-sm text-brand-100/90">
+      <section className="theme-hero rounded-[2rem] p-6 sm:p-8">
+        <p className="theme-hero-kicker text-sm uppercase tracking-[0.3em]">Business Settings</p>
+        <h2 className="theme-hero-title mt-3 text-3xl font-semibold">Profile, billing defaults, and plan control</h2>
+        <p className="theme-hero-copy mt-3 max-w-3xl text-sm">
           Only your current business is editable here. Owner and admin access is enforced on the
           backend, and plan guards decide which features open up across the product.
         </p>

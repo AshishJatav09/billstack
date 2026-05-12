@@ -5,7 +5,9 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 
 const { buildCorsOptions } = require("./config/cors");
+const { requestContext } = require("./middlewares/request-context.middleware");
 const { apiRateLimiter } = require("./middlewares/rate-limit.middleware");
+const { log } = require("./utils/logger");
 const authRoutes = require("./routes/auth.routes");
 const businessRoutes = require("./routes/business.routes");
 const customerRoutes = require("./routes/customer.routes");
@@ -19,11 +21,14 @@ const productRoutes = require("./routes/product.routes");
 const purchaseRoutes = require("./routes/purchase.routes");
 const reportRoutes = require("./routes/report.routes");
 const supplierRoutes = require("./routes/supplier.routes");
+const teamRoutes = require("./routes/team.routes");
 const superAdminRoutes = require("./routes/super-admin.routes");
 const { notFound, errorHandler } = require("./middlewares/error.middleware");
 
 const app = express();
 const jsonParser = express.json({ limit: "1mb" });
+
+morgan.token("requestId", (req) => req.requestId);
 
 app.use(
   helmet({
@@ -32,6 +37,7 @@ app.use(
 );
 app.use(cors(buildCorsOptions()));
 app.use(cookieParser());
+app.use(requestContext);
 app.use((req, res, next) => {
   if (req.originalUrl.startsWith("/api/billing/webhook")) {
     return next();
@@ -40,7 +46,13 @@ app.use((req, res, next) => {
   return jsonParser(req, res, next);
 });
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
-app.use(morgan("dev"));
+app.use(
+  morgan(":method :url :status :response-time ms req=:requestId", {
+    stream: {
+      write: (message) => log("info", message.trim()),
+    },
+  })
+);
 app.use("/uploads", express.static("uploads"));
 app.use("/api", apiRateLimiter);
 
@@ -56,6 +68,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/purchases", purchaseRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/suppliers", supplierRoutes);
+app.use("/api/team", teamRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/features", featureRoutes);
 

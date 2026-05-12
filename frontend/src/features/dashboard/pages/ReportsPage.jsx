@@ -42,10 +42,10 @@ const ReportsPage = () => {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-slate-900 via-slate-800 to-brand-900 p-6 sm:p-8">
-        <p className="text-sm uppercase tracking-[0.3em] text-brand-100">Reports</p>
-        <h2 className="mt-3 text-3xl font-semibold text-white">Sales, tax, inventory, payments, and profit reports</h2>
-        <p className="mt-3 max-w-3xl text-sm text-brand-100/90">
+      <section className="theme-hero rounded-[2rem] p-6 sm:p-8">
+        <p className="theme-hero-kicker text-sm uppercase tracking-[0.3em]">Reports</p>
+        <h2 className="theme-hero-title mt-3 text-3xl font-semibold">Sales, tax, inventory, payments, and profit reports</h2>
+        <p className="theme-hero-copy mt-3 max-w-3xl text-sm">
           This section is protected by the reports feature guard. All datasets are aggregated for the
           current business only.
         </p>
@@ -211,4 +211,3 @@ const ReportsPage = () => {
 };
 
 export default ReportsPage;
-

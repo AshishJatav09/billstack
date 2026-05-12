@@ -1,4 +1,5 @@
 const isEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+const { ROLES } = require("../constants/roles");
 
 const customerCreateValidator = (body) => {
   const errors = {};
@@ -156,6 +157,21 @@ const invoiceCreateValidator = (body) => {
       if (Number(item.rate) < 0 || Number.isNaN(Number(item.rate))) {
         errors[`lineItems.${index}.rate`] = "Rate must be valid";
       }
+      if (item.taxRate !== undefined && (Number(item.taxRate) < 0 || Number.isNaN(Number(item.taxRate)))) {
+        errors[`lineItems.${index}.taxRate`] = "Tax rate must be valid";
+      }
+      if (
+        item.discountValue !== undefined &&
+        (Number(item.discountValue) < 0 || Number.isNaN(Number(item.discountValue)))
+      ) {
+        errors[`lineItems.${index}.discountValue`] = "Discount must be valid";
+      }
+      if (
+        item.discountType !== undefined &&
+        !["percent", "amount"].includes(item.discountType)
+      ) {
+        errors[`lineItems.${index}.discountType`] = "Discount type must be percent or amount";
+      }
     });
   }
 
@@ -173,6 +189,60 @@ const invoiceCreateValidator = (body) => {
 
 const invoiceUpdateValidator = invoiceCreateValidator;
 
+const teamMemberCreateValidator = (body) => {
+  const errors = {};
+
+  if (!body.name || body.name.trim().length < 2) {
+    errors.name = "User name must be at least 2 characters";
+  }
+
+  if (!body.email || !isEmail(body.email)) {
+    errors.email = "A valid email is required";
+  }
+
+  if (!body.password || body.password.length < 6) {
+    errors.password = "Password must be at least 6 characters";
+  }
+
+  if (!body.role || !Object.values(ROLES).includes(body.role)) {
+    errors.role = "A valid role is required";
+  }
+
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
+};
+
+const teamMemberUpdateValidator = (body) => {
+  const errors = {};
+
+  if (body.name !== undefined && body.name.trim().length < 2) {
+    errors.name = "User name must be at least 2 characters";
+  }
+
+  if (body.email !== undefined && !isEmail(body.email)) {
+    errors.email = "A valid email is required";
+  }
+
+  if (body.password !== undefined && body.password && body.password.length < 6) {
+    errors.password = "Password must be at least 6 characters";
+  }
+
+  if (body.role !== undefined && !Object.values(ROLES).includes(body.role)) {
+    errors.role = "A valid role is required";
+  }
+
+  if (body.isActive !== undefined && ![true, false, "true", "false"].includes(body.isActive)) {
+    errors.isActive = "Status must be active or inactive";
+  }
+
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
+};
+
 module.exports = {
   customerCreateValidator,
   customerUpdateValidator,
@@ -184,4 +254,6 @@ module.exports = {
   stockMovementValidator,
   supplierCreateValidator,
   supplierUpdateValidator,
+  teamMemberCreateValidator,
+  teamMemberUpdateValidator,
 };

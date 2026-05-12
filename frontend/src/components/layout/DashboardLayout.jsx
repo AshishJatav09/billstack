@@ -4,7 +4,13 @@ import Sidebar from "./Sidebar";
 
 const DashboardLayout = () => {
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div
+      className="min-h-screen"
+      style={{
+        background: "var(--app-bg)",
+        color: "var(--text-primary)",
+      }}
+    >
       <div className="flex min-h-screen">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -19,4 +25,3 @@ const DashboardLayout = () => {
 };
 
 export default DashboardLayout;
-

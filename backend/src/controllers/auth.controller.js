@@ -90,6 +90,10 @@ const login = asyncHandler(async (req, res) => {
     throw new AppError("Invalid business or credentials", 401);
   }
 
+  if (!user.isActive) {
+    throw new AppError("This user account has been deactivated", 403);
+  }
+
   const passwordMatches = await comparePassword(password, user.password);
 
   if (!passwordMatches) {
@@ -140,6 +144,10 @@ const refresh = asyncHandler(async (req, res) => {
 
   if (!user || !business || user.businessId.toString() !== business._id.toString()) {
     throw new AppError("Refresh session is no longer valid", 401);
+  }
+
+  if (!user.isActive) {
+    throw new AppError("This user account has been deactivated", 403);
   }
 
   const nextRefreshToken = await issueRefreshToken(user, {

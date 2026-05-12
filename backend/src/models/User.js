@@ -30,6 +30,10 @@ const userSchema = new mongoose.Schema(
       enum: roles,
       default: "staff",
     },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,
@@ -39,4 +43,3 @@ const userSchema = new mongoose.Schema(
 userSchema.index({ businessId: 1, email: 1 }, { unique: true });
 
 module.exports = mongoose.model("User", userSchema);
-

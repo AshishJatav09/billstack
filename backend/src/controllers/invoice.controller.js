@@ -152,8 +152,11 @@ const buildInvoiceLineItems = ({ items, products }) => {
       productName: product.name,
       quantity: Number(item.quantity || 0),
       rate: Number(item.rate ?? product.sellingPrice ?? 0),
-      tax: Number(item.tax || 0),
-      discount: Number(item.discount || 0),
+      taxRate: Number(item.taxRate ?? item.tax ?? product.taxRate ?? 0),
+      discountType: item.discountType === "amount" ? "amount" : "percent",
+      discountValue: Number(
+        item.discountValue !== undefined ? item.discountValue : item.discount ?? product.discount ?? 0
+      ),
     };
   });
 };

@@ -27,6 +27,10 @@ const authMiddleware = asyncHandler(async (req, _res, next) => {
     throw new AppError("User not found", 401);
   }
 
+  if (!user.isActive) {
+    throw new AppError("This user account has been deactivated", 403);
+  }
+
   req.user = user;
   const business = await Business.findById(user.businessId).select("planCode isDisabled");
   if (business?.isDisabled) {

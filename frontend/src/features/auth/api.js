@@ -180,3 +180,22 @@ export const changeSubscriptionPlanRequest = async (payload) => {
   const response = await api.post("/billing/subscription/change-plan", payload);
   return response.data.data;
 };
+
+export const listTeamMembersRequest = async (params) => {
+  const response = await api.get("/team", { params });
+  return response.data.data;
+};
+
+export const createTeamMemberRequest = async (payload) => {
+  const response = await api.post("/team", payload);
+  return response.data.data;
+};
+
+export const updateTeamMemberRequest = async (userId, payload) => {
+  const response = await api.put(`/team/${userId}`, payload);
+  return response.data.data;
+};
+
+export const deleteTeamMemberRequest = async (userId) => {
+  await api.delete(`/team/${userId}`);
+};

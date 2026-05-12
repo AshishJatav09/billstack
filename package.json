@@ -1,0 +1,11 @@
+{
+  "name": "billstack-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-all.ps1",
+    "stop": "powershell -ExecutionPolicy Bypass -File ./scripts/stop-all.ps1",
+    "restart": "powershell -ExecutionPolicy Bypass -File ./scripts/restart-all.ps1",
+    "status": "powershell -ExecutionPolicy Bypass -File ./scripts/status-all.ps1"
+  }
+}

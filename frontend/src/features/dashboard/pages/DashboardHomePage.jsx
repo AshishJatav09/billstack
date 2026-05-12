@@ -66,12 +66,12 @@ const DashboardHomePage = () => {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-brand-600 via-brand-700 to-slate-900 p-6 sm:p-8">
-        <p className="text-sm uppercase tracking-[0.3em] text-brand-100">Command center</p>
-        <h2 className="mt-3 max-w-3xl text-3xl font-semibold text-white sm:text-4xl">
+      <section className="theme-hero rounded-[2rem] p-6 sm:p-8">
+        <p className="theme-hero-kicker text-sm uppercase tracking-[0.3em]">Command center</p>
+        <h2 className="theme-hero-title mt-3 max-w-3xl text-3xl font-semibold sm:text-4xl">
           Sales, inventory risk, collections, and stock activity in one view.
         </h2>
-        <p className="mt-3 max-w-3xl text-sm text-brand-100/90">
+        <p className="theme-hero-copy mt-3 max-w-3xl text-sm">
           This dashboard summarizes the current business only. Revenue charts, invoice status mix,
           top products, recent invoices, and stock movement activity are all tenant-scoped.
         </p>

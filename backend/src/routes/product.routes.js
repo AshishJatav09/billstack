@@ -24,14 +24,20 @@ const {
 
 const router = express.Router();
 
-router.use(authMiddleware, tenantMiddleware, requireActiveSubscription(), requireFeature("inventory"));
+router.use(authMiddleware, tenantMiddleware, requireActiveSubscription());
 
 router.get("/", listProducts);
 router.get("/:productId", validateObjectIdParam("productId"), getProductById);
-router.get("/:productId/movements", validateObjectIdParam("productId"), getProductMovements);
+router.get(
+  "/:productId/movements",
+  requireFeature("inventory"),
+  validateObjectIdParam("productId"),
+  getProductMovements
+);
 router.post("/", permit("owner", "admin", "staff"), validate(productCreateValidator), createProduct);
 router.post(
   "/:productId/movements",
+  requireFeature("inventory"),
   validateObjectIdParam("productId"),
   permit("owner", "admin", "staff"),
   validate(stockMovementValidator),

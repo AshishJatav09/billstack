@@ -22,6 +22,21 @@ const invoiceLineItemSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    taxRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    discountType: {
+      type: String,
+      enum: ["percent", "amount"],
+      default: "percent",
+    },
+    discountValue: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     tax: {
       type: Number,
       default: 0,
@@ -29,6 +44,11 @@ const invoiceLineItemSchema = new mongoose.Schema(
     discount: {
       type: Number,
       default: 0,
+    },
+    taxableAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     itemTotal: {
       type: Number,

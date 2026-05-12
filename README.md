@@ -34,7 +34,32 @@ billstack/
 
 ## Run Locally
 
-### 1. Backend
+### 1. One command for both apps
+
+```powershell
+cd c:\Users\asus\Desktop\Nemnidhi\billstack
+npm run dev
+```
+
+This opens separate PowerShell windows for:
+- backend on `http://localhost:5000`
+- frontend on `http://localhost:5173`
+
+If either app is already running on its port, the root launcher skips starting a duplicate.
+
+Additional workspace commands:
+
+```powershell
+npm run status
+npm run stop
+npm run restart
+```
+
+- `status`: shows whether backend/frontend ports are live
+- `stop`: stops processes listening on ports `5000` and `5173`
+- `restart`: stops both apps and launches them again
+
+### 2. Backend
 
 ```powershell
 cd c:\Users\asus\Desktop\Nemnidhi\billstack\backend
@@ -44,7 +69,7 @@ npm run dev
 
 API default: `http://localhost:5000`
 
-### 2. Frontend
+### 3. Frontend
 
 ```powershell
 cd c:\Users\asus\Desktop\Nemnidhi\billstack\frontend
@@ -54,7 +79,7 @@ npm run dev
 
 App default: `http://localhost:5173`
 
-### 3. Optional seed data
+### 4. Optional seed data
 
 ```powershell
 cd c:\Users\asus\Desktop\Nemnidhi\billstack\backend
@@ -66,7 +91,7 @@ Seeded login:
 - Owner: `owner@billstack.demo` / `password123`
 - Admin: `admin@billstack.demo` / `password123`
 
-### 4. Tests
+### 5. Tests
 
 ```powershell
 cd c:\Users\asus\Desktop\Nemnidhi\billstack\backend
@@ -77,7 +102,7 @@ npm test
 
 ### Backend
 
-Use [backend/.env.example](c:/Users/asus/Desktop/Nemnidhi/billstack/backend/.env.example) as the template.
+Create `backend/.env` directly for local setup, and use the same keys as server environment variables for production deployment.
 
 - `PORT`: API port
 - `NODE_ENV`: `development` or `production`
@@ -97,9 +122,38 @@ Use [backend/.env.example](c:/Users/asus/Desktop/Nemnidhi/billstack/backend/.env
 - `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`: Razorpay integration
 - `RAZORPAY_PLAN_BASIC_ID`, `RAZORPAY_PLAN_PRO_ID`, `RAZORPAY_PLAN_ENTERPRISE_ID`: mapped paid plans
 
+### Production Mongo URI Examples
+
+If you deploy MongoDB on the same VPS as the backend, use a replica set because BillStack uses MongoDB transactions for purchases and invoices.
+
+Recommended VPS URI with auth:
+
+```env
+MONGO_URI=mongodb://billstack_user:replace_with_db_password@127.0.0.1:27017/billstack?authSource=admin&replicaSet=rs0
+```
+
+Local-only URI shape without auth:
+
+```env
+MONGO_URI=mongodb://127.0.0.1:27017/billstack?replicaSet=rs0
+```
+
+Atlas URI shape:
+
+```env
+MONGO_URI=mongodb+srv://db_user:db_password@cluster0.xxxxx.mongodb.net/billstack?retryWrites=true&w=majority&appName=Cluster0
+```
+
+For VPS Mongo, the minimum production setup is:
+
+1. Install MongoDB on the VPS.
+2. Enable a single-node replica set, usually `rs0`.
+3. Create a DB user such as `billstack_user`.
+4. Use the auth + replica-set URI in the backend production env.
+
 ### Frontend
 
-Use [frontend/.env.example](c:/Users/asus/Desktop/Nemnidhi/billstack/frontend/.env.example).
+Create `frontend/.env` directly for local setup, and use the same key on your deployed frontend environment.
 
 - `VITE_API_BASE_URL`: API base URL, default `http://localhost:5000/api`
 
@@ -168,8 +222,12 @@ Use [frontend/.env.example](c:/Users/asus/Desktop/Nemnidhi/billstack/frontend/.e
 - Indexed tenant-critical collections
 - Seed script and backend smoke tests
 - Toast notifications, loading states, empty states, error states
+- Route-level code splitting with lazy-loaded screens
+- Custom route error and 404 pages
+- Root-level start, stop, restart, and status scripts
 - Responsive tenant navigation with mobile sidebar
 - Theme persistence with dark-mode support
+- Lightweight request and error log files under `backend/logs`
 
 ## Multi-Tenancy Enforcement
 

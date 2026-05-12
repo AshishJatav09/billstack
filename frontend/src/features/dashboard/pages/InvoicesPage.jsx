@@ -9,14 +9,73 @@ import {
   listProductsRequest,
   updateInvoiceRequest,
 } from "../../auth/api";
+import { uiStore } from "../../../store/uiStore";
 
 const createLineItem = () => ({
   productId: "",
   quantity: 1,
   rate: 0,
-  tax: 0,
-  discount: 0,
+  taxRate: 0,
+  discountType: "percent",
+  discountValue: 0,
 });
+
+const actionIcons = {
+  edit: (
+    <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
+      <path d="M13.9 3.6a1.5 1.5 0 0 1 2.1 0l.4.4a1.5 1.5 0 0 1 0 2.1L8 14.5l-3.5.6.6-3.5 8.8-8Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  pdf: (
+    <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
+      <path d="M6 2.5h5l3 3V16a1.5 1.5 0 0 1-1.5 1.5h-6A1.5 1.5 0 0 1 5 16V4A1.5 1.5 0 0 1 6.5 2.5Z" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M11 2.5V6h3" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M7 10.5h6M7 13h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  print: (
+    <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
+      <path d="M6 7V3.5h8V7M6.5 14.5h7a1 1 0 0 0 1-1v-4a2 2 0 0 0-2-2h-9a2 2 0 0 0-2 2v4a1 1 0 0 0 1 1h1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 12h8v5H6z" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  ),
+  email: (
+    <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
+      <rect x="3" y="5" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="m4 6 6 5 6-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  whatsapp: (
+    <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
+      <path d="M10 3a6.5 6.5 0 0 0-5.6 9.8L3.5 17l4.3-.8A6.5 6.5 0 1 0 10 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 8.3c.2 1.4 1.3 2.8 2.7 3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  cancel: (
+    <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
+      <circle cx="10" cy="10" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="m7.5 7.5 5 5m0-5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+};
+
+const InvoiceActionButton = ({ label, icon, onClick, tone = "default" }) => {
+  const toneClass =
+    tone === "danger"
+      ? "border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/15"
+      : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-medium transition ${toneClass}`}
+    >
+      <span className="shrink-0">{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+};
 
 const initialForm = {
   customerId: "",
@@ -46,6 +105,8 @@ const InvoicesPage = () => {
   const [editingId, setEditingId] = useState("");
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState("");
+  const [customerOptionsError, setCustomerOptionsError] = useState("");
+  const [productOptionsError, setProductOptionsError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -53,24 +114,35 @@ const InvoicesPage = () => {
     const normalizedItems = form.lineItems.map((item) => {
       const quantity = Number(item.quantity || 0);
       const rate = Number(item.rate || 0);
-      const tax = Number(item.tax || 0);
-      const discount = Number(item.discount || 0);
+      const lineBase = quantity * rate;
+      const taxRate = Number(item.taxRate || 0);
+      const discountType = item.discountType === "amount" ? "amount" : "percent";
+      const discountValue = Number(item.discountValue || 0);
+      const discountAmount =
+        discountType === "percent"
+          ? Math.min(lineBase, (lineBase * Math.max(discountValue, 0)) / 100)
+          : Math.min(lineBase, Math.max(discountValue, 0));
+      const taxableAmount = Math.max(lineBase - discountAmount, 0);
+      const taxAmount = (taxableAmount * Math.max(taxRate, 0)) / 100;
 
       return {
         ...item,
-        itemTotal: quantity * rate + tax - discount,
+        quantity,
+        rate,
+        taxRate,
+        discountType,
+        discountValue,
+        lineBase,
+        discountAmount,
+        taxableAmount,
+        taxAmount,
+        itemTotal: taxableAmount + taxAmount,
       };
     });
 
-    const subtotal = normalizedItems.reduce(
-      (sum, item) => sum + Number(item.quantity || 0) * Number(item.rate || 0),
-      0
-    );
-    const totalTax = normalizedItems.reduce((sum, item) => sum + Number(item.tax || 0), 0);
-    const totalDiscount = normalizedItems.reduce(
-      (sum, item) => sum + Number(item.discount || 0),
-      0
-    );
+    const subtotal = normalizedItems.reduce((sum, item) => sum + item.lineBase, 0);
+    const totalTax = normalizedItems.reduce((sum, item) => sum + item.taxAmount, 0);
+    const totalDiscount = normalizedItems.reduce((sum, item) => sum + item.discountAmount, 0);
     const shippingCharges = Number(form.shippingCharges || 0);
     const roundOff = Number(form.roundOff || 0);
     const grandTotal = subtotal + totalTax - totalDiscount + shippingCharges + roundOff;
@@ -110,14 +182,39 @@ const InvoicesPage = () => {
 
   useEffect(() => {
     const loadOptions = async () => {
+      setCustomerOptionsError("");
+      setProductOptionsError("");
+
       try {
-        const [customerData, productData] = await Promise.all([
-          listCustomersRequest({ page: 1, limit: 100, sortBy: "name", sortOrder: "asc" }),
-          listProductsRequest({ page: 1, limit: 100, sortBy: "name", sortOrder: "asc", status: "active" }),
-        ]);
-        setCustomers(customerData.items);
-        setProducts(productData.items);
-      } catch (_error) {}
+        const customerData = await listCustomersRequest({
+          page: 1,
+          limit: 100,
+          sortBy: "name",
+          sortOrder: "asc",
+        });
+        setCustomers(customerData.items || []);
+      } catch (error) {
+        setCustomers([]);
+        setCustomerOptionsError(
+          error.response?.data?.message || "Unable to load customers for this invoice."
+        );
+      }
+
+      try {
+        const productData = await listProductsRequest({
+          page: 1,
+          limit: 100,
+          sortBy: "name",
+          sortOrder: "asc",
+          status: "active",
+        });
+        setProducts(productData.items || []);
+      } catch (error) {
+        setProducts([]);
+        setProductOptionsError(
+          error.response?.data?.message || "Unable to load products for this invoice."
+        );
+      }
     };
 
     loadOptions();
@@ -147,8 +244,9 @@ const InvoicesPage = () => {
           const selectedProduct = products.find((product) => product._id === value);
           if (selectedProduct) {
             nextItem.rate = selectedProduct.sellingPrice ?? 0;
-            nextItem.tax = selectedProduct.taxRate ?? 0;
-            nextItem.discount = selectedProduct.discount ?? 0;
+            nextItem.taxRate = selectedProduct.taxRate ?? 0;
+            nextItem.discountType = "percent";
+            nextItem.discountValue = selectedProduct.discount ?? 0;
           }
         }
 
@@ -193,8 +291,10 @@ const InvoicesPage = () => {
         productId: item.productId,
         quantity: item.quantity,
         rate: item.rate,
-        tax: item.tax,
-        discount: item.discount,
+        taxRate: item.taxRate ?? 0,
+        discountType: item.discountType || "amount",
+        discountValue:
+          item.discountValue !== undefined ? item.discountValue : item.discount ?? 0,
       })),
     });
   };
@@ -212,6 +312,10 @@ const InvoicesPage = () => {
         await createInvoiceRequest(form);
       }
 
+      uiStore.getState().pushToast({
+        tone: "success",
+        message: editingId ? "Invoice updated successfully." : "Invoice created successfully.",
+      });
       resetForm();
       await loadInvoices();
     } catch (error) {
@@ -225,6 +329,10 @@ const InvoicesPage = () => {
   const handleCancelInvoice = async (invoiceId) => {
     try {
       await cancelInvoiceRequest(invoiceId);
+      uiStore.getState().pushToast({
+        tone: "success",
+        message: "Invoice cancelled successfully.",
+      });
       await loadInvoices();
     } catch (error) {
       setServerError(error.response?.data?.message || "Unable to cancel invoice");
@@ -255,6 +363,10 @@ const InvoicesPage = () => {
     try {
       const blob = await downloadInvoicePdfRequest(invoice._id, true);
       openPdfBlob(blob, false, `${invoice.invoiceNumber}.pdf`);
+      uiStore.getState().pushToast({
+        tone: "success",
+        message: "Invoice PDF downloaded.",
+      });
     } catch (error) {
       setServerError(error.response?.data?.message || "Unable to download invoice PDF");
     }
@@ -264,6 +376,10 @@ const InvoicesPage = () => {
     try {
       const blob = await downloadInvoicePdfRequest(invoice._id, false);
       openPdfBlob(blob, true, `${invoice.invoiceNumber}.pdf`);
+      uiStore.getState().pushToast({
+        tone: "info",
+        message: "Print view opened in a new tab.",
+      });
     } catch (error) {
       setServerError(error.response?.data?.message || "Unable to print invoice");
     }
@@ -279,7 +395,10 @@ const InvoicesPage = () => {
 
     try {
       await emailInvoiceRequest(invoice._id, toEmail);
-      window.alert("Invoice emailed successfully.");
+      uiStore.getState().pushToast({
+        tone: "success",
+        message: "Invoice emailed successfully.",
+      });
     } catch (error) {
       setServerError(error.response?.data?.message || "Unable to email invoice");
     }
@@ -340,12 +459,20 @@ const InvoicesPage = () => {
               <span className="mb-2 block text-sm text-slate-300">Customer</span>
               <select name="customerId" value={form.customerId} onChange={handleFormChange} className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white">
                 <option value="">Select customer</option>
+                {!customers.length ? <option value="" disabled>No customers available</option> : null}
                 {customers.map((customer) => (
                   <option key={customer._id} value={customer._id}>
                     {customer.name}
                   </option>
                 ))}
               </select>
+              {customerOptionsError ? (
+                <span className="mt-2 block text-xs text-rose-400">{customerOptionsError}</span>
+              ) : !customers.length ? (
+                <span className="mt-2 block text-xs text-slate-400">
+                  No customers found. Create a customer first from the Customers page.
+                </span>
+              ) : null}
               {errors.customerId ? <span className="mt-2 block text-xs text-rose-400">{errors.customerId}</span> : null}
             </label>
             <label className="block">
@@ -365,19 +492,26 @@ const InvoicesPage = () => {
                       <span className="mb-2 block text-sm text-slate-300">Product</span>
                       <select value={item.productId} onChange={(event) => handleLineItemChange(index, "productId", event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white">
                         <option value="">Select product</option>
+                        {!products.length ? <option value="" disabled>No products available</option> : null}
                         {products.map((product) => (
                           <option key={product._id} value={product._id}>
                             {product.name} ({product.currentStock} in stock)
                           </option>
                         ))}
                       </select>
+                      {productOptionsError ? (
+                        <span className="mt-2 block text-xs text-rose-400">{productOptionsError}</span>
+                      ) : !products.length ? (
+                        <span className="mt-2 block text-xs text-slate-400">
+                          No active products found. Create a product first from the Products page.
+                        </span>
+                      ) : null}
                       {errors[`lineItems.${index}.productId`] ? <span className="mt-2 block text-xs text-rose-400">{errors[`lineItems.${index}.productId`]}</span> : null}
                     </label>
                     {[
                       ["quantity", "Quantity"],
                       ["rate", "Rate"],
-                      ["tax", "Tax"],
-                      ["discount", "Discount"],
+                      ["taxRate", "Tax rate (%)"],
                     ].map(([field, label]) => (
                       <label key={field} className="block">
                         <span className="mb-2 block text-sm text-slate-300">{label}</span>
@@ -385,8 +519,37 @@ const InvoicesPage = () => {
                         {errors[`lineItems.${index}.${field}`] ? <span className="mt-2 block text-xs text-rose-400">{errors[`lineItems.${index}.${field}`]}</span> : null}
                       </label>
                     ))}
+                    <label className="block">
+                      <span className="mb-2 block text-sm text-slate-300">Discount type</span>
+                      <select
+                        value={item.discountType}
+                        onChange={(event) => handleLineItemChange(index, "discountType", event.target.value)}
+                        className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white"
+                      >
+                        <option value="percent">Percent (%)</option>
+                        <option value="amount">Amount</option>
+                      </select>
+                      {errors[`lineItems.${index}.discountType`] ? <span className="mt-2 block text-xs text-rose-400">{errors[`lineItems.${index}.discountType`]}</span> : null}
+                    </label>
+                    <label className="block">
+                      <span className="mb-2 block text-sm text-slate-300">
+                        Discount {item.discountType === "amount" ? "amount" : "(%)"}
+                      </span>
+                      <input
+                        value={item.discountValue}
+                        onChange={(event) => handleLineItemChange(index, "discountValue", event.target.value)}
+                        className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white"
+                      />
+                      {errors[`lineItems.${index}.discountValue`] ? <span className="mt-2 block text-xs text-rose-400">{errors[`lineItems.${index}.discountValue`]}</span> : null}
+                    </label>
                   </div>
-                  <p className="mt-3 text-sm text-slate-400">Item total: {totals.normalizedItems[index]?.itemTotal?.toFixed(2) || "0.00"}</p>
+                  <div className="mt-3 grid gap-1 text-sm text-slate-400">
+                    <p>Base: {totals.normalizedItems[index]?.lineBase?.toFixed(2) || "0.00"}</p>
+                    <p>Discount: {totals.normalizedItems[index]?.discountAmount?.toFixed(2) || "0.00"}</p>
+                    <p>Taxable amount: {totals.normalizedItems[index]?.taxableAmount?.toFixed(2) || "0.00"}</p>
+                    <p>Tax: {totals.normalizedItems[index]?.taxAmount?.toFixed(2) || "0.00"}</p>
+                    <p className="font-medium text-slate-300">Item total: {totals.normalizedItems[index]?.itemTotal?.toFixed(2) || "0.00"}</p>
+                  </div>
                   {form.lineItems.length > 1 ? (
                     <button type="button" onClick={() => removeLineItem(index)} className="mt-3 rounded-xl border border-rose-500/40 px-4 py-2 text-sm text-rose-300">
                       Remove line
@@ -460,43 +623,42 @@ const InvoicesPage = () => {
             <div className="space-y-3">
               {result.items.map((invoice) => (
                 <div key={invoice._id} className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:justify-between">
-                    <div>
-                      <p className="text-lg font-semibold text-white">{invoice.invoiceNumber}</p>
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="max-w-md">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <p className="text-lg font-semibold text-white">{invoice.invoiceNumber}</p>
+                          <span className="rounded-full bg-brand-500/15 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-brand-200">
+                            {invoice.paymentStatus}
+                          </span>
+                          <span className="rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-300">
+                            {invoice.status}
+                          </span>
+                        </div>
                       <div className="mt-2 grid gap-1 text-sm text-slate-300">
                         <p>Customer: {invoice.customerId?.name || invoice.customerDetails?.name}</p>
                         <p>Date: {new Date(invoice.invoiceDate).toLocaleDateString()}</p>
                         <p>Total: {invoice.grandTotal}</p>
                         <p>Balance: {invoice.balanceDue}</p>
-                        <p>Status: {invoice.status} / {invoice.paymentStatus}</p>
+                        <p>Due date: {new Date(invoice.dueDate).toLocaleDateString()}</p>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      {invoice.status !== "cancelled" ? (
-                        <>
-                          <button onClick={() => handleEdit(invoice)} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-200">
-                            Edit
-                          </button>
-                          <button onClick={() => handleDownloadPdf(invoice)} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-200">
-                            PDF
-                          </button>
-                          <button onClick={() => handlePrintInvoice(invoice)} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-200">
-                            Print
-                          </button>
-                          <button onClick={() => handleEmailInvoice(invoice)} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-200">
-                            Email
-                          </button>
-                          <button onClick={() => handleWhatsAppShare(invoice)} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-200">
-                            WhatsApp
-                          </button>
-                          <button onClick={() => handleCancelInvoice(invoice._id)} className="rounded-xl border border-rose-500/40 px-4 py-2 text-sm text-rose-300">
-                            Cancel invoice
-                          </button>
-                        </>
-                      ) : (
-                        <span className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-400">Cancelled</span>
-                      )}
                     </div>
+                    {invoice.status !== "cancelled" ? (
+                      <div className="flex flex-wrap gap-2">
+                        <InvoiceActionButton label="Edit" icon={actionIcons.edit} onClick={() => handleEdit(invoice)} />
+                        <InvoiceActionButton label="PDF" icon={actionIcons.pdf} onClick={() => handleDownloadPdf(invoice)} />
+                        <InvoiceActionButton label="Print" icon={actionIcons.print} onClick={() => handlePrintInvoice(invoice)} />
+                        <InvoiceActionButton label="Email" icon={actionIcons.email} onClick={() => handleEmailInvoice(invoice)} />
+                        <InvoiceActionButton label="WhatsApp" icon={actionIcons.whatsapp} onClick={() => handleWhatsAppShare(invoice)} />
+                        <InvoiceActionButton label="Cancel invoice" icon={actionIcons.cancel} onClick={() => handleCancelInvoice(invoice._id)} tone="danger" />
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-400">
+                        <span className="shrink-0">{actionIcons.cancel}</span>
+                        <span>Invoice cancelled</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
