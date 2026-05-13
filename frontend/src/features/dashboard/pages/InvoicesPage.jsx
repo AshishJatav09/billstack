@@ -59,7 +59,7 @@ const actionIcons = {
   ),
 };
 
-const InvoiceActionButton = ({ label, icon, onClick, tone = "default" }) => {
+const InvoiceActionButton = ({ label, icon, onClick, tone = "default", disabled = false }) => {
   const toneClass =
     tone === "danger"
       ? "border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/15"
@@ -69,7 +69,8 @@ const InvoiceActionButton = ({ label, icon, onClick, tone = "default" }) => {
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-medium transition ${toneClass}`}
+      disabled={disabled}
+      className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${toneClass}`}
     >
       <span className="shrink-0">{icon}</span>
       <span>{label}</span>
@@ -109,6 +110,7 @@ const InvoicesPage = () => {
   const [productOptionsError, setProductOptionsError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [activeInvoiceAction, setActiveInvoiceAction] = useState({ invoiceId: "", type: "" });
 
   const totals = useMemo(() => {
     const normalizedItems = form.lineItems.map((item) => {
@@ -327,7 +329,9 @@ const InvoicesPage = () => {
   };
 
   const handleCancelInvoice = async (invoiceId) => {
+    setServerError("");
     try {
+      setActiveInvoiceAction({ invoiceId, type: "cancel" });
       await cancelInvoiceRequest(invoiceId);
       uiStore.getState().pushToast({
         tone: "success",
@@ -336,6 +340,8 @@ const InvoicesPage = () => {
       await loadInvoices();
     } catch (error) {
       setServerError(error.response?.data?.message || "Unable to cancel invoice");
+    } finally {
+      setActiveInvoiceAction({ invoiceId: "", type: "" });
     }
   };
 
@@ -360,7 +366,9 @@ const InvoicesPage = () => {
   };
 
   const handleDownloadPdf = async (invoice) => {
+    setServerError("");
     try {
+      setActiveInvoiceAction({ invoiceId: invoice._id, type: "pdf" });
       const blob = await downloadInvoicePdfRequest(invoice._id, true);
       openPdfBlob(blob, false, `${invoice.invoiceNumber}.pdf`);
       uiStore.getState().pushToast({
@@ -369,11 +377,15 @@ const InvoicesPage = () => {
       });
     } catch (error) {
       setServerError(error.response?.data?.message || "Unable to download invoice PDF");
+    } finally {
+      setActiveInvoiceAction({ invoiceId: "", type: "" });
     }
   };
 
   const handlePrintInvoice = async (invoice) => {
+    setServerError("");
     try {
+      setActiveInvoiceAction({ invoiceId: invoice._id, type: "print" });
       const blob = await downloadInvoicePdfRequest(invoice._id, false);
       openPdfBlob(blob, true, `${invoice.invoiceNumber}.pdf`);
       uiStore.getState().pushToast({
@@ -382,6 +394,8 @@ const InvoicesPage = () => {
       });
     } catch (error) {
       setServerError(error.response?.data?.message || "Unable to print invoice");
+    } finally {
+      setActiveInvoiceAction({ invoiceId: "", type: "" });
     }
   };
 
@@ -393,7 +407,9 @@ const InvoicesPage = () => {
       return;
     }
 
+    setServerError("");
     try {
+      setActiveInvoiceAction({ invoiceId: invoice._id, type: "email" });
       await emailInvoiceRequest(invoice._id, toEmail);
       uiStore.getState().pushToast({
         tone: "success",
@@ -401,6 +417,8 @@ const InvoicesPage = () => {
       });
     } catch (error) {
       setServerError(error.response?.data?.message || "Unable to email invoice");
+    } finally {
+      setActiveInvoiceAction({ invoiceId: "", type: "" });
     }
   };
 
@@ -623,6 +641,12 @@ const InvoicesPage = () => {
             <div className="space-y-3">
               {result.items.map((invoice) => (
                 <div key={invoice._id} className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                  {(() => {
+                    const isActionRunning = activeInvoiceAction.invoiceId === invoice._id;
+                    const getLabel = (baseLabel, type) =>
+                      isActionRunning && activeInvoiceAction.type === type ? `${baseLabel}...` : baseLabel;
+
+                    return (
                   <div className="space-y-4">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div className="max-w-md">
@@ -646,12 +670,12 @@ const InvoicesPage = () => {
                     </div>
                     {invoice.status !== "cancelled" ? (
                       <div className="flex flex-wrap gap-2">
-                        <InvoiceActionButton label="Edit" icon={actionIcons.edit} onClick={() => handleEdit(invoice)} />
-                        <InvoiceActionButton label="PDF" icon={actionIcons.pdf} onClick={() => handleDownloadPdf(invoice)} />
-                        <InvoiceActionButton label="Print" icon={actionIcons.print} onClick={() => handlePrintInvoice(invoice)} />
-                        <InvoiceActionButton label="Email" icon={actionIcons.email} onClick={() => handleEmailInvoice(invoice)} />
-                        <InvoiceActionButton label="WhatsApp" icon={actionIcons.whatsapp} onClick={() => handleWhatsAppShare(invoice)} />
-                        <InvoiceActionButton label="Cancel invoice" icon={actionIcons.cancel} onClick={() => handleCancelInvoice(invoice._id)} tone="danger" />
+                        <InvoiceActionButton label="Edit" icon={actionIcons.edit} onClick={() => handleEdit(invoice)} disabled={isActionRunning} />
+                        <InvoiceActionButton label={getLabel("PDF", "pdf")} icon={actionIcons.pdf} onClick={() => handleDownloadPdf(invoice)} disabled={isActionRunning} />
+                        <InvoiceActionButton label={getLabel("Print", "print")} icon={actionIcons.print} onClick={() => handlePrintInvoice(invoice)} disabled={isActionRunning} />
+                        <InvoiceActionButton label={getLabel("Email", "email")} icon={actionIcons.email} onClick={() => handleEmailInvoice(invoice)} disabled={isActionRunning} />
+                        <InvoiceActionButton label="WhatsApp" icon={actionIcons.whatsapp} onClick={() => handleWhatsAppShare(invoice)} disabled={isActionRunning} />
+                        <InvoiceActionButton label={getLabel("Cancel invoice", "cancel")} icon={actionIcons.cancel} onClick={() => handleCancelInvoice(invoice._id)} tone="danger" disabled={isActionRunning} />
                       </div>
                     ) : (
                       <div className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-400">
@@ -660,6 +684,8 @@ const InvoicesPage = () => {
                       </div>
                     )}
                   </div>
+                    );
+                  })()}
                 </div>
               ))}
               {!result.items.length ? <p className="text-sm text-slate-400">No invoices found.</p> : null}
