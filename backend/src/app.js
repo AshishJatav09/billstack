@@ -27,6 +27,7 @@ const { notFound, errorHandler } = require("./middlewares/error.middleware");
 
 const app = express();
 const jsonParser = express.json({ limit: "1mb" });
+const corsMiddleware = cors(buildCorsOptions());
 
 morgan.token("requestId", (req) => req.requestId);
 
@@ -35,7 +36,16 @@ app.use(
     crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
-app.use(cors(buildCorsOptions()));
+app.use((req, res, next) => {
+  if (
+    req.originalUrl.startsWith("/api/billing/webhook") ||
+    req.originalUrl.startsWith("/api/billing/subscription/callback")
+  ) {
+    return next();
+  }
+
+  return corsMiddleware(req, res, next);
+});
 app.use(cookieParser());
 app.use(requestContext);
 app.use((req, res, next) => {
