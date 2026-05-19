@@ -15,7 +15,7 @@ const DashboardLayout = () => {
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <Navbar />
-          <main className="flex-1 p-4 sm:p-6 lg:p-8">
+          <main className="flex-1 p-4 sm:p-6 lg:pb-8 lg:pl-6 lg:pr-8 lg:pt-6">
             <Outlet />
           </main>
         </div>

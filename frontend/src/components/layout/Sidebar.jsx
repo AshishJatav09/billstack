@@ -29,9 +29,9 @@ const Sidebar = () => {
         />
       ) : null}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-72 px-6 py-8 transition-transform duration-200 lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-30 flex w-72 flex-col overflow-y-auto overscroll-contain px-6 py-8 transition-transform duration-200 ${
           isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } lg:block`}
+        } lg:sticky lg:top-0 lg:h-screen lg:translate-x-0`}
         style={{
           borderRight: "1px solid var(--panel-border)",
           background: "color-mix(in srgb, var(--panel-bg) 96%, transparent)",
@@ -59,19 +59,27 @@ const Sidebar = () => {
           </button>
         </div>
 
-        <nav className="space-y-2">
+        <nav className="flex-1 space-y-2 overflow-y-auto pb-6 pr-1">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.to === "/dashboard"}
               onClick={closeSidebar}
-              className={({ isActive }) =>
-                `block rounded-2xl px-4 py-3 text-sm font-medium transition ${
-                  isActive
-                    ? "bg-brand-500 text-white"
-                    : "text-slate-300 hover:bg-white/5 hover:text-white"
-                }`
+              className="block rounded-2xl border px-4 py-3 text-sm font-medium transition"
+              style={({ isActive }) =>
+                isActive
+                  ? {
+                      color: "var(--text-primary)",
+                      background: "color-mix(in srgb, var(--accent) 14%, var(--panel-bg) 86%)",
+                      borderColor: "color-mix(in srgb, var(--accent) 58%, var(--panel-border) 42%)",
+                      boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent)",
+                    }
+                  : {
+                      color: "var(--text-muted)",
+                      background: "transparent",
+                      borderColor: "transparent",
+                    }
               }
             >
               {item.label}

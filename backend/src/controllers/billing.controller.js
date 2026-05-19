@@ -14,6 +14,17 @@ const {
   verifyRazorpayWebhookSignature,
 } = require("../services/razorpay.service");
 const { ensureBusinessSubscription } = require("../utils/subscription");
+const getBillingRedirectUrl = (status, message = "") => {
+  const baseUrl = process.env.CLIENT_URL || "http://localhost:5173";
+  const redirectUrl = new URL("/dashboard/settings", baseUrl);
+  redirectUrl.searchParams.set("billing", status);
+
+  if (message) {
+    redirectUrl.searchParams.set("message", message);
+  }
+
+  return redirectUrl.toString();
+};
 
 const syncBusinessWithSubscription = async ({
   business,
@@ -54,6 +65,42 @@ const mapRazorpayPayloadToSubscription = (target, razorpaySubscription, planCode
     target.pendingPlanCode = "";
     target.scheduleChangeAt = "";
   }
+};
+
+const finalizeVerifiedSubscription = async ({
+  razorpayPaymentId,
+  razorpaySubscriptionId,
+}) => {
+  const subscription = await BusinessSubscription.findOne({
+    razorpaySubscriptionId,
+  });
+
+  if (!subscription) {
+    throw new AppError("Subscription record not found", 404);
+  }
+
+  const business = await Business.findById(subscription.businessId);
+
+  if (!business) {
+    throw new AppError("Business not found", 404);
+  }
+
+  const razorpaySubscription = await fetchRazorpaySubscription(razorpaySubscriptionId);
+  subscription.lastPaymentId = razorpayPaymentId;
+  subscription.verifiedAt = new Date();
+  mapRazorpayPayloadToSubscription(subscription, razorpaySubscription);
+  await subscription.save();
+
+  const businessPayload = await syncBusinessWithSubscription({
+    business,
+    subscription,
+  });
+
+  return {
+    business,
+    subscription,
+    businessPayload,
+  };
 };
 
 const getCurrentSubscription = asyncHandler(async (req, res) => {
@@ -135,31 +182,74 @@ const verifySubscriptionPayment = asyncHandler(async (req, res) => {
     throw new AppError("Invalid Razorpay subscription payment signature", 400);
   }
 
-  const business = await Business.findById(req.tenant.businessId);
   const subscription = await BusinessSubscription.findOne({
     businessId: req.tenant.businessId,
     razorpaySubscriptionId: razorpaySubscriptionId,
   });
 
-  if (!business || !subscription) {
+  if (!subscription) {
     throw new AppError("Subscription record not found", 404);
   }
 
-  const razorpaySubscription = await fetchRazorpaySubscription(razorpaySubscriptionId);
-  subscription.lastPaymentId = razorpayPaymentId;
-  subscription.verifiedAt = new Date();
-  mapRazorpayPayloadToSubscription(subscription, razorpaySubscription);
-  await subscription.save();
-
-  const businessPayload = await syncBusinessWithSubscription({
-    business,
-    subscription,
+  const { businessPayload } = await finalizeVerifiedSubscription({
+    razorpayPaymentId,
+    razorpaySubscriptionId,
   });
 
   res.status(200).json({
     message: "Subscription payment verified successfully",
     data: businessPayload,
   });
+});
+
+const handleSubscriptionCallback = asyncHandler(async (req, res) => {
+  const {
+    razorpay_payment_id: razorpayPaymentId,
+    razorpay_subscription_id: razorpaySubscriptionId,
+    razorpay_signature: razorpaySignature,
+    error,
+  } = req.body;
+
+  if (error?.description) {
+    return res.redirect(
+      302,
+      getBillingRedirectUrl("failed", error.description)
+    );
+  }
+
+  if (!razorpayPaymentId || !razorpaySubscriptionId || !razorpaySignature) {
+    return res.redirect(
+      302,
+      getBillingRedirectUrl("failed", "Missing Razorpay callback details.")
+    );
+  }
+
+  const isValid = verifyRazorpaySubscriptionPayment({
+    razorpayPaymentId,
+    razorpaySubscriptionId,
+    razorpaySignature,
+  });
+
+  if (!isValid) {
+    return res.redirect(
+      302,
+      getBillingRedirectUrl("failed", "Invalid Razorpay payment signature.")
+    );
+  }
+
+  try {
+    await finalizeVerifiedSubscription({
+      razorpayPaymentId,
+      razorpaySubscriptionId,
+    });
+  } catch (error) {
+    return res.redirect(
+      302,
+      getBillingRedirectUrl("failed", error.message || "Unable to sync subscription.")
+    );
+  }
+
+  return res.redirect(302, getBillingRedirectUrl("success"));
 });
 
 const changeSubscriptionPlan = asyncHandler(async (req, res) => {
@@ -277,7 +367,7 @@ module.exports = {
   changeSubscriptionPlan,
   createSubscription,
   getCurrentSubscription,
+  handleSubscriptionCallback,
   handleRazorpayWebhook,
   verifySubscriptionPayment,
 };
-

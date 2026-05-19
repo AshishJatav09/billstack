@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   changeSubscriptionPlanRequest,
   createSubscriptionRequest,
@@ -6,7 +7,6 @@ import {
   currentSubscriptionRequest,
   listPlansRequest,
   updateBusinessSetupRequest,
-  verifySubscriptionPaymentRequest,
 } from "../../auth/api";
 import { authStore } from "../../../store/authStore";
 
@@ -22,8 +22,35 @@ const planRank = {
   enterprise: 3,
 };
 
+let razorpayScriptPromise = null;
+
+const ensureRazorpayCheckout = () => {
+  if (typeof window === "undefined") {
+    return Promise.resolve(false);
+  }
+
+  if (window.Razorpay) {
+    return Promise.resolve(true);
+  }
+
+  if (!razorpayScriptPromise) {
+    razorpayScriptPromise = new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  }
+
+  return razorpayScriptPromise;
+};
+
 const BusinessSettingsPage = () => {
   const { business, updateBusiness, user } = authStore();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [plans, setPlans] = useState([]);
   const [currentPlan, setCurrentPlan] = useState(null);
   const [subscriptionState, setSubscriptionState] = useState(business?.subscription || null);
@@ -32,11 +59,6 @@ const BusinessSettingsPage = () => {
   const [isPlanSaving, setIsPlanSaving] = useState(false);
   const [planError, setPlanError] = useState("");
   const [planSuccess, setPlanSuccess] = useState("");
-  const [verificationForm, setVerificationForm] = useState({
-    razorpay_payment_id: "",
-    razorpay_subscription_id: "",
-    razorpay_signature: "",
-  });
   const [form, setForm] = useState({
     name: business?.name || "",
     email: business?.email || "",
@@ -75,7 +97,7 @@ const BusinessSettingsPage = () => {
 
         setPlans(availablePlans);
         setCurrentPlan(activePlan);
-        setSelectedPlanCode(activePlan.planCode);
+        setSelectedPlanCode(activePlan.subscription?.pendingPlanCode || activePlan.planCode);
         setSubscriptionState(activePlan.subscription);
       } catch (error) {
         setPlanError(error.response?.data?.message || "Unable to load plan data");
@@ -86,6 +108,36 @@ const BusinessSettingsPage = () => {
 
     loadPlanData();
   }, []);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const billingStatus = searchParams.get("billing");
+    const billingMessage = searchParams.get("message");
+
+    if (!billingStatus) {
+      return;
+    }
+
+    const consumeCallbackState = async () => {
+      if (billingStatus === "success") {
+        setPlanSuccess("Payment verified successfully. Your subscription is now active.");
+        setPlanError("");
+
+        try {
+          await refreshSubscriptionState();
+        } catch (error) {
+          setPlanError(error.response?.data?.message || "Unable to refresh subscription");
+        }
+      } else {
+        setPlanSuccess("");
+        setPlanError(billingMessage || "Razorpay payment could not be verified.");
+      }
+
+      navigate(location.pathname, { replace: true });
+    };
+
+    consumeCallbackState();
+  }, [location.pathname, location.search, navigate]);
 
   const logoPreviewUrl = useMemo(() => {
     if (logoFile) {
@@ -154,10 +206,43 @@ const BusinessSettingsPage = () => {
           quantity: 1,
         });
         data = subscriptionData.business;
-        setPlanSuccess("Subscription created. Open the Razorpay link to complete authorization.");
+        setPlanSuccess("Opening Razorpay checkout to authorize your subscription.");
 
-        if (subscriptionData.shortUrl) {
-          window.open(subscriptionData.shortUrl, "_blank");
+        const hasCheckout = await ensureRazorpayCheckout();
+
+        if (hasCheckout && subscriptionData.subscriptionId && subscriptionData.razorpayKeyId) {
+          const checkout = new window.Razorpay({
+            key: subscriptionData.razorpayKeyId,
+            subscription_id: subscriptionData.subscriptionId,
+            name: "BillStack",
+            description: `Activate ${selectedPlanCode} plan`,
+            callback_url: `${getApiOrigin()}/api/billing/subscription/callback`,
+            redirect: true,
+            prefill: {
+              name: business?.name || "",
+              email: business?.billingEmail || business?.email || "",
+              contact: business?.phone || "",
+            },
+            notes: {
+              businessId: business?.id || "",
+              businessName: business?.name || "",
+              targetPlanCode: selectedPlanCode,
+            },
+            modal: {
+              ondismiss: () => {
+                setPlanSuccess("Checkout closed. You can retry plan activation anytime.");
+              },
+            },
+            theme: {
+              color: "#3B82F6",
+            },
+          });
+
+          checkout.open();
+        } else if (subscriptionData.shortUrl) {
+          window.location.href = subscriptionData.shortUrl;
+        } else {
+          throw new Error("Unable to open Razorpay checkout");
         }
       } else {
         data = await changeSubscriptionPlanRequest({
@@ -177,7 +262,7 @@ const BusinessSettingsPage = () => {
         invoiceUsage: data.invoiceUsage,
       });
       setSubscriptionState(data.subscription);
-      setSelectedPlanCode(data.planCode);
+      setSelectedPlanCode(data.subscription?.pendingPlanCode || data.planCode);
     } catch (error) {
       setPlanError(error.response?.data?.message || "Unable to update plan");
     } finally {
@@ -195,42 +280,9 @@ const BusinessSettingsPage = () => {
         invoiceUsage: data.invoiceUsage,
       });
       setSubscriptionState(data.subscription);
-      setSelectedPlanCode(data.planCode);
+      setSelectedPlanCode(data.subscription?.pendingPlanCode || data.planCode);
     } catch (error) {
       setPlanError(error.response?.data?.message || "Unable to refresh subscription");
-    }
-  };
-
-  const handleVerificationChange = (event) => {
-    const { name, value } = event.target;
-    setVerificationForm((current) => ({ ...current, [name]: value }));
-  };
-
-  const handleVerifyPayment = async () => {
-    setPlanError("");
-    setPlanSuccess("");
-    setIsPlanSaving(true);
-
-    try {
-      const data = await verifySubscriptionPaymentRequest(verificationForm);
-      updateBusiness(data);
-      setCurrentPlan({
-        planCode: data.planCode,
-        plan: data.plan,
-        invoiceUsage: data.invoiceUsage,
-      });
-      setSubscriptionState(data.subscription);
-      setSelectedPlanCode(data.planCode);
-      setPlanSuccess("Subscription payment verified successfully.");
-      setVerificationForm({
-        razorpay_payment_id: "",
-        razorpay_subscription_id: "",
-        razorpay_signature: "",
-      });
-    } catch (error) {
-      setPlanError(error.response?.data?.message || "Unable to verify subscription payment");
-    } finally {
-      setIsPlanSaving(false);
     }
   };
 
@@ -420,13 +472,22 @@ const BusinessSettingsPage = () => {
                 <p className="mt-2">Expires: {new Date(subscriptionState.currentEnd).toLocaleString()}</p>
               ) : null}
               {subscriptionState?.shortUrl ? (
-                <button
-                  type="button"
-                  onClick={() => window.open(subscriptionState.shortUrl, "_blank")}
-                  className="mt-3 rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-200"
-                >
-                  Open Razorpay checkout link
-                </button>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => window.open(subscriptionState.shortUrl, "_blank")}
+                    className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-200"
+                  >
+                    Open hosted checkout
+                  </button>
+                  <button
+                    type="button"
+                    onClick={refreshSubscriptionState}
+                    className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-200"
+                  >
+                    Refresh billing status
+                  </button>
+                </div>
               ) : null}
             </div>
           ) : null}
@@ -435,41 +496,19 @@ const BusinessSettingsPage = () => {
           {planSuccess ? <p className="text-sm text-emerald-300">{planSuccess}</p> : null}
 
           <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-            <p className="text-sm font-semibold text-white">Verify Razorpay payment</p>
-            <div className="mt-3 grid gap-3">
-              {[
-                ["razorpay_payment_id", "Razorpay payment ID"],
-                ["razorpay_subscription_id", "Razorpay subscription ID"],
-                ["razorpay_signature", "Razorpay signature"],
-              ].map(([name, label]) => (
-                <label key={name} className="block">
-                  <span className="mb-2 block text-sm text-slate-300">{label}</span>
-                  <input
-                    name={name}
-                    value={verificationForm[name]}
-                    onChange={handleVerificationChange}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-brand-500"
-                  />
-                </label>
-              ))}
-            </div>
-            <div className="mt-3 flex gap-3">
-              <button
-                type="button"
-                onClick={handleVerifyPayment}
-                disabled={isPlanSaving || user?.role !== "owner"}
-                className="rounded-2xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-70"
-              >
-                Verify payment
-              </button>
-              <button
-                type="button"
-                onClick={refreshSubscriptionState}
-                className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-200"
-              >
-                Refresh billing status
-              </button>
-            </div>
+            <p className="text-sm font-semibold text-white">Automatic billing verification</p>
+            <p className="mt-3 text-sm text-slate-300">
+              After Razorpay payment or mandate authorization succeeds, BillStack now verifies the
+              signature on the backend callback and refreshes your subscription automatically when
+              you return here. You should not need to paste Razorpay IDs manually anymore.
+            </p>
+            <button
+              type="button"
+              onClick={refreshSubscriptionState}
+              className="mt-3 rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-200"
+            >
+              Refresh billing status
+            </button>
           </div>
 
           <button

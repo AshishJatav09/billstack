@@ -1,10 +1,7 @@
 import { create } from "zustand";
 
 const persistedTheme =
-  typeof window === "undefined"
-    ? "dark"
-    : localStorage.getItem("billstack-theme") ||
-      (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  typeof window === "undefined" ? "light" : localStorage.getItem("billstack-theme") || "light";
 
 export const uiStore = create((set) => ({
   theme: persistedTheme,

@@ -4,6 +4,7 @@ const {
   changeSubscriptionPlan,
   createSubscription,
   getCurrentSubscription,
+  handleSubscriptionCallback,
   handleRazorpayWebhook,
   verifySubscriptionPayment,
 } = require("../controllers/billing.controller");
@@ -14,6 +15,7 @@ const tenantMiddleware = require("../middlewares/tenant.middleware");
 const router = express.Router();
 
 router.post("/webhook", express.raw({ type: "application/json" }), handleRazorpayWebhook);
+router.post("/subscription/callback", handleSubscriptionCallback);
 
 router.use(authMiddleware, tenantMiddleware);
 

@@ -7,7 +7,7 @@ const Navbar = () => {
 
   return (
     <header
-      className="px-4 py-4 backdrop-blur sm:px-6 lg:px-8"
+      className="sticky top-0 z-20 px-4 py-4 backdrop-blur sm:px-6 lg:py-4 lg:pl-6 lg:pr-8"
       style={{
         borderBottom: "1px solid var(--panel-border)",
         background: "color-mix(in srgb, var(--panel-bg) 88%, transparent)",
