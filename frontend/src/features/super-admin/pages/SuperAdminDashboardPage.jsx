@@ -384,7 +384,7 @@ const SuperAdminDashboardPage = () => {
               <input
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Search name, slug, email"
+                placeholder="Search name or email"
                 className="rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-brand-500"
               />
               <select
@@ -455,7 +455,7 @@ const SuperAdminDashboardPage = () => {
                     <tr key={business.id} className="border-b border-white/5 align-top">
                       <td className="py-4 pr-4">
                         <p className="font-semibold text-white">{business.name}</p>
-                        <p className="mt-1 text-xs text-slate-400">{business.slug}</p>
+                        <p className="mt-1 text-xs text-slate-400">{business.email || business.billingEmail || ""}</p>
                         <p className="mt-1 text-xs text-slate-400">
                           {business.billingEmail || business.email || "No email"}
                         </p>

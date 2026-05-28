@@ -330,6 +330,8 @@ const InvoicesPage = () => {
 
   const handleCancelInvoice = async (invoiceId) => {
     setServerError("");
+    const confirmed = window.confirm("Are you sure you want to cancel this invoice? This action can't be undone.");
+    if (!confirmed) return;
     try {
       setActiveInvoiceAction({ invoiceId, type: "cancel" });
       await cancelInvoiceRequest(invoiceId);

@@ -107,6 +107,10 @@ const buildAuthPayload = async ({ user, business, accessToken }) => {
     name: user.name,
     email: user.email,
     role: user.role,
+    permissions: {
+      canManageHR: Boolean(user.permissions?.canManageHR),
+      canViewHR: Boolean(user.permissions?.canViewHR),
+    },
     isActive: user.isActive,
     businessId: user.businessId,
   },

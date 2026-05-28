@@ -23,6 +23,9 @@ const PurchasesPage = lazy(() => import("../features/dashboard/pages/PurchasesPa
 const ReportsPage = lazy(() => import("../features/dashboard/pages/ReportsPage"));
 const SuppliersPage = lazy(() => import("../features/dashboard/pages/SuppliersPage"));
 const TeamPage = lazy(() => import("../features/dashboard/pages/TeamPage"));
+const EmployeesPage = lazy(() => import("../features/hr/pages/EmployeesPage"));
+const AttendancePage = lazy(() => import("../features/hr/pages/AttendancePage"));
+const SalarySetupPage = lazy(() => import("../features/hr/pages/SalarySetupPage"));
 const SuperAdminDashboardPage = lazy(() => import("../features/super-admin/pages/SuperAdminDashboardPage"));
 const SuperAdminLoginPage = lazy(() => import("../features/super-admin/pages/SuperAdminLoginPage"));
 
@@ -111,6 +114,18 @@ export const router = createBrowserRouter([
               {
                 path: "team",
                 element: lazyElement(<TeamPage />, "Loading team"),
+              },
+              {
+                path: "hr/employees",
+                element: lazyElement(<EmployeesPage />, "Loading employees"),
+              },
+              {
+                path: "hr/attendance",
+                element: lazyElement(<AttendancePage />, "Loading attendance"),
+              },
+              {
+                path: "hr/salary-setup",
+                element: lazyElement(<SalarySetupPage />, "Loading salary setup"),
               },
               {
                 path: "settings",

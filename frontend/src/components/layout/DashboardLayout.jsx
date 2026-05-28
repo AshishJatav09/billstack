@@ -1,8 +1,11 @@
 import { Outlet } from "react-router-dom";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import { uiStore } from "../../store/uiStore";
 
 const DashboardLayout = () => {
+  const { isSidebarPinned } = uiStore();
+
   return (
     <div
       className="min-h-screen"
@@ -15,7 +18,7 @@ const DashboardLayout = () => {
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <Navbar />
-          <main className="flex-1 p-4 sm:p-6 lg:pb-8 lg:pl-6 lg:pr-8 lg:pt-6">
+          <main className={`flex-1 p-4 sm:p-6 lg:pb-8 lg:pr-8 lg:pt-6 ${isSidebarPinned ? "lg:pl-6" : "lg:pl-4"}`}>
             <Outlet />
           </main>
         </div>

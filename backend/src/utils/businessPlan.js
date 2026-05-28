@@ -9,7 +9,6 @@ const serializeBusinessWithPlan = (business, subscription = null) => {
   return {
     id: business._id,
     name: business.name,
-    slug: business.slug,
     industry: business.industry,
     billingEmail: business.billingEmail,
     email: business.email,

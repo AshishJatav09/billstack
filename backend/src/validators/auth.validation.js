@@ -2,7 +2,6 @@ const { ROLES } = require("../constants/roles");
 const { PLAN_DEFINITIONS } = require("../constants/plans");
 
 const isEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-const isSlug = (value) => /^[a-z0-9-]{3,30}$/.test(value);
 
 const loginValidator = (body) => {
   const errors = {};
@@ -13,10 +12,6 @@ const loginValidator = (body) => {
 
   if (!body.password || body.password.length < 6) {
     errors.password = "Password must be at least 6 characters";
-  }
-
-  if (!body.businessSlug || !isSlug(body.businessSlug)) {
-    errors.businessSlug = "A valid business slug is required";
   }
 
   return {
@@ -42,10 +37,6 @@ const registerValidator = (body) => {
 
   if (!body.businessName || body.businessName.trim().length < 2) {
     errors.businessName = "Business name must be at least 2 characters";
-  }
-
-  if (!body.businessSlug || !isSlug(body.businessSlug)) {
-    errors.businessSlug = "Business slug must be 3-30 characters using lowercase letters, numbers, or hyphens";
   }
 
   if (body.role && !Object.values(ROLES).includes(body.role)) {

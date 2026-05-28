@@ -9,7 +9,6 @@ const initialForm = {
   email: "",
   password: "",
   businessName: "",
-  businessSlug: "",
 };
 
 const RegisterPage = () => {
@@ -23,7 +22,7 @@ const RegisterPage = () => {
     const { name, value } = event.target;
     setForm((current) => ({
       ...current,
-      [name]: name === "businessSlug" ? value.toLowerCase().replace(/\s+/g, "-") : value,
+      [name]: value,
     }));
   };
 
@@ -53,7 +52,6 @@ const RegisterPage = () => {
         <FormField label="Work email" name="email" type="email" placeholder="team@billstack.app" value={form.email} onChange={handleChange} error={errors.email} />
         <FormField label="Password" name="password" type="password" placeholder="Create a secure password" value={form.password} onChange={handleChange} error={errors.password} />
         <FormField label="Business name" name="businessName" placeholder="BillStack Labs" value={form.businessName} onChange={handleChange} error={errors.businessName} />
-        <FormField label="Business slug" name="businessSlug" placeholder="billstack-labs" value={form.businessSlug} onChange={handleChange} error={errors.businessSlug} />
         {serverError ? <p className="text-sm text-rose-600">{serverError}</p> : null}
         <button
           type="submit"
@@ -74,4 +72,3 @@ const RegisterPage = () => {
 };
 
 export default RegisterPage;
-

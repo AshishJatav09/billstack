@@ -3,9 +3,15 @@ import { create } from "zustand";
 const persistedTheme =
   typeof window === "undefined" ? "light" : localStorage.getItem("billstack-theme") || "light";
 
+const persistedSidebarVisibility =
+  typeof window === "undefined"
+    ? "visible"
+    : localStorage.getItem("billstack-sidebar-visibility") || "visible";
+
 export const uiStore = create((set) => ({
   theme: persistedTheme,
   isSidebarOpen: false,
+  isSidebarPinned: persistedSidebarVisibility !== "hidden",
   toasts: [],
   setTheme: (theme) => {
     localStorage.setItem("billstack-theme", theme);
@@ -19,6 +25,12 @@ export const uiStore = create((set) => ({
     }),
   openSidebar: () => set({ isSidebarOpen: true }),
   closeSidebar: () => set({ isSidebarOpen: false }),
+  toggleSidebarPinned: () =>
+    set((state) => {
+      const nextPinned = !state.isSidebarPinned;
+      localStorage.setItem("billstack-sidebar-visibility", nextPinned ? "visible" : "hidden");
+      return { isSidebarPinned: nextPinned };
+    }),
   pushToast: (toast) =>
     set((state) => ({
       toasts: [

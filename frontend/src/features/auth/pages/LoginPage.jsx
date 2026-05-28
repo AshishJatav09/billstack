@@ -7,7 +7,6 @@ import { useAuth } from "../useAuth";
 const initialForm = {
   email: "",
   password: "",
-  businessSlug: "",
 };
 
 const LoginPage = () => {
@@ -21,7 +20,7 @@ const LoginPage = () => {
     const { name, value } = event.target;
     setForm((current) => ({
       ...current,
-      [name]: name === "businessSlug" ? value.toLowerCase().replace(/\s+/g, "-") : value,
+      [name]: value,
     }));
   };
 
@@ -44,10 +43,9 @@ const LoginPage = () => {
   return (
     <AuthCard
       title="Welcome back"
-      subtitle="Sign in with your business slug so every session stays tenant-scoped."
+      subtitle="Sign in to continue to your workspace."
     >
       <form className="space-y-4" onSubmit={handleSubmit}>
-        <FormField label="Business slug" name="businessSlug" placeholder="billstack-labs" value={form.businessSlug} onChange={handleChange} error={errors.businessSlug} />
         <FormField label="Email" name="email" type="email" placeholder="founder@billstack.app" value={form.email} onChange={handleChange} error={errors.email} />
         <FormField label="Password" name="password" type="password" placeholder="Enter your password" value={form.password} onChange={handleChange} error={errors.password} />
         {serverError ? <p className="text-sm text-rose-600">{serverError}</p> : null}
@@ -72,4 +70,3 @@ const LoginPage = () => {
 };
 
 export default LoginPage;
-

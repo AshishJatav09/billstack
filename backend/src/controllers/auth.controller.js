@@ -17,6 +17,29 @@ const { serializeBusinessWithPlan } = require("../utils/businessPlan");
 
 const refreshCookieName = process.env.REFRESH_COOKIE_NAME || "billstack_refresh_token";
 
+const slugify = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40) || "workspace";
+
+const buildUniqueBusinessSlug = async (businessName) => {
+  const base = slugify(businessName);
+
+  // Keep slug generation deterministic-ish but collision-safe.
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    const suffix = attempt === 0 ? "" : `-${Math.random().toString(36).slice(2, 6)}`;
+    const candidate = `${base}${suffix}`.slice(0, 48);
+    // eslint-disable-next-line no-await-in-loop
+    const exists = await Business.exists({ slug: candidate });
+    if (!exists) return candidate;
+  }
+
+  return `${base}-${Date.now().toString(36)}`.slice(0, 48);
+};
+
 const refreshCookieOptions = {
   httpOnly: true,
   sameSite: "lax",
@@ -25,17 +48,12 @@ const refreshCookieOptions = {
 };
 
 const register = asyncHandler(async (req, res) => {
-  const { name, email, password, businessName, businessSlug } = req.body;
-
-  const existingBusiness = await Business.findOne({ slug: businessSlug.trim().toLowerCase() });
-
-  if (existingBusiness) {
-    throw new AppError("Business slug is already in use", 409);
-  }
+  const { name, email, password, businessName } = req.body;
+  const slug = await buildUniqueBusinessSlug(businessName);
 
   const business = await Business.create({
     name: businessName.trim(),
-    slug: businessSlug.trim().toLowerCase(),
+    slug,
   });
 
   const existingUser = await User.findOne({
@@ -73,21 +91,24 @@ const register = asyncHandler(async (req, res) => {
 });
 
 const login = asyncHandler(async (req, res) => {
-  const { email, password, businessSlug } = req.body;
+  const { email, password } = req.body;
+  const normalizedEmail = email.trim().toLowerCase();
 
-  const business = await Business.findOne({ slug: businessSlug.trim().toLowerCase() });
+  const users = await User.find({ email: normalizedEmail }).limit(2);
 
-  if (!business) {
-    throw new AppError("Invalid business or credentials", 401);
+  if (!users.length) {
+    throw new AppError("Invalid credentials", 401);
   }
 
-  const user = await User.findOne({
-    businessId: business._id,
-    email: email.trim().toLowerCase(),
-  });
+  if (users.length > 1) {
+    throw new AppError("Multiple accounts found for this email. Please contact your admin.", 409);
+  }
 
-  if (!user) {
-    throw new AppError("Invalid business or credentials", 401);
+  const user = users[0];
+  const business = await Business.findById(user.businessId);
+
+  if (!business) {
+    throw new AppError("Invalid credentials", 401);
   }
 
   if (!user.isActive) {
@@ -97,7 +118,7 @@ const login = asyncHandler(async (req, res) => {
   const passwordMatches = await comparePassword(password, user.password);
 
   if (!passwordMatches) {
-    throw new AppError("Invalid business or credentials", 401);
+    throw new AppError("Invalid credentials", 401);
   }
 
   const accessToken = signAccessToken(user);

@@ -128,7 +128,7 @@ const seed = async () => {
   ]);
 
   console.log("Seed complete");
-  console.log(`Business slug: ${business.slug}`);
+  console.log(`Business: ${business.name}`);
   console.log(`Owner login: owner@billstack.demo / password123`);
   console.log(`Admin login: admin@billstack.demo / password123`);
   console.log(`Sample customer: ${customer.name}`);

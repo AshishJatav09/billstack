@@ -112,7 +112,7 @@ const getSuperAdminOverview = asyncHandler(async (_req, res) => {
 const listBusinesses = asyncHandler(async (req, res) => {
   const { page, limit, skip } = buildPagination(req.query);
   const sort = buildSort(req.query.sortBy, req.query.sortOrder, listBusinessSortFields, "-createdAt");
-  const searchFilter = buildSearchFilter(req.query.search, ["name", "slug", "email", "billingEmail"]);
+  const searchFilter = buildSearchFilter(req.query.search, ["name", "email", "billingEmail"]);
 
   const filters = {
     ...searchFilter,

@@ -30,6 +30,16 @@ const userSchema = new mongoose.Schema(
       enum: roles,
       default: "staff",
     },
+    permissions: {
+      canManageHR: {
+        type: Boolean,
+        default: false,
+      },
+      canViewHR: {
+        type: Boolean,
+        default: false,
+      },
+    },
     isActive: {
       type: Boolean,
       default: true,

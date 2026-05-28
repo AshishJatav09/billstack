@@ -15,6 +15,7 @@ const dashboardRoutes = require("./routes/dashboard.routes");
 const billingRoutes = require("./routes/billing.routes");
 const featureRoutes = require("./routes/feature.routes");
 const healthRoutes = require("./routes/health.routes");
+const hrRoutes = require("./routes/hr.routes");
 const invoiceRoutes = require("./routes/invoice.routes");
 const planRoutes = require("./routes/plan.routes");
 const productRoutes = require("./routes/product.routes");
@@ -67,6 +68,7 @@ app.use("/uploads", express.static("uploads"));
 app.use("/api", apiRateLimiter);
 
 app.use("/api/health", healthRoutes);
+app.use("/api/hr", hrRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/super-admin", superAdminRoutes);
 app.use("/api/business", businessRoutes);
