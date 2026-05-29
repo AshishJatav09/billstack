@@ -46,6 +46,8 @@ api.interceptors.response.use(
     const isAuthFlowRequest =
       requestUrl.includes("/auth/login") ||
       requestUrl.includes("/auth/register") ||
+      requestUrl.includes("/auth/forgot-password") ||
+      requestUrl.includes("/auth/reset-password") ||
       requestUrl.includes("/auth/logout") ||
       requestUrl.includes("/auth/refresh") ||
       requestUrl.includes("/super-admin/login");

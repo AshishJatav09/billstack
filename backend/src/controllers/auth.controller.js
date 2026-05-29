@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+
 const Business = require("../models/Business");
 const User = require("../models/User");
 const asyncHandler = require("../utils/asyncHandler");
@@ -13,6 +15,7 @@ const {
   revokeRefreshTokenFamily,
   signAccessToken,
 } = require("../services/auth.service");
+const { sendEmail } = require("../services/email.service");
 const { serializeBusinessWithPlan } = require("../utils/businessPlan");
 
 const refreshCookieName = process.env.REFRESH_COOKIE_NAME || "billstack_refresh_token";
@@ -46,6 +49,10 @@ const refreshCookieOptions = {
   secure: process.env.NODE_ENV === "production",
   maxAge: Number(process.env.JWT_REFRESH_EXPIRES_DAYS || 7) * 24 * 60 * 60 * 1000,
 };
+
+const getClientUrl = () => (process.env.CLIENT_URL || "http://localhost:5173").split(",")[0].trim();
+
+const hashResetToken = (token) => crypto.createHash("sha256").update(token).digest("hex");
 
 const register = asyncHandler(async (req, res) => {
   const { name, email, password, businessName } = req.body;
@@ -131,6 +138,58 @@ const login = asyncHandler(async (req, res) => {
   res.status(200).json({
     message: "Login successful",
     data: await buildAuthPayload({ user, business, accessToken }),
+  });
+});
+
+const forgotPassword = asyncHandler(async (req, res) => {
+  const normalizedEmail = req.body.email.trim().toLowerCase();
+  const users = await User.find({ email: normalizedEmail }).limit(2).select("+passwordResetToken +passwordResetExpiresAt");
+
+  if (users.length === 1 && users[0].isActive) {
+    const user = users[0];
+    const token = crypto.randomBytes(32).toString("hex");
+    const resetUrl = `${getClientUrl().replace(/\/$/, "")}/reset-password?token=${token}`;
+
+    user.passwordResetToken = hashResetToken(token);
+    user.passwordResetExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    await user.save();
+
+    await sendEmail({
+      to: user.email,
+      subject: "Reset your BillStack password",
+      text: `Reset your BillStack password using this link: ${resetUrl}\n\nThis link expires in 30 minutes.`,
+      html: `
+        <p>Hello ${user.name},</p>
+        <p>Use the link below to reset your BillStack password. This link expires in 30 minutes.</p>
+        <p><a href="${resetUrl}">Reset password</a></p>
+        <p>If you did not request this, you can ignore this email.</p>
+      `,
+    });
+  }
+
+  res.status(200).json({
+    message: "If an account exists for this email, a reset link has been sent.",
+  });
+});
+
+const resetPassword = asyncHandler(async (req, res) => {
+  const resetToken = hashResetToken(req.body.token.trim());
+  const user = await User.findOne({
+    passwordResetToken: resetToken,
+    passwordResetExpiresAt: { $gt: new Date() },
+  }).select("+passwordResetToken +passwordResetExpiresAt");
+
+  if (!user) {
+    throw new AppError("Password reset link is invalid or expired", 400);
+  }
+
+  user.password = await hashPassword(req.body.password);
+  user.passwordResetToken = "";
+  user.passwordResetExpiresAt = null;
+  await user.save();
+
+  res.status(200).json({
+    message: "Password reset successfully. Please sign in with your new password.",
   });
 });
 
@@ -222,9 +281,11 @@ const logout = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  forgotPassword,
   getMe,
   login,
   logout,
   refresh,
   register,
+  resetPassword,
 };

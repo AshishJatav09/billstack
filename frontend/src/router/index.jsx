@@ -14,6 +14,7 @@ const ForgotPasswordPage = lazy(() => import("../features/auth/pages/ForgotPassw
 const LoginPage = lazy(() => import("../features/auth/pages/LoginPage"));
 const OnboardingPage = lazy(() => import("../features/auth/pages/OnboardingPage"));
 const RegisterPage = lazy(() => import("../features/auth/pages/RegisterPage"));
+const ResetPasswordPage = lazy(() => import("../features/auth/pages/ResetPasswordPage"));
 const BusinessSettingsPage = lazy(() => import("../features/dashboard/pages/BusinessSettingsPage"));
 const CustomersPage = lazy(() => import("../features/dashboard/pages/CustomersPage"));
 const DashboardHomePage = lazy(() => import("../features/dashboard/pages/DashboardHomePage"));
@@ -52,6 +53,7 @@ export const router = createBrowserRouter([
               { path: "login", element: lazyElement(<LoginPage />, "Opening login") },
               { path: "register", element: lazyElement(<RegisterPage />, "Opening registration") },
               { path: "forgot-password", element: lazyElement(<ForgotPasswordPage />, "Opening password reset") },
+              { path: "reset-password", element: lazyElement(<ResetPasswordPage />, "Opening password reset") },
             ],
           },
         ],

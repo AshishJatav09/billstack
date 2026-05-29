@@ -20,6 +20,36 @@ const loginValidator = (body) => {
   };
 };
 
+const forgotPasswordValidator = (body) => {
+  const errors = {};
+
+  if (!body.email || !isEmail(body.email)) {
+    errors.email = "A valid email is required";
+  }
+
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
+};
+
+const resetPasswordValidator = (body) => {
+  const errors = {};
+
+  if (!body.token || String(body.token).trim().length < 32) {
+    errors.token = "A valid reset token is required";
+  }
+
+  if (!body.password || body.password.length < 6) {
+    errors.password = "Password must be at least 6 characters";
+  }
+
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
+};
+
 const registerValidator = (body) => {
   const errors = {};
 
@@ -96,7 +126,9 @@ const planUpdateValidator = (body) => {
 
 module.exports = {
   businessSetupValidator,
+  forgotPasswordValidator,
   loginValidator,
   planUpdateValidator,
   registerValidator,
+  resetPasswordValidator,
 };

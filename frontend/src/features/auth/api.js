@@ -10,6 +10,16 @@ export const loginRequest = async (payload) => {
   return response.data.data;
 };
 
+export const forgotPasswordRequest = async (payload) => {
+  const response = await api.post("/auth/forgot-password", payload);
+  return response.data;
+};
+
+export const resetPasswordRequest = async (payload) => {
+  const response = await api.post("/auth/reset-password", payload);
+  return response.data;
+};
+
 export const logoutRequest = async () => {
   await api.post("/auth/logout");
 };
