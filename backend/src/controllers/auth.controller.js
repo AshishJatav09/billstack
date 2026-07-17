@@ -173,7 +173,7 @@ const forgotPassword = asyncHandler(async (req, res) => {
     user.passwordResetExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
     await user.save();
 
-    await sendEmail({
+    sendEmail({
       to: user.email,
       subject: "Reset your BillStack password",
       text: `Reset your BillStack password using this link: ${resetUrl}\n\nThis link expires in 30 minutes.`,
@@ -183,7 +183,7 @@ const forgotPassword = asyncHandler(async (req, res) => {
         <p><a href="${resetUrl}">Reset password</a></p>
         <p>If you did not request this, you can ignore this email.</p>
       `,
-    });
+    }).catch((err) => console.error("Failed to send reset email:", err));
   }
 
   res.status(200).json({
