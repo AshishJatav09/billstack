@@ -17,6 +17,13 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (_req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+
+  if (file.mimetype === "image/svg+xml" || ext === ".svg") {
+    cb(new Error("SVG uploads are not allowed"));
+    return;
+  }
+
   if (!file.mimetype.startsWith("image/")) {
     cb(new Error("Only image uploads are allowed"));
     return;

@@ -18,8 +18,8 @@ const run = (name, fn) => {
 run("buildInvoiceTotals calculates payment state and totals", () => {
   const result = buildInvoiceTotals({
     lineItems: [
-      { productId: "1", quantity: 2, rate: 100, tax: 18, discount: 10 },
-      { productId: "2", quantity: 1, rate: 200, tax: 36, discount: 0 },
+      { productId: "1", quantity: 2, rate: 100, taxRate: 18, discount: 10 },
+      { productId: "2", quantity: 1, rate: 200, taxRate: 36, discount: 0 },
     ],
     shippingCharges: 50,
     roundOff: -4,
@@ -27,10 +27,10 @@ run("buildInvoiceTotals calculates payment state and totals", () => {
   });
 
   assert.equal(result.subtotal, 400);
-  assert.equal(result.totalTax, 54);
-  assert.equal(result.totalDiscount, 10);
-  assert.equal(result.grandTotal, 490);
-  assert.equal(result.balanceDue, 390);
+  assert.equal(result.totalTax, 104.4);
+  assert.equal(result.totalDiscount, 20);
+  assert.equal(result.grandTotal, 530.4);
+  assert.equal(result.balanceDue, 430.4);
   assert.equal(result.paymentStatus, "partial");
 });
 

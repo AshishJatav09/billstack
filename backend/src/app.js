@@ -3,6 +3,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
 const morgan = require("morgan");
+const mongoSanitize = require("express-mongo-sanitize");
 
 const { buildCorsOptions } = require("./config/cors");
 const { requestContext } = require("./middlewares/request-context.middleware");
@@ -27,6 +28,7 @@ const superAdminRoutes = require("./routes/super-admin.routes");
 const { notFound, errorHandler } = require("./middlewares/error.middleware");
 
 const app = express();
+app.set("trust proxy", 1);
 const jsonParser = express.json({ limit: "1mb" });
 const corsMiddleware = cors(buildCorsOptions());
 
@@ -57,6 +59,7 @@ app.use((req, res, next) => {
   return jsonParser(req, res, next);
 });
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+app.use(mongoSanitize());
 app.use(
   morgan(":method :url :status :response-time ms req=:requestId", {
     stream: {

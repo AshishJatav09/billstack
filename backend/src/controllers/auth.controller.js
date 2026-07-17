@@ -122,11 +122,30 @@ const login = asyncHandler(async (req, res) => {
     throw new AppError("This user account has been deactivated", 403);
   }
 
+  // Account lockout check — runs before bcrypt to fail fast
+  if (user.lockedUntil && user.lockedUntil > new Date()) {
+    const minutesLeft = Math.ceil((user.lockedUntil - Date.now()) / 60000);
+    throw new AppError(
+      `Account temporarily locked, try again in ${minutesLeft} minute(s)`,
+      423
+    );
+  }
+
   const passwordMatches = await comparePassword(password, user.password);
 
   if (!passwordMatches) {
+    user.failedLoginAttempts += 1;
+    if (user.failedLoginAttempts >= 5) {
+      user.lockedUntil = new Date(Date.now() + 15 * 60 * 1000);
+    }
+    await user.save();
     throw new AppError("Invalid credentials", 401);
   }
+
+  // Reset lockout state on successful login
+  user.failedLoginAttempts = 0;
+  user.lockedUntil = null;
+  await user.save();
 
   const accessToken = signAccessToken(user);
   const refreshToken = await issueRefreshToken(user, {

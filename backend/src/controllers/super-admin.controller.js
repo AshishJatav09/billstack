@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const Business = require("../models/Business");
 const BusinessSubscription = require("../models/BusinessSubscription");
 const Invoice = require("../models/Invoice");
@@ -27,10 +28,14 @@ const superAdminLogin = asyncHandler(async (req, res) => {
   const email = (req.body.email || "").trim().toLowerCase();
   const password = req.body.password || "";
 
-  if (
-    email !== (process.env.SUPER_ADMIN_EMAIL || "").trim().toLowerCase() ||
-    password !== (process.env.SUPER_ADMIN_PASSWORD || "")
-  ) {
+  const expectedEmail = (process.env.SUPER_ADMIN_EMAIL || "").trim().toLowerCase();
+  const expectedPassword = process.env.SUPER_ADMIN_PASSWORD || "";
+  const hashStr = (s) => crypto.createHash("sha256").update(s).digest();
+
+  const emailMatch = crypto.timingSafeEqual(hashStr(email), hashStr(expectedEmail));
+  const passMatch = crypto.timingSafeEqual(hashStr(password), hashStr(expectedPassword));
+
+  if (!emailMatch || !passMatch) {
     throw new AppError("Invalid super admin credentials", 401);
   }
 

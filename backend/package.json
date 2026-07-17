@@ -7,7 +7,7 @@
     "dev": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-local.ps1",
     "start": "node src/server.js",
     "seed": "node src/scripts/seed.js",
-    "test": "node tests/run-tests.js"
+    "test": "node tests/run-tests.js && node --test tests/lockout.test.js"
   },
   "keywords": [
     "express",
@@ -23,6 +23,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
+    "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^8.4.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
