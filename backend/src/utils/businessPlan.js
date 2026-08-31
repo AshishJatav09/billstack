@@ -1,10 +1,19 @@
 const { PLAN_CODES, PLAN_DEFINITIONS } = require("../constants/plans");
-const { isSubscriptionAccessible, isSubscriptionExpired } = require("./subscription");
+const { getPlanEntitlements, isSubscriptionAccessible, isSubscriptionExpired, normalizeStatus } = require("./subscription");
 
-const getPlanByCode = (code) => PLAN_DEFINITIONS[code] || PLAN_DEFINITIONS[PLAN_CODES.FREE];
+const COMPATIBILITY_PLAN_MAP = {
+  [PLAN_CODES.BASIC]: PLAN_CODES.STARTER,
+};
+
+const getPlanByCode = (code) => {
+  const normalizedCode = String(code || PLAN_CODES.FREE).trim().toLowerCase();
+  const mappedCode = COMPATIBILITY_PLAN_MAP[normalizedCode] || normalizedCode;
+  return PLAN_DEFINITIONS[mappedCode] || PLAN_DEFINITIONS[PLAN_CODES.FREE];
+};
 
 const serializeBusinessWithPlan = (business, subscription = null) => {
-  const plan = getPlanByCode(business.planCode);
+  const plan = subscription ? getPlanByCode(subscription.planCode) : getPlanByCode(business.planCode);
+  const entitlements = subscription ? getPlanEntitlements(subscription) : plan;
 
   return {
     id: business._id,
@@ -21,8 +30,11 @@ const serializeBusinessWithPlan = (business, subscription = null) => {
     defaultTaxSettings: business.defaultTaxSettings,
     invoiceNumbering: business.invoiceNumbering,
     onboardingCompleted: business.onboardingCompleted,
-    planCode: business.planCode,
+    deploymentMode: business.deploymentMode,
+    businessProfile: business.businessProfile,
+    planCode: subscription?.planCode || business.planCode,
     plan,
+    entitlements,
     isDisabled: business.isDisabled,
     invoiceUsage: business.invoiceUsage,
     inventorySettings: business.inventorySettings,
@@ -35,6 +47,7 @@ const serializeBusinessWithPlan = (business, subscription = null) => {
           razorpayPlanId: subscription.razorpayPlanId,
           razorpaySubscriptionId: subscription.razorpaySubscriptionId,
           status: subscription.status,
+          lifecycleStatus: normalizeStatus(subscription.status, subscription.planCode).toUpperCase(),
           quantity: subscription.quantity,
           totalCount: subscription.totalCount,
           paidCount: subscription.paidCount,
@@ -49,6 +62,10 @@ const serializeBusinessWithPlan = (business, subscription = null) => {
           cancelledAt: subscription.cancelledAt,
           isAccessible: isSubscriptionAccessible(subscription),
           isExpired: isSubscriptionExpired(subscription),
+          trialEndsAt: subscription.trialEndsAt,
+          graceEndsAt: subscription.graceEndsAt,
+          failedPaymentAt: subscription.failedPaymentAt,
+          addonEntitlements: subscription.addonEntitlements,
         }
       : null,
   };

@@ -95,6 +95,37 @@ const inventorySettingsSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const businessProfileSchema = new mongoose.Schema(
+  {
+    industryCode: { type: String, trim: true, default: "" },
+    playerType: { type: String, trim: true, default: "" },
+    playerTypeCode: { type: String, trim: true, default: "" },
+    operationalFamily: { type: String, trim: true, default: "" },
+    businessModel: {
+      type: String,
+      enum: ["PRODUCT", "SERVICE", "TRADING", "MANUFACTURING", "PROJECT_BASED", "RECURRING", "MIXED", ""],
+      default: "",
+    },
+    businessSize: { type: String, trim: true, default: "" },
+    numberOfUsers: { type: Number, default: 1 },
+    numberOfLocations: { type: Number, default: 1 },
+    gstRegistered: { type: Boolean, default: false },
+    selectedNeeds: { type: [String], default: [] },
+    recommendedModules: { type: [String], default: [] },
+    optionalModules: { type: [String], default: [] },
+    futureCapabilities: { type: [String], default: [] },
+    futureWorkflowPacks: { type: [String], default: [] },
+    recommendedPlanCode: { type: String, trim: true, default: "" },
+    preset: { type: String, trim: true, default: "" },
+    onboardingStatus: {
+      type: String,
+      enum: ["NOT_STARTED", "IN_PROGRESS", "COMPLETED"],
+      default: "NOT_STARTED",
+    },
+  },
+  { _id: false }
+);
+
 const businessSchema = new mongoose.Schema(
   {
     name: {
@@ -145,6 +176,7 @@ const businessSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    gstConfiguration: { gstin: { type: String, default: "" }, stateCode: { type: String, default: "" }, state: { type: String, default: "" }, enabled: { type: Boolean, default: false } },
     bankDetails: {
       type: bankDetailsSchema,
       default: () => ({}),
@@ -162,9 +194,33 @@ const businessSchema = new mongoose.Schema(
       type: invoiceNumberingSchema,
       default: () => ({}),
     },
+    quoteNumbering: {
+      type: invoiceNumberingSchema,
+      default: () => ({ prefix: "QUO", format: "QUO-{YYYY}-{0001}", nextSequence: 1 }),
+    },
+    expenseNumbering: {
+      type: invoiceNumberingSchema,
+      default: () => ({ prefix: "EXP", format: "EXP-{YYYY}-{0001}", nextSequence: 1 }),
+    },
+    orderNumbering: {
+      type: invoiceNumberingSchema,
+      default: () => ({ prefix: "ORD", format: "ORD-{YYYY}-{0001}", nextSequence: 1 }),
+    },
+    projectNumbering: {
+      type: invoiceNumberingSchema,
+      default: () => ({ prefix: "PRJ", format: "PRJ-{YYYY}-{0001}", nextSequence: 1 }),
+    },
+    productionJobNumbering: {
+      type: invoiceNumberingSchema,
+      default: () => ({ prefix: "JOB", format: "JOB-{YYYY}-{0001}", nextSequence: 1 }),
+    },
+    dispatchNumbering: {
+      type: invoiceNumberingSchema,
+      default: () => ({ prefix: "DSP", format: "DSP-{YYYY}-{0001}", nextSequence: 1 }),
+    },
     planCode: {
       type: String,
-      enum: ["free", "basic", "pro", "enterprise"],
+      enum: ["free", "starter", "growth", "basic", "pro", "enterprise"],
       default: "free",
     },
     subscriptionExpiresAt: {
@@ -181,6 +237,15 @@ const businessSchema = new mongoose.Schema(
     },
     inventorySettings: {
       type: inventorySettingsSchema,
+      default: () => ({}),
+    },
+    deploymentMode: {
+      type: String,
+      enum: ["SAAS", "SELF_HOSTED"],
+      default: "SAAS",
+    },
+    businessProfile: {
+      type: businessProfileSchema,
       default: () => ({}),
     },
     onboardingCompleted: {

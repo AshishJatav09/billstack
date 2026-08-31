@@ -1,10 +1,8 @@
-const { PLAN_FEATURE_MAP } = require("../constants/plans");
 const Business = require("../models/Business");
 const Invoice = require("../models/Invoice");
 const AppError = require("../utils/appError");
-const { getPlanByCode } = require("../utils/businessPlan");
 const asyncHandler = require("../utils/asyncHandler");
-const { ensureBusinessSubscription, isSubscriptionAccessible } = require("../utils/subscription");
+const { ensureBusinessSubscription, getPlanEntitlements, isSubscriptionAccessible } = require("../utils/subscription");
 
 const requireFeature = (featureKey) =>
   asyncHandler(async (req, _res, next) => {
@@ -12,6 +10,10 @@ const requireFeature = (featureKey) =>
 
     if (!business) {
       throw new AppError("Business not found", 404);
+    }
+
+    if (business.deploymentMode === "SELF_HOSTED") {
+      return next();
     }
 
     const subscription = await ensureBusinessSubscription({
@@ -23,8 +25,8 @@ const requireFeature = (featureKey) =>
       throw new AppError("Your subscription is inactive or expired", 402);
     }
 
-    const plan = getPlanByCode(business.planCode);
-    const mappedFeature = PLAN_FEATURE_MAP[featureKey];
+    const plan = getPlanEntitlements(subscription);
+    const mappedFeature = require("../constants/plans").PLAN_FEATURE_MAP[featureKey];
 
     if (!mappedFeature || !plan[mappedFeature]) {
       throw new AppError(`Your ${plan.name} plan does not include ${featureKey} access`, 403);
@@ -51,7 +53,7 @@ const requireInvoiceCapacity = () =>
       throw new AppError("Your subscription is inactive or expired", 402);
     }
 
-    const plan = getPlanByCode(business.planCode);
+    const plan = getPlanEntitlements(subscription);
     const currentMonthKey = new Date().toISOString().slice(0, 7);
     const invoiceCount = await Invoice.countDocuments({
       businessId: business._id,
@@ -68,7 +70,14 @@ const requireInvoiceCapacity = () =>
     if (invoiceCount >= plan.invoiceMonthlyLimit) {
       throw new AppError(
         `Invoice limit reached for the ${plan.name} plan. Monthly limit: ${plan.invoiceMonthlyLimit}`,
-        403
+        403,
+        {
+          code: "LIMIT_REACHED",
+          feature: "invoices",
+          current: invoiceCount,
+          limit: plan.invoiceMonthlyLimit,
+          recommendedAction: "UPGRADE_PLAN",
+        }
       );
     }
 
@@ -94,13 +103,20 @@ const requireStaffCapacity = () =>
       throw new AppError("Your subscription is inactive or expired", 402);
     }
 
-    const plan = getPlanByCode(business.planCode);
+    const plan = getPlanEntitlements(subscription);
     const projectedStaffCount = Number(req.body.projectedStaffCount || 0);
 
     if (projectedStaffCount > plan.staffUserLimit) {
       throw new AppError(
         `Staff user limit reached for the ${plan.name} plan. Allowed users: ${plan.staffUserLimit}`,
-        403
+        403,
+        {
+          code: "LIMIT_REACHED",
+          feature: "staff",
+          current: projectedStaffCount,
+          limit: plan.staffUserLimit,
+          recommendedAction: "UPGRADE_PLAN",
+        }
       );
     }
 

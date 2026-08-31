@@ -64,6 +64,8 @@ const customerSchema = new mongoose.Schema(
       uppercase: true,
       default: "",
     },
+    stateCode: { type: String, trim: true, default: "" },
+    placeOfSupplyCode: { type: String, trim: true, default: "" },
     notes: {
       type: String,
       trim: true,
@@ -73,6 +75,8 @@ const customerSchema = new mongoose.Schema(
       type: [invoiceHistorySchema],
       default: [],
     },
+    isSampleData: { type: Boolean, default: false, index: true },
+    sampleDataKey: { type: String, trim: true, default: "" },
   },
   {
     timestamps: true,
@@ -83,5 +87,6 @@ customerSchema.index({ businessId: 1, name: 1 });
 customerSchema.index({ businessId: 1, email: 1 });
 customerSchema.index({ businessId: 1, phone: 1 });
 customerSchema.index({ businessId: 1, _id: 1 });
+customerSchema.index({ businessId: 1, isSampleData: 1 });
 
 module.exports = mongoose.model("Customer", customerSchema);

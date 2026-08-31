@@ -57,6 +57,21 @@ body {
   box-sizing: border-box;
 }
 
+.field {
+  width: 100%;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+  background: var(--theme-surface-input);
+  color: var(--text-primary);
+  padding: 0.68rem 0.8rem;
+  font-size: 0.875rem;
+}
+
+.field:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  outline-offset: 1px;
+}
+
 :root[data-theme="light"] .bg-slate-950,
 :root[data-theme="light"] .bg-slate-900,
 :root[data-theme="light"] .bg-slate-950\/50,

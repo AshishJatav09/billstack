@@ -2,7 +2,9 @@ const mongoose = require("mongoose");
 
 const Business = require("../models/Business");
 const Customer = require("../models/Customer");
+const EInvoiceMetadata = require("../models/EInvoiceMetadata");
 const Invoice = require("../models/Invoice");
+const CustomerLedger = require("../models/CustomerLedger");
 const Product = require("../models/Product");
 const StockMovement = require("../models/StockMovement");
 const asyncHandler = require("../utils/asyncHandler");
@@ -11,6 +13,8 @@ const { sendInvoiceEmail } = require("../services/email.service");
 const { buildInventoryFlags } = require("../services/inventory.service");
 const { generateInvoicePdfBuffer } = require("../utils/pdfInvoice");
 const { buildInvoiceNumber, buildInvoiceTotals } = require("../utils/invoice");
+const { buildGstSnapshot, validateGstin, validateStateCode } = require("../utils/gst");
+  const { applyFinancialRead, applyFinancialReads, hasDocumentAllocations, hasMigratedFinancialState, documentUpdateDecision, legacyPaymentWriteDecision } = require("../services/financial-read.service");
 const {
   buildPaginatedResponse,
   buildPagination,
@@ -19,6 +23,33 @@ const {
 } = require("../utils/queryFeatures");
 
 const invoiceSortFields = ["invoiceDate", "dueDate", "grandTotal", "createdAt"];
+
+const attachEInvoiceMetadata = async ({ businessId, invoices }) => {
+  const list = Array.isArray(invoices) ? invoices : [invoices];
+  const metadataRows = await EInvoiceMetadata.find({
+    businessId,
+    invoiceId: { $in: list.map((invoice) => invoice._id) },
+  }).select("invoiceId eInvoiceStatus irn acknowledgementNumber acknowledgementDate lastReadinessStatus lastReadinessErrors");
+  const metadataMap = new Map(metadataRows.map((row) => [row.invoiceId.toString(), row]));
+  const mapped = list.map((invoice) => {
+    const plain = typeof invoice.toObject === "function" ? invoice.toObject() : invoice;
+    const metadata = metadataMap.get(plain._id.toString());
+    return {
+      ...plain,
+      eInvoice: metadata
+        ? {
+            status: metadata.eInvoiceStatus,
+            irn: metadata.irn,
+            acknowledgementNumber: metadata.acknowledgementNumber,
+            acknowledgementDate: metadata.acknowledgementDate,
+            readinessStatus: metadata.lastReadinessStatus,
+            readinessErrors: metadata.lastReadinessErrors,
+          }
+        : { status: plain.gstSnapshot ? "READY" : "NOT_REQUIRED", irn: "", acknowledgementNumber: "", readinessStatus: "" },
+    };
+  });
+  return Array.isArray(invoices) ? mapped : mapped[0];
+};
 
 const getInvoiceForSharing = async ({ invoiceId, businessId }) => {
   const [invoice, business] = await Promise.all([
@@ -35,7 +66,10 @@ const getInvoiceForSharing = async ({ invoiceId, businessId }) => {
     throw new AppError("Invoice not found", 404);
   }
 
-  return { invoice, business };
+  return {
+    invoice: await applyFinancialRead({ businessId, sourceType: "INVOICE", document: invoice }),
+    business,
+  };
 };
 
 const syncCustomerInvoiceHistory = async ({ customer, businessId, session }) => {
@@ -192,9 +226,12 @@ const listInvoices = asyncHandler(async (req, res) => {
     Invoice.countDocuments(filters),
   ]);
 
+  const financialItems = await applyFinancialReads({ businessId: req.tenant.businessId, sourceType: "INVOICE", documents: items });
+  const enrichedItems = await attachEInvoiceMetadata({ businessId: req.tenant.businessId, invoices: financialItems });
+
   res.status(200).json({
     message: "Invoices fetched successfully",
-    data: buildPaginatedResponse({ items, total, page, limit }),
+    data: buildPaginatedResponse({ items: enrichedItems, total, page, limit }),
   });
 });
 
@@ -210,9 +247,12 @@ const getInvoiceById = asyncHandler(async (req, res) => {
     throw new AppError("Invoice not found", 404);
   }
 
+  const financialInvoice = await applyFinancialRead({ businessId: req.tenant.businessId, sourceType: "INVOICE", document: invoice });
+  const enrichedInvoice = await attachEInvoiceMetadata({ businessId: req.tenant.businessId, invoices: financialInvoice });
+
   res.status(200).json({
     message: "Invoice fetched successfully",
-    data: invoice,
+    data: enrichedInvoice,
   });
 });
 
@@ -255,6 +295,12 @@ const createInvoice = asyncHandler(async (req, res) => {
         roundOff: req.body.roundOff,
         amountPaid: req.body.amountPaid,
       });
+      if (business.gstConfiguration?.enabled) {
+        if (!validateGstin(business.gstConfiguration.gstin || business.gstTaxId) || !validateStateCode(business.gstConfiguration.stateCode)) throw new AppError("Invalid business GST configuration", 400);
+        if (customer.gstNumber && !validateGstin(customer.gstNumber)) throw new AppError("Invalid customer GSTIN", 400);
+        if ((req.body.placeOfSupplyCode || customer.placeOfSupplyCode || customer.stateCode) && !validateStateCode(req.body.placeOfSupplyCode || customer.placeOfSupplyCode || customer.stateCode)) throw new AppError("Invalid place of supply state code", 400);
+      }
+      const gstSnapshot = business.gstConfiguration?.enabled ? buildGstSnapshot({ business, counterparty: customer, lineItems: totals.lineItems, products, placeOfSupplyCode: req.body.placeOfSupplyCode }) : null;
 
       const sequence = business.invoiceNumbering?.nextSequence || 1;
       const invoiceDate = req.body.invoiceDate ? new Date(req.body.invoiceDate) : new Date();
@@ -299,6 +345,8 @@ const createInvoice = asyncHandler(async (req, res) => {
             paymentStatus: totals.paymentStatus,
             notes: req.body.notes?.trim() || "",
             termsAndConditions: req.body.termsAndConditions?.trim() || "",
+            gstSnapshot,
+            gstBreakup: gstSnapshot ? { cgst: gstSnapshot.cgst, sgst: gstSnapshot.sgst, utgst: gstSnapshot.utgst, igst: gstSnapshot.igst, taxableValue: gstSnapshot.taxableValue, hsnSacSummary: gstSnapshot.hsnSacSummary } : undefined,
             status: "issued",
             createdBy: req.user._id,
           },
@@ -308,6 +356,7 @@ const createInvoice = asyncHandler(async (req, res) => {
 
       const invoice = created[0];
       createdInvoiceId = invoice._id;
+      await CustomerLedger.updateOne({ businessId: req.tenant.businessId, sourceKey: `INVOICE:${invoice._id}:DEBIT` }, { $setOnInsert: { businessId: req.tenant.businessId, customerId: customer._id, eventType: "INVOICE", amount: invoice.grandTotal, direction: "DEBIT", invoiceId: invoice._id, sourceKey: `INVOICE:${invoice._id}:DEBIT`, createdBy: req.user._id } }, { upsert: true, session });
       business.invoiceNumbering.nextSequence = sequence + 1;
       await business.save({ session });
 
@@ -359,6 +408,26 @@ const updateInvoice = asyncHandler(async (req, res) => {
         throw new AppError("Cancelled invoices cannot be edited", 400);
       }
 
+      const allocationsExist = await hasDocumentAllocations({
+        businessId: req.tenant.businessId,
+        sourceType: "INVOICE",
+        sourceDocumentId: invoice._id,
+        session,
+      });
+      const migrated = await hasMigratedFinancialState({ businessId: req.tenant.businessId, sourceType: "INVOICE", sourceDocumentId: invoice._id, session });
+      const paymentWrite = legacyPaymentWriteDecision({ sourceType: "INVOICE", migrated, allocationsExist, body: req.body });
+      if (!paymentWrite.allowed) throw new AppError("Payment changes for this invoice must use the Payment and Allocation workflow.", 400);
+      const updateDecision = documentUpdateDecision({ sourceType: "INVOICE", allocationsExist, body: req.body });
+      if (!updateDecision.allowed) {
+        throw new AppError("Invoices with payment allocations cannot have financial values changed.", 400);
+      }
+      if (allocationsExist) {
+        if (req.body.notes !== undefined) invoice.notes = req.body.notes?.trim() || "";
+        if (req.body.termsAndConditions !== undefined) invoice.termsAndConditions = req.body.termsAndConditions?.trim() || "";
+        await invoice.save({ session });
+        return;
+      }
+
       const previousCustomerId = invoice.customerId.toString();
       const business = await Business.findById(req.tenant.businessId).session(session);
       const customer = await Customer.findOne({
@@ -388,6 +457,13 @@ const updateInvoice = asyncHandler(async (req, res) => {
         roundOff: req.body.roundOff,
         amountPaid: req.body.amountPaid,
       });
+
+      if (business.gstConfiguration?.enabled) {
+        if (!validateGstin(business.gstConfiguration.gstin || business.gstTaxId) || !validateStateCode(business.gstConfiguration.stateCode)) throw new AppError("Invalid business GST configuration", 400);
+        if (customer.gstNumber && !validateGstin(customer.gstNumber)) throw new AppError("Invalid customer GSTIN", 400);
+        if ((req.body.placeOfSupplyCode || customer.placeOfSupplyCode || customer.stateCode) && !validateStateCode(req.body.placeOfSupplyCode || customer.placeOfSupplyCode || customer.stateCode)) throw new AppError("Invalid place of supply state code", 400);
+      }
+      const gstSnapshot = business.gstConfiguration?.enabled ? buildGstSnapshot({ business, counterparty: customer, lineItems: totals.lineItems, products, placeOfSupplyCode: req.body.placeOfSupplyCode }) : null;
 
       const previousItems = invoice.lineItems.map((item) => ({
         productId: item.productId,
@@ -421,6 +497,8 @@ const updateInvoice = asyncHandler(async (req, res) => {
       invoice.amountPaid = totals.amountPaid;
       invoice.balanceDue = totals.balanceDue;
       invoice.paymentStatus = totals.paymentStatus;
+      invoice.gstSnapshot = gstSnapshot;
+      invoice.gstBreakup = gstSnapshot ? { cgst: gstSnapshot.cgst, sgst: gstSnapshot.sgst, utgst: gstSnapshot.utgst, igst: gstSnapshot.igst, taxableValue: gstSnapshot.taxableValue, hsnSacSummary: gstSnapshot.hsnSacSummary } : undefined;
       invoice.notes = req.body.notes?.trim() || "";
       invoice.termsAndConditions = req.body.termsAndConditions?.trim() || "";
 
@@ -509,8 +587,9 @@ const cancelInvoice = asyncHandler(async (req, res) => {
 
       invoice.status = "cancelled";
       invoice.paymentStatus = "cancelled";
-      invoice.balanceDue = 0;
-      await invoice.save({ session });
+        invoice.balanceDue = 0;
+        await invoice.save({ session });
+        await CustomerLedger.updateOne({ businessId: req.tenant.businessId, sourceKey: `INVOICE:${invoice._id}:CANCEL` }, { $setOnInsert: { businessId: req.tenant.businessId, customerId: invoice.customerId, eventType: "REVERSAL", amount: invoice.grandTotal, direction: "CREDIT", invoiceId: invoice._id, sourceKey: `INVOICE:${invoice._id}:CANCEL`, createdBy: req.user._id, notes: "Invoice cancellation" } }, { upsert: true, session });
 
       if (customer) {
         await syncCustomerInvoiceHistory({

@@ -46,6 +46,8 @@ const productSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    hsnSac: { type: String, trim: true, default: "" },
+    gstClassification: { type: String, trim: true, default: "" },
     discount: {
       type: Number,
       default: 0,
@@ -79,6 +81,8 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isSampleData: { type: Boolean, default: false, index: true },
+    sampleDataKey: { type: String, trim: true, default: "" },
   },
   {
     timestamps: true,
@@ -96,5 +100,6 @@ productSchema.index(
   }
 );
 productSchema.index({ businessId: 1, category: 1 });
+productSchema.index({ businessId: 1, isSampleData: 1 });
 
 module.exports = mongoose.model("Product", productSchema);

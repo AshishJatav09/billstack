@@ -89,6 +89,12 @@ const invoiceSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    sourceQuoteId: { type: mongoose.Schema.Types.ObjectId, ref: "Quote", default: null, immutable: true, index: true },
+    sourceOrderId: { type: mongoose.Schema.Types.ObjectId, ref: "Order", default: null, immutable: true, index: true },
+    sourceRecurringProfileId: { type: mongoose.Schema.Types.ObjectId, ref: "RecurringBillingProfile", default: null, immutable: true, index: true },
+    recurringOccurrenceKey: { type: String, trim: true, default: "", immutable: true },
+    gstSnapshot: { type: Object, default: null },
+    gstBreakup: { cgst: { type: Number, default: 0 }, sgst: { type: Number, default: 0 }, utgst: { type: Number, default: 0 }, igst: { type: Number, default: 0 }, taxableValue: { type: Number, default: 0 }, hsnSacSummary: { type: Object, default: {} } },
     invoiceDate: {
       type: Date,
       required: true,
@@ -134,6 +140,8 @@ const invoiceSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    isSampleData: { type: Boolean, default: false, index: true },
+    sampleDataKey: { type: String, trim: true, default: "" },
   },
   {
     timestamps: true,
@@ -141,7 +149,11 @@ const invoiceSchema = new mongoose.Schema(
 );
 
 invoiceSchema.index({ businessId: 1, invoiceNumber: 1 }, { unique: true });
+invoiceSchema.index({ businessId: 1, sourceQuoteId: 1 }, { unique: true, partialFilterExpression: { sourceQuoteId: { $type: "objectId" } } });
+invoiceSchema.index({ businessId: 1, sourceOrderId: 1 }, { unique: true, partialFilterExpression: { sourceOrderId: { $type: "objectId" } } });
+invoiceSchema.index({ businessId: 1, recurringOccurrenceKey: 1 }, { unique: true, partialFilterExpression: { recurringOccurrenceKey: { $type: "string", $ne: "" } } });
 invoiceSchema.index({ businessId: 1, customerId: 1, invoiceDate: -1 });
 invoiceSchema.index({ businessId: 1, status: 1, invoiceDate: -1 });
+invoiceSchema.index({ businessId: 1, isSampleData: 1 });
 
 module.exports = mongoose.model("Invoice", invoiceSchema);

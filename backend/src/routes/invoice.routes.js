@@ -9,6 +9,12 @@ const {
   listInvoices,
   updateInvoice,
 } = require("../controllers/invoice.controller");
+const {
+  checkInvoiceReadiness,
+  getEInvoiceDetails,
+  prepareEInvoicePayload,
+} = require("../controllers/einvoice.controller");
+const { listInvoiceAllocations } = require("../controllers/payment.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
 const { requireInvoiceCapacity } = require("../middlewares/feature-guard.middleware");
 const { validateObjectIdParam } = require("../middlewares/object-id.middleware");
@@ -26,6 +32,10 @@ const router = express.Router();
 router.use(authMiddleware, tenantMiddleware, requireActiveSubscription());
 
 router.get("/", listInvoices);
+router.get("/:invoiceId/allocations", validateObjectIdParam("invoiceId"), listInvoiceAllocations);
+router.get("/:invoiceId/e-invoice", validateObjectIdParam("invoiceId"), getEInvoiceDetails);
+router.post("/:invoiceId/e-invoice/check", validateObjectIdParam("invoiceId"), checkInvoiceReadiness);
+router.post("/:invoiceId/e-invoice/prepare", validateObjectIdParam("invoiceId"), prepareEInvoicePayload);
 router.get("/:invoiceId/pdf", validateObjectIdParam("invoiceId"), downloadInvoicePdf);
 router.get("/:invoiceId", validateObjectIdParam("invoiceId"), getInvoiceById);
 router.post("/", permit("owner", "admin", "staff", "accountant"), requireInvoiceCapacity(), validate(invoiceCreateValidator), createInvoice);

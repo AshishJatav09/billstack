@@ -3,7 +3,11 @@ const express = require("express");
 const {
   createCustomer,
   deleteCustomer,
+  downloadCustomerStatementPdf,
+  exportCustomerStatementCsv,
   getCustomerById,
+  getCustomerLedger,
+  getCustomerStatement,
   listCustomers,
   updateCustomer,
 } = require("../controllers/customer.controller");
@@ -23,6 +27,10 @@ const router = express.Router();
 router.use(authMiddleware, tenantMiddleware, requireActiveSubscription());
 
 router.get("/", listCustomers);
+router.get("/:customerId/ledger", validateObjectIdParam("customerId"), getCustomerLedger);
+router.get("/:customerId/statement", validateObjectIdParam("customerId"), getCustomerStatement);
+router.get("/:customerId/statement.csv", validateObjectIdParam("customerId"), exportCustomerStatementCsv);
+router.get("/:customerId/statement.pdf", validateObjectIdParam("customerId"), downloadCustomerStatementPdf);
 router.get("/:customerId", validateObjectIdParam("customerId"), getCustomerById);
 router.post("/", permit("owner", "admin", "staff", "accountant"), validate(customerCreateValidator), createCustomer);
 router.put(

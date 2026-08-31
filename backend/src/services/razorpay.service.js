@@ -22,6 +22,8 @@ const getRazorpayInstance = () => {
 
 const getRazorpayPlanIdForCode = (planCode) => {
   const planMap = {
+    starter: process.env.RAZORPAY_PLAN_STARTER_ID || process.env.RAZORPAY_PLAN_BASIC_ID,
+    growth: process.env.RAZORPAY_PLAN_GROWTH_ID,
     basic: process.env.RAZORPAY_PLAN_BASIC_ID,
     pro: process.env.RAZORPAY_PLAN_PRO_ID,
     enterprise: process.env.RAZORPAY_PLAN_ENTERPRISE_ID,
@@ -58,6 +60,21 @@ const createRazorpaySubscription = async ({
   });
 
   return subscription;
+};
+
+const createRazorpayOrder = async ({ amount, currency = "INR", receipt, notes = {} }) => {
+  const razorpay = getRazorpayInstance();
+
+  if (!razorpay) {
+    throw new Error("Razorpay is not configured");
+  }
+
+  return razorpay.orders.create({
+    amount,
+    currency,
+    receipt,
+    notes,
+  });
 };
 
 const updateRazorpaySubscription = async ({
@@ -112,6 +129,23 @@ const verifyRazorpaySubscriptionPayment = ({
   return generatedSignature === razorpaySignature;
 };
 
+const verifyRazorpayOrderPayment = ({
+  razorpayOrderId,
+  razorpayPaymentId,
+  razorpaySignature,
+}) => {
+  if (!process.env.RAZORPAY_KEY_SECRET) {
+    throw new Error("Razorpay is not configured");
+  }
+
+  const generatedSignature = crypto
+    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+    .digest("hex");
+
+  return generatedSignature === razorpaySignature;
+};
+
 const verifyRazorpayWebhookSignature = ({ rawBody, signature }) => {
   const expectedSignature = crypto
     .createHmac("sha256", process.env.RAZORPAY_WEBHOOK_SECRET)
@@ -123,11 +157,12 @@ const verifyRazorpayWebhookSignature = ({ rawBody, signature }) => {
 
 module.exports = {
   createRazorpaySubscription,
+  createRazorpayOrder,
   fetchRazorpaySubscription,
   getRazorpayInstance,
   getRazorpayPlanIdForCode,
   updateRazorpaySubscription,
   verifyRazorpaySubscriptionPayment,
+  verifyRazorpayOrderPayment,
   verifyRazorpayWebhookSignature,
 };
-

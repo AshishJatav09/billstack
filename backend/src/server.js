@@ -4,6 +4,7 @@ dotenv.config();
 
 const app = require("./app");
 const connectDB = require("./config/db");
+const { validateEnvironment } = require("./config/env");
 const { log } = require("./utils/logger");
 
 const PORT = process.env.PORT || 5000;
@@ -11,6 +12,10 @@ let server;
 
 const startServer = async () => {
   try {
+    const env = validateEnvironment();
+    for (const warning of env.warnings) {
+      log("warn", "Environment validation warning", { warning });
+    }
     await connectDB();
     server = app.listen(PORT, () => {
       log("info", `BillStack API running on port ${PORT}`);

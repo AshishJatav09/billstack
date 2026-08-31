@@ -35,6 +35,7 @@ const supplierSchema = new mongoose.Schema(
       uppercase: true,
       default: "",
     },
+    stateCode: { type: String, trim: true, default: "" },
     productsSupplied: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -61,4 +62,3 @@ supplierSchema.index({ businessId: 1, supplierName: 1 });
 supplierSchema.index({ businessId: 1, email: 1 });
 
 module.exports = mongoose.model("Supplier", supplierSchema);
-

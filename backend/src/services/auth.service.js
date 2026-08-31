@@ -113,6 +113,8 @@ const buildAuthPayload = async ({ user, business, accessToken }) => {
     },
     isActive: user.isActive,
     businessId: user.businessId,
+    authProvider: user.authProvider,
+    googleLinked: Boolean(user.googleSubject && user.googleEmailVerified),
   },
   business: serializeBusinessWithPlan(business, subscription),
 });

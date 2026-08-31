@@ -12,9 +12,16 @@ import { EmptyState, ErrorState, LoadingState } from "../../../components/ui/Pag
 import MetricCard from "../../dashboard/components/MetricCard";
 import {
   superAdminBusinessesRequest,
+  superAdminCreateModuleOfferRequest,
   superAdminListPlansRequest,
   superAdminOverviewRequest,
+  superAdminProductConfigurationRequest,
+  superAdminReviewCommercialOrderRequest,
+  superAdminReviewModuleRequest,
+  superAdminSyncCommercialCatalogueRequest,
   superAdminToggleBusinessStatusRequest,
+  superAdminUpdateCommercialModuleRequest,
+  superAdminUpdateCommercialPlanRequest,
   superAdminUpdateBusinessPlanRequest,
 } from "../api";
 import { superAdminStore } from "../../../store/superAdminStore";
@@ -28,6 +35,8 @@ const formatCurrency = (value) =>
   }).format(Number(value || 0));
 
 const planFeatureLabel = (value) => (value ? "Enabled" : "Locked");
+const formatLimit = (value) =>
+  Number(value) === Number.MAX_SAFE_INTEGER ? "Unlimited" : Number(value || 0);
 
 const SuperAdminDashboardPage = () => {
   const { email, clearSession } = superAdminStore();
@@ -54,6 +63,8 @@ const SuperAdminDashboardPage = () => {
   const [businessError, setBusinessError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [busyBusinessId, setBusyBusinessId] = useState("");
+  const [productConfig, setProductConfig] = useState(null);
+  const [productConfigError, setProductConfigError] = useState("");
 
   useEffect(() => {
     const loadOverview = async () => {
@@ -61,12 +72,14 @@ const SuperAdminDashboardPage = () => {
       setOverviewError("");
 
       try {
-        const [overviewData, plansData] = await Promise.all([
+        const [overviewData, plansData, productConfiguration] = await Promise.all([
           superAdminOverviewRequest(),
           superAdminListPlansRequest(),
+          superAdminProductConfigurationRequest(),
         ]);
         setOverview(overviewData);
         setPlans(plansData);
+        setProductConfig(productConfiguration);
       } catch (error) {
         setOverviewError(error.response?.data?.message || "Unable to load platform overview");
       } finally {
@@ -159,7 +172,7 @@ const SuperAdminDashboardPage = () => {
     setBusinessError("");
 
     try {
-      const [overviewData, businessData] = await Promise.all([
+      const [overviewData, businessData, productConfiguration] = await Promise.all([
         superAdminOverviewRequest(),
         superAdminBusinessesRequest({
           page: query.page,
@@ -170,9 +183,11 @@ const SuperAdminDashboardPage = () => {
           sortBy: "createdAt",
           sortOrder: "desc",
         }),
+        superAdminProductConfigurationRequest(),
       ]);
 
       setOverview(overviewData);
+      setProductConfig(productConfiguration);
       setBusinesses(businessData.items || []);
       setPagination(
         businessData.pagination || { page: 1, limit: 10, total: 0, totalPages: 1 }
@@ -181,6 +196,106 @@ const SuperAdminDashboardPage = () => {
       const message = error.response?.data?.message || "Unable to refresh platform data";
       setOverviewError(message);
       setBusinessError(message);
+    }
+  };
+
+  const handleReviewModuleRequest = async (requestId, status) => {
+    setProductConfigError("");
+    try {
+      await superAdminReviewModuleRequest(requestId, { status });
+      const productConfiguration = await superAdminProductConfigurationRequest();
+      setProductConfig(productConfiguration);
+    } catch (error) {
+      setProductConfigError(error.response?.data?.message || "Unable to review module request");
+    }
+  };
+
+  const refreshProductConfiguration = async () => {
+    const productConfiguration = await superAdminProductConfigurationRequest();
+    setProductConfig(productConfiguration);
+  };
+
+  const handleSyncCommercialCatalogue = async () => {
+    setProductConfigError("");
+    try {
+      await superAdminSyncCommercialCatalogueRequest();
+      await refreshProductConfiguration();
+    } catch (error) {
+      setProductConfigError(error.response?.data?.message || "Unable to sync commercial catalogue");
+    }
+  };
+
+  const handleCommercialPriceUpdate = async (module) => {
+    const nextPrice = window.prompt(`Standard price for ${module.displayName}`, module.defaultPrice ?? 0);
+    if (nextPrice === null) return;
+    setProductConfigError("");
+    try {
+      await superAdminUpdateCommercialModuleRequest(module.moduleKey, {
+        defaultPrice: Number(nextPrice),
+        commercialType: module.commercialType,
+        pricingType: module.pricingType,
+        gstApplicable: module.gstApplicable,
+        gstRate: module.gstRate,
+        active: module.active,
+      });
+      await refreshProductConfiguration();
+    } catch (error) {
+      setProductConfigError(error.response?.data?.message || "Unable to update commercial module");
+    }
+  };
+
+  const handleCommercialPlanUpdate = async (plan) => {
+    const monthlyPrice = window.prompt(`Monthly price for ${plan.name}`, plan.monthlyPrice ?? 0);
+    if (monthlyPrice === null) return;
+    const yearlyPrice = window.prompt(`Yearly price for ${plan.name}`, plan.yearlyPrice ?? 0);
+    if (yearlyPrice === null) return;
+    const invoiceLimit = window.prompt(`Monthly invoice limit for ${plan.name}`, plan.limits?.monthlyInvoices ?? "");
+    if (invoiceLimit === null) return;
+
+    setProductConfigError("");
+    try {
+      await superAdminUpdateCommercialPlanRequest(plan.code, {
+        monthlyPrice: Number(monthlyPrice),
+        yearlyPrice: Number(yearlyPrice),
+        limits: {
+          ...plan.limits,
+          monthlyInvoices: invoiceLimit === "" ? plan.limits?.monthlyInvoices : Number(invoiceLimit),
+        },
+        active: plan.active,
+        publicVisible: plan.publicVisible,
+      });
+      await refreshProductConfiguration();
+    } catch (error) {
+      setProductConfigError(error.response?.data?.message || "Unable to update commercial plan");
+    }
+  };
+
+  const handleCreateOffer = async (request) => {
+    const negotiatedPrice = window.prompt(
+      `Offer base price for ${request.moduleKey}. Leave 0 for included/free.`,
+      ""
+    );
+    if (negotiatedPrice === null) return;
+    setProductConfigError("");
+    try {
+      await superAdminCreateModuleOfferRequest({
+        moduleRequestId: request._id,
+        negotiatedPrice: negotiatedPrice === "" ? undefined : Number(negotiatedPrice),
+        adminNote: "Commercial offer created from Super Admin",
+      });
+      await refreshProductConfiguration();
+    } catch (error) {
+      setProductConfigError(error.response?.data?.message || "Unable to create module offer");
+    }
+  };
+
+  const handleReviewCommercialOrder = async (orderId, status) => {
+    setProductConfigError("");
+    try {
+      await superAdminReviewCommercialOrderRequest(orderId, { status });
+      await refreshProductConfiguration();
+    } catch (error) {
+      setProductConfigError(error.response?.data?.message || "Unable to review commercial payment");
     }
   };
 
@@ -367,6 +482,149 @@ const SuperAdminDashboardPage = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Product Configuration</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Review module catalogue, business presets, and module/add-on requests without direct database overrides.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={handleSyncCommercialCatalogue} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200">
+                Sync catalogue
+              </button>
+              <span className="rounded-full bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-300">
+                {productConfig?.modules?.length || 0} modules
+              </span>
+            </div>
+          </div>
+          {productConfigError ? <p className="mt-4 text-sm text-rose-300">{productConfigError}</p> : null}
+          <div className="mt-5 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+              <p className="text-sm font-semibold text-white">Module catalogue</p>
+              <div className="mt-3 grid max-h-80 gap-2 overflow-y-auto pr-1">
+                {(productConfig?.modules || []).map((module) => (
+                  <div key={module.key} className="rounded-xl border border-white/10 bg-white/[.03] p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-white">{module.name}</p>
+                      <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] text-slate-300">{module.status}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-400">{module.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                <p className="text-sm font-semibold text-white">Commercial catalogue</p>
+                <div className="mt-3 space-y-2">
+                  {(productConfig?.commercialModules || []).length ? productConfig.commercialModules.map((module) => (
+                    <div key={module._id || module.moduleKey} className="rounded-xl border border-white/10 bg-white/[.03] p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-white">{module.displayName}</p>
+                          <p className="mt-1 text-xs text-slate-400">{module.moduleKey} · {module.commercialType} · {module.pricingType}</p>
+                        </div>
+                        <button type="button" onClick={() => handleCommercialPriceUpdate(module)} className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-slate-200">
+                          Edit price
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-300">
+                        Standard {formatCurrency(module.defaultPrice)} {module.gstApplicable ? `+ GST ${module.gstRate}%` : "· no GST"} · {module.active ? "Active" : "Hidden"}
+                      </p>
+                    </div>
+                  )) : <p className="text-sm text-slate-400">Commercial catalogue is not synced yet.</p>}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                <p className="text-sm font-semibold text-white">Commercial plans</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Backend-authoritative prices and limits used by customer subscription screens.
+                </p>
+                <div className="mt-3 space-y-2">
+                  {(productConfig?.commercialPlans || []).length ? productConfig.commercialPlans.map((plan) => (
+                    <div key={plan._id || plan.code} className="rounded-xl border border-white/10 bg-white/[.03] p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-white">{plan.name}</p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            {plan.code} · {formatCurrency(plan.monthlyPrice)}/mo · {formatCurrency(plan.yearlyPrice)}/yr
+                          </p>
+                        </div>
+                        <button type="button" onClick={() => handleCommercialPlanUpdate(plan)} className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-slate-200">
+                          Edit plan
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-300">
+                        Invoices {formatLimit(plan.limits?.monthlyInvoices)} · Users {formatLimit(plan.limits?.users)} · WhatsApp {formatLimit(plan.limits?.whatsappQuota)} · {plan.active ? "Active" : "Hidden"}
+                      </p>
+                    </div>
+                  )) : <p className="text-sm text-slate-400">Commercial plans are not synced yet.</p>}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                <p className="text-sm font-semibold text-white">Presets</p>
+                <div className="mt-3 space-y-2">
+                  {(productConfig?.presets || []).map((preset) => (
+                    <p key={preset.key} className="rounded-xl bg-white/[.03] p-3 text-xs text-slate-300">
+                      <span className="font-semibold text-white">{preset.key}</span> · {preset.moduleKeys.join(", ") || "custom selection"}
+                    </p>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                <p className="text-sm font-semibold text-white">Module Requests</p>
+                <div className="mt-3 space-y-2">
+                  {(productConfig?.requests || []).length ? productConfig.requests.map((request) => (
+                    <div key={request._id} className="rounded-xl border border-white/10 bg-white/[.03] p-3">
+                      <p className="text-sm font-semibold text-white">{request.moduleKey || request.requestType}</p>
+                      <p className="mt-1 text-xs text-slate-400">{request.businessId?.name || "Business"} · {request.status}</p>
+                      {request.message ? <p className="mt-1 text-xs text-slate-500">{request.message}</p> : null}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button type="button" onClick={() => handleCreateOffer(request)} className="rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white">Create offer</button>
+                        <button type="button" onClick={() => handleReviewModuleRequest(request._id, "APPROVED")} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Approve</button>
+                        <button type="button" onClick={() => handleReviewModuleRequest(request._id, "REJECTED")} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-semibold text-white">Reject</button>
+                      </div>
+                    </div>
+                  )) : <p className="text-sm text-slate-400">No module requests yet.</p>}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                <p className="text-sm font-semibold text-white">Commercial Offers</p>
+                <div className="mt-3 space-y-2">
+                  {(productConfig?.offers || []).length ? productConfig.offers.map((offer) => (
+                    <div key={offer._id} className="rounded-xl border border-white/10 bg-white/[.03] p-3">
+                      <p className="text-sm font-semibold text-white">{offer.moduleKey} · {formatCurrency(offer.finalAmount)}</p>
+                      <p className="mt-1 text-xs text-slate-400">{offer.businessId?.name || "Business"} · {offer.status}</p>
+                    </div>
+                  )) : <p className="text-sm text-slate-400">No commercial offers yet.</p>}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                <p className="text-sm font-semibold text-white">Commercial Payments</p>
+                <div className="mt-3 space-y-2">
+                  {(productConfig?.orders || []).length ? productConfig.orders.map((order) => (
+                    <div key={order._id} className="rounded-xl border border-white/10 bg-white/[.03] p-3">
+                      <p className="text-sm font-semibold text-white">{order.moduleKey} · {formatCurrency(order.totalAmount)}</p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {order.businessId?.name || "Business"} · {order.paymentMethod} · {order.paymentStatus} · Activation {order.activationStatus}
+                      </p>
+                      {order.utrReference ? <p className="mt-1 text-xs text-slate-500">UTR: {order.utrReference}</p> : null}
+                      {order.paymentStatus === "AWAITING_VERIFICATION" ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button type="button" onClick={() => handleReviewCommercialOrder(order._id, "PAID")} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Verify paid</button>
+                          <button type="button" onClick={() => handleReviewCommercialOrder(order._id, "REJECTED")} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-semibold text-white">Reject</button>
+                        </div>
+                      ) : null}
+                    </div>
+                  )) : <p className="text-sm text-slate-400">No commercial payments yet.</p>}
+                </div>
+              </div>
             </div>
           </div>
         </section>

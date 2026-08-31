@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import {
   currentSessionRequest,
+  googleAuthRequest,
   loginRequest,
   logoutRequest,
   registerRequest,
@@ -43,6 +44,17 @@ export const useAuth = () => {
     navigate(data.business.onboardingCompleted ? "/dashboard" : "/onboarding");
   };
 
+  const googleAuth = async (payload) => {
+    const data = await googleAuthRequest(payload);
+    setSession(data);
+    uiStore.getState().pushToast({
+      tone: "success",
+      title: payload.mode === "signup" ? "Account created" : "Welcome back",
+      message: "Google sign-in completed securely.",
+    });
+    navigate(data.business.onboardingCompleted ? "/dashboard" : "/onboarding");
+  };
+
   const logout = async () => {
     try {
       await logoutRequest();
@@ -59,6 +71,7 @@ export const useAuth = () => {
   return {
     accessToken,
     business,
+    googleAuth,
     login,
     logout,
     register,

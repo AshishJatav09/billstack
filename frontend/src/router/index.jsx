@@ -16,14 +16,20 @@ const OnboardingPage = lazy(() => import("../features/auth/pages/OnboardingPage"
 const RegisterPage = lazy(() => import("../features/auth/pages/RegisterPage"));
 const ResetPasswordPage = lazy(() => import("../features/auth/pages/ResetPasswordPage"));
 const BusinessSettingsPage = lazy(() => import("../features/dashboard/pages/BusinessSettingsPage"));
+const CommunicationsPage = lazy(() => import("../features/dashboard/pages/CommunicationsPage"));
 const CustomersPage = lazy(() => import("../features/dashboard/pages/CustomersPage"));
 const DashboardHomePage = lazy(() => import("../features/dashboard/pages/DashboardHomePage"));
+const ExpensesPage = lazy(() => import("../features/dashboard/pages/ExpensesPage"));
 const InvoicesPage = lazy(() => import("../features/dashboard/pages/InvoicesPage"));
+const InvoiceDetailPage = lazy(() => import("../features/dashboard/pages/InvoiceDetailPage"));
 const ProductsPage = lazy(() => import("../features/dashboard/pages/ProductsPage"));
 const PurchasesPage = lazy(() => import("../features/dashboard/pages/PurchasesPage"));
 const ReportsPage = lazy(() => import("../features/dashboard/pages/ReportsPage"));
+const SalesLifecyclePage = lazy(() => import("../features/dashboard/pages/SalesLifecyclePage"));
+const SubscriptionPage = lazy(() => import("../features/dashboard/pages/SubscriptionPage"));
 const SuppliersPage = lazy(() => import("../features/dashboard/pages/SuppliersPage"));
 const TeamPage = lazy(() => import("../features/dashboard/pages/TeamPage"));
+const WorkflowPage = lazy(() => import("../features/dashboard/pages/WorkflowPage"));
 const EmployeesPage = lazy(() => import("../features/hr/pages/EmployeesPage"));
 const AttendancePage = lazy(() => import("../features/hr/pages/AttendancePage"));
 const SalarySetupPage = lazy(() => import("../features/hr/pages/SalarySetupPage"));
@@ -94,6 +100,26 @@ export const router = createBrowserRouter([
                 element: lazyElement(<InvoicesPage />, "Loading invoices"),
               },
               {
+                path: "invoices/:invoiceId",
+                element: lazyElement(<InvoiceDetailPage />, "Loading invoice"),
+              },
+              {
+                path: "quotes",
+                element: lazyElement(<SalesLifecyclePage />, "Loading quotes"),
+              },
+              {
+                path: "orders",
+                element: lazyElement(<WorkflowPage />, "Loading orders"),
+              },
+              {
+                path: "credit-notes",
+                element: lazyElement(<SalesLifecyclePage />, "Loading credit notes"),
+              },
+              {
+                path: "sales-returns",
+                element: lazyElement(<SalesLifecyclePage />, "Loading sales returns"),
+              },
+              {
                 path: "customers",
                 element: lazyElement(<CustomersPage />, "Loading customers"),
               },
@@ -110,8 +136,48 @@ export const router = createBrowserRouter([
                 element: lazyElement(<PurchasesPage />, "Loading purchases"),
               },
               {
+                path: "expenses",
+                element: lazyElement(<ExpensesPage />, "Loading expenses"),
+              },
+              {
                 path: "reports",
                 element: lazyElement(<ReportsPage />, "Loading reports"),
+              },
+              {
+                path: "communications",
+                element: lazyElement(<CommunicationsPage />, "Loading communications"),
+              },
+              {
+                path: "projects",
+                element: lazyElement(<WorkflowPage />, "Loading projects"),
+              },
+              {
+                path: "tasks",
+                element: lazyElement(<WorkflowPage />, "Loading tasks"),
+              },
+              {
+                path: "recurring-billing",
+                element: lazyElement(<WorkflowPage />, "Loading recurring billing"),
+              },
+              {
+                path: "appointments",
+                element: lazyElement(<WorkflowPage />, "Loading appointments"),
+              },
+              {
+                path: "production-jobs",
+                element: lazyElement(<WorkflowPage />, "Loading production jobs"),
+              },
+              {
+                path: "batches",
+                element: lazyElement(<WorkflowPage />, "Loading batches"),
+              },
+              {
+                path: "dispatches",
+                element: lazyElement(<WorkflowPage />, "Loading dispatches"),
+              },
+              {
+                path: "approvals",
+                element: lazyElement(<WorkflowPage />, "Loading approvals"),
               },
               {
                 path: "team",
@@ -132,6 +198,10 @@ export const router = createBrowserRouter([
               {
                 path: "settings",
                 element: lazyElement(<BusinessSettingsPage />, "Loading settings"),
+              },
+              {
+                path: "subscription",
+                element: lazyElement(<SubscriptionPage />, "Loading subscription"),
               },
             ],
           },

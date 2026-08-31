@@ -6,19 +6,31 @@ const morgan = require("morgan");
 const mongoSanitize = require("express-mongo-sanitize");
 
 const { buildCorsOptions } = require("./config/cors");
+const { logoUploadDirectory } = require("./config/upload");
 const { requestContext } = require("./middlewares/request-context.middleware");
 const { apiRateLimiter } = require("./middlewares/rate-limit.middleware");
 const { log } = require("./utils/logger");
+const auditRoutes = require("./routes/audit.routes");
 const authRoutes = require("./routes/auth.routes");
 const businessRoutes = require("./routes/business.routes");
 const customerRoutes = require("./routes/customer.routes");
+const communicationRoutes = require("./routes/communication.routes");
 const dashboardRoutes = require("./routes/dashboard.routes");
 const billingRoutes = require("./routes/billing.routes");
 const featureRoutes = require("./routes/feature.routes");
 const healthRoutes = require("./routes/health.routes");
 const hrRoutes = require("./routes/hr.routes");
 const invoiceRoutes = require("./routes/invoice.routes");
+const integrationRoutes = require("./routes/integration.routes");
 const planRoutes = require("./routes/plan.routes");
+const moduleRoutes = require("./routes/module.routes");
+  const paymentRoutes = require("./routes/payment.routes");
+  const quoteRoutes = require("./routes/quote.routes");
+  const salesLifecycleRoutes = require("./routes/sales-lifecycle.routes");
+const sharedOperationsRoutes = require("./routes/shared-operations.routes");
+const workflowRoutes = require("./routes/workflow.routes");
+const gstRoutes = require("./routes/gst.routes");
+const expenseRoutes = require("./routes/expense.routes");
 const productRoutes = require("./routes/product.routes");
 const purchaseRoutes = require("./routes/purchase.routes");
 const reportRoutes = require("./routes/report.routes");
@@ -29,7 +41,12 @@ const { notFound, errorHandler } = require("./middlewares/error.middleware");
 
 const app = express();
 app.set("trust proxy", 1);
-const jsonParser = express.json({ limit: "1mb" });
+const jsonParser = express.json({
+  limit: "1mb",
+  verify: (req, _res, buf) => {
+    req.rawBody = buf.toString("utf8");
+  },
+});
 const corsMiddleware = cors(buildCorsOptions());
 
 morgan.token("requestId", (req) => req.requestId);
@@ -67,25 +84,45 @@ app.use(
     },
   })
 );
-app.use("/uploads", express.static("uploads"));
+app.use(
+  "/uploads/logos",
+  express.static(logoUploadDirectory, {
+    immutable: true,
+    maxAge: "1d",
+    setHeaders: (res) => {
+      res.setHeader("X-Content-Type-Options", "nosniff");
+    },
+  })
+);
 app.use("/api", apiRateLimiter);
 
 app.use("/api/health", healthRoutes);
+app.use("/api/audit-logs", auditRoutes);
 app.use("/api/hr", hrRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/super-admin", superAdminRoutes);
 app.use("/api/business", businessRoutes);
 app.use("/api/billing", billingRoutes);
 app.use("/api/customers", customerRoutes);
+app.use("/api/communications", communicationRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/plans", planRoutes);
+  app.use("/api/payments", paymentRoutes);
+  app.use("/api/quotes", quoteRoutes);
+  app.use("/api/sales", salesLifecycleRoutes);
+app.use("/api/shared-operations", sharedOperationsRoutes);
+app.use("/api/gst", gstRoutes);
+app.use("/api/expenses", expenseRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/purchases", purchaseRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/team", teamRoutes);
 app.use("/api/invoices", invoiceRoutes);
+app.use("/api/integrations", integrationRoutes);
 app.use("/api/features", featureRoutes);
+app.use("/api/modules", moduleRoutes);
+app.use("/api/workflows", workflowRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

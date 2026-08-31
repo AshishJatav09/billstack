@@ -11,7 +11,7 @@ const businessSubscriptionSchema = new mongoose.Schema(
     },
     planCode: {
       type: String,
-      enum: ["free", "basic", "pro", "enterprise"],
+      enum: ["free", "starter", "growth", "basic", "pro", "enterprise"],
       required: true,
       default: "free",
     },
@@ -34,10 +34,14 @@ const businessSubscriptionSchema = new mongoose.Schema(
       type: String,
       enum: [
         "inactive",
+        "free",
+        "trial",
         "created",
         "authenticated",
         "active",
         "pending",
+        "past_due",
+        "grace_period",
         "halted",
         "cancelled",
         "completed",
@@ -76,7 +80,7 @@ const businessSubscriptionSchema = new mongoose.Schema(
     },
     pendingPlanCode: {
       type: String,
-      enum: ["", "free", "basic", "pro", "enterprise"],
+      enum: ["", "free", "starter", "growth", "basic", "pro", "enterprise"],
       default: "",
     },
     scheduleChangeAt: {
@@ -97,6 +101,55 @@ const businessSubscriptionSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    trialEndsAt: {
+      type: Date,
+      default: null,
+    },
+    lifecycleStatus: {
+      type: String,
+      enum: ["FREE", "TRIAL", "ACTIVE", "PAST_DUE", "GRACE_PERIOD", "CANCELLED", "EXPIRED", ""],
+      default: "",
+      index: true,
+    },
+    trialStartedAt: {
+      type: Date,
+      default: null,
+    },
+    trialSource: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    trialPlanCode: {
+      type: String,
+      enum: ["", "starter", "growth", "pro", "enterprise"],
+      default: "",
+    },
+    trialConsumed: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    graceEndsAt: {
+      type: Date,
+      default: null,
+    },
+    failedPaymentAt: {
+      type: Date,
+      default: null,
+    },
+    sourceOfTruthVersion: {
+      type: String,
+      default: "phase15",
+    },
+    addonEntitlements: {
+      whatsappPackage: { type: Number, default: 0 },
+      extraUsers: { type: Number, default: 0 },
+      extraBusinesses: { type: Number, default: 0 },
+      extraStorageGb: { type: Number, default: 0 },
+      industryModules: { type: [String], default: [] },
+      workflowModules: { type: [String], default: [] },
+    },
   },
   {
     timestamps: true,
@@ -104,4 +157,3 @@ const businessSubscriptionSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model("BusinessSubscription", businessSubscriptionSchema);
-

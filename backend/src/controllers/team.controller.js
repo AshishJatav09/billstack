@@ -1,7 +1,7 @@
 const User = require("../models/User");
 const AppError = require("../utils/appError");
 const asyncHandler = require("../utils/asyncHandler");
-const { getPlanByCode } = require("../utils/businessPlan");
+const { ensureBusinessSubscription, getPlanEntitlements, isSubscriptionAccessible } = require("../utils/subscription");
 const {
   buildPaginatedResponse,
   buildPagination,
@@ -47,13 +47,24 @@ const listTeamMembers = asyncHandler(async (req, res) => {
 
 const createTeamMember = asyncHandler(async (req, res) => {
   const businessId = req.tenant.businessId;
-  const plan = getPlanByCode(req.business.planCode);
+  const subscription = await ensureBusinessSubscription({ businessId, planCode: req.business.planCode });
+  if (!isSubscriptionAccessible(subscription)) {
+    throw new AppError("Your subscription is inactive or expired", 402);
+  }
+  const plan = getPlanEntitlements(subscription);
   const currentUserCount = await User.countDocuments({ businessId });
 
   if (currentUserCount >= plan.staffUserLimit) {
     throw new AppError(
       `Staff user limit reached for the ${plan.name} plan. Allowed users: ${plan.staffUserLimit}`,
-      403
+      403,
+      {
+        code: "LIMIT_REACHED",
+        feature: "staff",
+        current: currentUserCount,
+        limit: plan.staffUserLimit,
+        recommendedAction: "UPGRADE_PLAN",
+      }
     );
   }
 

@@ -10,7 +10,6 @@ const webhookEventSchema = new mongoose.Schema(
     eventId: {
       type: String,
       required: true,
-      unique: true,
       index: true,
     },
     eventType: {
@@ -21,9 +20,20 @@ const webhookEventSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
+    status: {
+      type: String,
+      enum: ["RECEIVED", "PROCESSING", "PROCESSED", "FAILED"],
+      default: "RECEIVED",
+      index: true,
+    },
+    errorMessage: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     processedAt: {
       type: Date,
-      default: Date.now,
+      default: null,
     },
   },
   {
@@ -31,5 +41,6 @@ const webhookEventSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model("WebhookEvent", webhookEventSchema);
+webhookEventSchema.index({ provider: 1, eventId: 1 }, { unique: true });
 
+module.exports = mongoose.model("WebhookEvent", webhookEventSchema);

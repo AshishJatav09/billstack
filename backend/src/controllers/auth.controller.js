@@ -16,7 +16,10 @@ const {
   signAccessToken,
 } = require("../services/auth.service");
 const { sendEmail } = require("../services/email.service");
+const { verifyGoogleIdentityToken } = require("../services/google-auth.service");
+const { writeAuditLog } = require("../services/audit.service");
 const { serializeBusinessWithPlan } = require("../utils/businessPlan");
+const { startTrialForNewBusiness } = require("../services/commercial-plan.service");
 
 const refreshCookieName = process.env.REFRESH_COOKIE_NAME || "billstack_refresh_token";
 
@@ -83,6 +86,8 @@ const register = asyncHandler(async (req, res) => {
 
   business.ownerUserId = user._id;
   await business.save();
+  await startTrialForNewBusiness({ businessId: business._id, trialSource: "email_signup" });
+  const trialBusiness = await Business.findById(business._id);
 
   const accessToken = signAccessToken(user);
   const refreshToken = await issueRefreshToken(user, {
@@ -91,9 +96,10 @@ const register = asyncHandler(async (req, res) => {
   });
 
   res.cookie(refreshCookieName, refreshToken, refreshCookieOptions);
+  await writeAuditLog({ req, businessId: business._id, actor: { type: "USER", userId: user._id, email: user.email, role: user.role }, action: "USER_REGISTERED", entityType: "USER", entityId: user._id, metadata: { authProvider: user.authProvider } });
   res.status(201).json({
     message: "Registration successful",
-    data: await buildAuthPayload({ user, business, accessToken }),
+    data: await buildAuthPayload({ user, business: trialBusiness || business, accessToken }),
   });
 });
 
@@ -154,8 +160,75 @@ const login = asyncHandler(async (req, res) => {
   });
 
   res.cookie(refreshCookieName, refreshToken, refreshCookieOptions);
+  await writeAuditLog({ req, businessId: business._id, actor: { type: "USER", userId: user._id, email: user.email, role: user.role }, action: "USER_LOGIN", entityType: "USER", entityId: user._id, metadata: { authProvider: user.authProvider } });
   res.status(200).json({
     message: "Login successful",
+    data: await buildAuthPayload({ user, business, accessToken }),
+  });
+});
+
+const googleAuth = asyncHandler(async (req, res) => {
+  const identity = await verifyGoogleIdentityToken(req.body.idToken, req.body.nonce || "");
+  const mode = req.body.mode === "signup" ? "signup" : "login";
+  const normalizedEmail = identity.email;
+  let users = await User.find({ email: normalizedEmail }).limit(2);
+
+  if (users.length > 1) {
+    throw new AppError("Multiple accounts found for this verified Google email. Please contact support to merge accounts.", 409);
+  }
+
+  let user = users[0] || null;
+  let business = user ? await Business.findById(user.businessId) : null;
+
+  if (user && user.googleSubject && user.googleSubject !== identity.subject) {
+    throw new AppError("This email is already linked to another Google account.", 409);
+  }
+
+  if (!user && mode !== "signup") {
+    throw new AppError("No BillStack account exists for this Google email. Please create an account first.", 404);
+  }
+
+  if (!user) {
+    const businessName = (req.body.businessName || `${identity.name}'s Workspace`).trim();
+    business = await Business.create({
+      name: businessName,
+      slug: await buildUniqueBusinessSlug(businessName),
+    });
+    user = await User.create({
+      businessId: business._id,
+      name: (req.body.name || identity.name).trim(),
+      email: normalizedEmail,
+      password: "",
+      role: "owner",
+      authProvider: "google",
+      googleSubject: identity.subject,
+      googleEmailVerified: true,
+      googleLinkedAt: new Date(),
+    });
+    business.ownerUserId = user._id;
+    await business.save();
+    await startTrialForNewBusiness({ businessId: business._id, trialSource: "google_signup" });
+    business = await Business.findById(business._id);
+  } else {
+    if (!business) throw new AppError("Business context is invalid", 403);
+    if (!user.isActive) throw new AppError("This user account has been deactivated", 403);
+    user.googleSubject = identity.subject;
+    user.googleEmailVerified = true;
+    user.googleLinkedAt = user.googleLinkedAt || new Date();
+    user.authProvider = user.password ? "password_google" : "google";
+    await user.save();
+  }
+
+  const accessToken = signAccessToken(user);
+  const refreshToken = await issueRefreshToken(user, {
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+
+  res.cookie(refreshCookieName, refreshToken, refreshCookieOptions);
+  await writeAuditLog({ req, businessId: business._id, actor: { type: "USER", userId: user._id, email: user.email, role: user.role }, action: mode === "signup" && !users.length ? "GOOGLE_USER_REGISTERED" : "GOOGLE_USER_LOGIN", entityType: "USER", entityId: user._id, metadata: { authProvider: user.authProvider, googleLinked: true } });
+  res.status(mode === "signup" && !users.length ? 201 : 200).json({
+    message: mode === "signup" && !users.length ? "Google registration successful" : "Google login successful",
     data: await buildAuthPayload({ user, business, accessToken }),
   });
 });
@@ -287,6 +360,7 @@ const getMe = asyncHandler(async (req, res) => {
 const logout = asyncHandler(async (req, res) => {
   const refreshToken = req.cookies[refreshCookieName];
   await revokeRefreshToken(refreshToken);
+  await writeAuditLog({ req, businessId: req.user?.businessId, action: "USER_LOGOUT", entityType: "USER", entityId: req.user?._id });
 
   res.clearCookie(refreshCookieName, {
     httpOnly: true,
@@ -303,6 +377,7 @@ module.exports = {
   forgotPassword,
   getMe,
   login,
+  googleAuth,
   logout,
   refresh,
   register,

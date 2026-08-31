@@ -1,6 +1,19 @@
 const Customer = require("../models/Customer");
+const CreditNote = require("../models/CreditNote");
+const CustomerLedger = require("../models/CustomerLedger");
+const Invoice = require("../models/Invoice");
+const Payment = require("../models/Payment");
+const Quote = require("../models/Quote");
+const SalesReturn = require("../models/SalesReturn");
+const { getDerivedInvoiceRows } = require("../services/financial-read.service");
 const asyncHandler = require("../utils/asyncHandler");
 const AppError = require("../utils/appError");
+const { listCustomerLedger } = require("../services/payment.service");
+const {
+  buildCustomerStatement,
+  buildStatementCsv,
+  buildStatementPdfBuffer,
+} = require("../services/customer-statement.service");
 const {
   buildPaginatedResponse,
   buildPagination,
@@ -54,9 +67,17 @@ const getCustomerById = asyncHandler(async (req, res) => {
     throw new AppError("Customer not found", 404);
   }
 
+  const invoices = (await getDerivedInvoiceRows({ businessId: req.tenant.businessId, filter: { customerId: customer._id } })).filter((invoice) => invoice.status !== "cancelled");
+  const financialSummary = {
+    totalInvoiced: invoices.reduce((sum, invoice) => sum + Number(invoice.grandTotal || 0), 0),
+    totalCollected: invoices.reduce((sum, invoice) => sum + Number(invoice.amountPaid || 0), 0),
+    outstanding: invoices.reduce((sum, invoice) => sum + Number(invoice.balanceDue || 0), 0),
+    overdue: invoices.filter((invoice) => invoice.balanceDue > 0 && new Date(invoice.dueDate) < new Date()).reduce((sum, invoice) => sum + Number(invoice.balanceDue || 0), 0),
+    reconciliationMismatches: invoices.filter((invoice) => invoice.financialRead?.reconciliation?.status === "MISMATCH").length,
+  };
   res.status(200).json({
     message: "Customer fetched successfully",
-    data: customer,
+    data: { ...customer.toObject(), financialSummary },
   });
 });
 
@@ -110,7 +131,7 @@ const updateCustomer = asyncHandler(async (req, res) => {
 });
 
 const deleteCustomer = asyncHandler(async (req, res) => {
-  const customer = await Customer.findOneAndDelete({
+  const customer = await Customer.findOne({
     _id: req.params.customerId,
     businessId: req.tenant.businessId,
   });
@@ -119,16 +140,92 @@ const deleteCustomer = asyncHandler(async (req, res) => {
     throw new AppError("Customer not found", 404);
   }
 
+  const [invoiceCount, paymentCount, ledgerCount, quoteCount, creditNoteCount, returnCount] = await Promise.all([
+    Invoice.countDocuments({ businessId: req.tenant.businessId, customerId: customer._id }),
+    Payment.countDocuments({ businessId: req.tenant.businessId, customerId: customer._id }),
+    CustomerLedger.countDocuments({ businessId: req.tenant.businessId, customerId: customer._id }),
+    Quote.countDocuments({ businessId: req.tenant.businessId, customerId: customer._id }),
+    CreditNote.countDocuments({ businessId: req.tenant.businessId, customerId: customer._id }),
+    SalesReturn.countDocuments({ businessId: req.tenant.businessId, customerId: customer._id }),
+  ]);
+
+  if (invoiceCount || paymentCount || ledgerCount || quoteCount || creditNoteCount || returnCount) {
+    throw new AppError("Customer has historical financial or sales records and cannot be deleted.", 409);
+  }
+
+  await customer.deleteOne();
+
   res.status(200).json({
     message: "Customer deleted successfully",
   });
 });
 
+const getCustomerLedger = asyncHandler(async (req, res) => {
+  const customer = await Customer.findOne({
+    _id: req.params.customerId,
+    businessId: req.tenant.businessId,
+  });
+
+  if (!customer) {
+    throw new AppError("Customer not found", 404);
+  }
+
+  const entries = await listCustomerLedger({
+    businessId: req.tenant.businessId,
+    customerId: customer._id,
+  });
+
+  res.status(200).json({
+    message: "Customer ledger fetched successfully",
+    data: entries,
+  });
+});
+
+const getCustomerStatement = asyncHandler(async (req, res) => {
+  const statement = await buildCustomerStatement({
+    businessId: req.tenant.businessId,
+    customerId: req.params.customerId,
+    query: req.query,
+  });
+
+  res.status(200).json({
+    message: "Customer statement fetched successfully",
+    data: statement,
+  });
+});
+
+const exportCustomerStatementCsv = asyncHandler(async (req, res) => {
+  const statement = await buildCustomerStatement({
+    businessId: req.tenant.businessId,
+    customerId: req.params.customerId,
+    query: req.query,
+  });
+  const csv = buildStatementCsv(statement);
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename=\"customer-statement-${req.params.customerId}.csv\"`);
+  res.status(200).send(csv);
+});
+
+const downloadCustomerStatementPdf = asyncHandler(async (req, res) => {
+  const statement = await buildCustomerStatement({
+    businessId: req.tenant.businessId,
+    customerId: req.params.customerId,
+    query: req.query,
+  });
+  const buffer = await buildStatementPdfBuffer(statement);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename=\"customer-statement-${req.params.customerId}.pdf\"`);
+  res.status(200).send(buffer);
+});
+
 module.exports = {
   createCustomer,
   deleteCustomer,
+  downloadCustomerStatementPdf,
+  exportCustomerStatementCsv,
   getCustomerById,
+  getCustomerLedger,
+  getCustomerStatement,
   listCustomers,
   updateCustomer,
 };
-

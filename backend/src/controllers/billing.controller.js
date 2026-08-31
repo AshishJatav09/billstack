@@ -3,6 +3,7 @@ const BusinessSubscription = require("../models/BusinessSubscription");
 const WebhookEvent = require("../models/WebhookEvent");
 const asyncHandler = require("../utils/asyncHandler");
 const AppError = require("../utils/appError");
+const { log } = require("../utils/logger");
 const { getPlanByCode } = require("../utils/businessPlan");
 const { serializeBusinessWithPlan } = require("../utils/businessPlan");
 const {
@@ -13,7 +14,14 @@ const {
   verifyRazorpaySubscriptionPayment,
   verifyRazorpayWebhookSignature,
 } = require("../services/razorpay.service");
-const { ensureBusinessSubscription } = require("../utils/subscription");
+const {
+  applyControlledPlanChange,
+  ensureBusinessSubscription,
+  getCommunicationUsage,
+  markLifecycleState,
+  normalizeStatus,
+  syncBusinessCache,
+} = require("../utils/subscription");
 const getBillingRedirectUrl = (status, message = "") => {
   const baseUrl = process.env.CLIENT_URL || "http://localhost:5173";
   const redirectUrl = new URL("/dashboard/settings", baseUrl);
@@ -31,13 +39,7 @@ const syncBusinessWithSubscription = async ({
   subscription,
   source,
 }) => {
-  if (subscription.planCode) {
-    business.planCode = subscription.planCode;
-  }
-
-  business.subscriptionExpiresAt = subscription.currentEnd || null;
-  await business.save();
-
+  await syncBusinessCache({ business, subscription });
   return serializeBusinessWithPlan(business, subscription, source);
 };
 
@@ -45,7 +47,7 @@ const mapRazorpayPayloadToSubscription = (target, razorpaySubscription, planCode
   target.razorpayPlanId = razorpaySubscription.plan_id || target.razorpayPlanId;
   target.razorpaySubscriptionId = razorpaySubscription.id || target.razorpaySubscriptionId;
   target.razorpayCustomerId = razorpaySubscription.customer_id || target.razorpayCustomerId;
-  target.status = razorpaySubscription.status || target.status;
+  target.status = normalizeStatus(razorpaySubscription.status || target.status, target.planCode);
   target.quantity = razorpaySubscription.quantity || target.quantity;
   target.totalCount = razorpaySubscription.total_count || target.totalCount;
   target.paidCount = razorpaySubscription.paid_count || target.paidCount;
@@ -60,7 +62,9 @@ const mapRazorpayPayloadToSubscription = (target, razorpaySubscription, planCode
     : target.expireBy;
   target.shortUrl = razorpaySubscription.short_url || target.shortUrl;
   target.scheduleChangeAt = razorpaySubscription.schedule_change_at || target.scheduleChangeAt || "";
-  target.planCode = planCodeOverride || target.pendingPlanCode || target.planCode;
+  if (["active", "trial", "grace_period"].includes(target.status)) {
+    target.planCode = planCodeOverride || target.pendingPlanCode || target.planCode;
+  }
   if (target.status === "active") {
     target.pendingPlanCode = "";
     target.scheduleChangeAt = "";
@@ -117,7 +121,10 @@ const getCurrentSubscription = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     message: "Subscription fetched successfully",
-    data: serializeBusinessWithPlan(business, subscription),
+    data: {
+      ...serializeBusinessWithPlan(business, subscription),
+      usage: await getCommunicationUsage({ businessId: business._id }),
+    },
   });
 });
 
@@ -129,7 +136,7 @@ const createSubscription = asyncHandler(async (req, res) => {
     throw new AppError("Business not found", 404);
   }
 
-  if (!["basic", "pro", "enterprise"].includes(planCode)) {
+  if (!["starter", "growth", "basic", "pro", "enterprise"].includes(planCode)) {
     throw new AppError("A paid plan is required for subscription creation", 400);
   }
 
@@ -150,8 +157,9 @@ const createSubscription = asyncHandler(async (req, res) => {
   });
 
   subscription.pendingPlanCode = planCode;
-  mapRazorpayPayloadToSubscription(subscription, razorpaySubscription, planCode);
+  mapRazorpayPayloadToSubscription(subscription, razorpaySubscription);
   await subscription.save();
+  await syncBusinessCache({ business, subscription });
 
   res.status(201).json({
     message: "Subscription created successfully",
@@ -265,13 +273,8 @@ const changeSubscriptionPlan = asyncHandler(async (req, res) => {
   }
 
   if (planCode === "free") {
-    subscription.planCode = "free";
-    subscription.status = "active";
-    subscription.pendingPlanCode = "";
-    subscription.scheduleChangeAt = "";
-    subscription.cancelledAt = new Date();
-    await subscription.save();
-    const businessPayload = await syncBusinessWithSubscription({ business, subscription });
+    const updated = await applyControlledPlanChange({ businessId: business._id, planCode: "free", status: "free", source: "owner_free_fallback" });
+    const businessPayload = serializeBusinessWithPlan(updated.business, updated.subscription);
 
     res.status(200).json({
       message: "Business downgraded to Free plan",
@@ -301,6 +304,7 @@ const changeSubscriptionPlan = asyncHandler(async (req, res) => {
   subscription.scheduleChangeAt = scheduleChangeAt;
   mapRazorpayPayloadToSubscription(subscription, razorpaySubscription);
   await subscription.save();
+  await syncBusinessCache({ business, subscription });
 
   res.status(200).json({
     message: `${scheduleChangeAt === "cycle_end" ? "Downgrade" : "Upgrade"} scheduled successfully`,
@@ -313,50 +317,84 @@ const handleRazorpayWebhook = asyncHandler(async (req, res) => {
   const eventId = req.headers["x-razorpay-event-id"];
   const rawBody = req.body.toString();
 
+  if (!signature || !eventId) {
+    log("warn", "Razorpay webhook rejected due to missing signature or event id");
+    throw new AppError("Missing Razorpay webhook signature or event id", 400);
+  }
+
   if (!verifyRazorpayWebhookSignature({ rawBody, signature })) {
+    log("warn", "Razorpay webhook rejected due to invalid signature", { eventId });
     throw new AppError("Invalid Razorpay webhook signature", 400);
   }
 
-  const duplicate = await WebhookEvent.findOne({ eventId });
-  if (duplicate) {
+  const payload = JSON.parse(rawBody);
+  let webhookEvent = await WebhookEvent.findOne({ provider: "razorpay", eventId });
+  if (webhookEvent?.status === "PROCESSED") {
     res.status(200).json({ message: "Duplicate webhook ignored" });
     return;
   }
 
-  const payload = JSON.parse(rawBody);
-  const subscriptionEntity = payload.payload?.subscription?.entity;
-
-  if (subscriptionEntity?.id) {
-    const subscription = await BusinessSubscription.findOne({
-      razorpaySubscriptionId: subscriptionEntity.id,
-    });
-
-    if (subscription) {
-      const business = await Business.findById(subscription.businessId);
-      mapRazorpayPayloadToSubscription(subscription, subscriptionEntity);
-
-      if (subscription.pendingPlanCode && ["active", "authenticated"].includes(subscription.status)) {
-        subscription.planCode = subscription.pendingPlanCode;
-        subscription.pendingPlanCode = "";
-        subscription.scheduleChangeAt = "";
+  if (!webhookEvent) {
+    try {
+      webhookEvent = await WebhookEvent.create({
+        provider: "razorpay",
+        eventId,
+        eventType: payload.event || "unknown",
+        payload,
+        status: "RECEIVED",
+      });
+    } catch (error) {
+      if (error.code === 11000) {
+        res.status(200).json({ message: "Duplicate webhook ignored" });
+        return;
       }
-
-      if (["cancelled", "expired", "completed"].includes(subscription.status) && subscription.planCode !== "free") {
-        business.planCode = "free";
-      } else {
-        business.planCode = subscription.planCode;
-      }
-
-      business.subscriptionExpiresAt = subscription.currentEnd || null;
-      await Promise.all([subscription.save(), business.save()]);
+      throw error;
     }
   }
 
-  await WebhookEvent.create({
-    eventId,
-    eventType: payload.event,
-    payload,
-  });
+  webhookEvent.status = "PROCESSING";
+  webhookEvent.errorMessage = "";
+  await webhookEvent.save();
+
+  try {
+    const subscriptionEntity = payload.payload?.subscription?.entity;
+
+    if (subscriptionEntity?.id) {
+      const subscription = await BusinessSubscription.findOne({
+        razorpaySubscriptionId: subscriptionEntity.id,
+      });
+
+      if (subscription) {
+        const business = await Business.findById(subscription.businessId);
+        mapRazorpayPayloadToSubscription(subscription, subscriptionEntity);
+
+        if (subscription.pendingPlanCode && ["active", "authenticated"].includes(subscription.status)) {
+          subscription.planCode = subscription.pendingPlanCode;
+          subscription.pendingPlanCode = "";
+          subscription.scheduleChangeAt = "";
+        }
+
+        if (["halted"].includes(subscription.status)) {
+          subscription.status = "past_due";
+        }
+        if (["cancelled", "expired", "completed"].includes(subscription.status)) {
+          subscription.status = subscription.status === "completed" ? "expired" : subscription.status;
+        }
+        await subscription.save();
+        await syncBusinessCache({ business, subscription });
+      }
+    }
+
+    webhookEvent.status = "PROCESSED";
+    webhookEvent.processedAt = new Date();
+    await webhookEvent.save();
+  } catch (error) {
+    webhookEvent.status = "FAILED";
+    webhookEvent.errorMessage = error.message;
+    await webhookEvent.save();
+    log("error", "Razorpay webhook processing failed", { eventId, eventType: payload.event || "unknown", error: error.message });
+    throw error;
+  }
 
   res.status(200).json({
     message: "Webhook processed successfully",

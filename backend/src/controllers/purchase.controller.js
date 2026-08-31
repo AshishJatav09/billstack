@@ -1,12 +1,16 @@
 const mongoose = require("mongoose");
 
 const Product = require("../models/Product");
+const Business = require("../models/Business");
 const Purchase = require("../models/Purchase");
+const SupplierLedger = require("../models/SupplierLedger");
 const StockMovement = require("../models/StockMovement");
 const Supplier = require("../models/Supplier");
 const asyncHandler = require("../utils/asyncHandler");
 const AppError = require("../utils/appError");
 const { buildInventoryFlags } = require("../services/inventory.service");
+const { buildGstSnapshot, validateGstin, validateStateCode } = require("../utils/gst");
+const { applyFinancialRead, applyFinancialReads } = require("../services/financial-read.service");
 const {
   buildPaginatedResponse,
   buildPagination,
@@ -46,7 +50,7 @@ const listPurchases = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     message: "Purchases fetched successfully",
-    data: buildPaginatedResponse({ items, total, page, limit }),
+    data: buildPaginatedResponse({ items: await applyFinancialReads({ businessId: req.tenant.businessId, sourceType: "PURCHASE", documents: items }), total, page, limit }),
   });
 });
 
@@ -64,11 +68,15 @@ const getPurchaseById = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     message: "Purchase fetched successfully",
-    data: purchase,
+    data: await applyFinancialRead({ businessId: req.tenant.businessId, sourceType: "PURCHASE", document: purchase }),
   });
 });
 
 const createPurchase = asyncHandler(async (req, res) => {
+  if (Number(req.body.paidAmount || 0) > 0 || (req.body.paymentStatus && req.body.paymentStatus !== "unpaid")) {
+    throw new AppError("Purchase payments must be recorded through the Payment and Allocation workflow.", 400);
+  }
+
   const session = await mongoose.startSession();
 
   try {
@@ -79,6 +87,7 @@ const createPurchase = asyncHandler(async (req, res) => {
         _id: req.body.supplierId,
         businessId: req.tenant.businessId,
       }).session(session);
+      const business = await Business.findById(req.tenant.businessId).session(session);
 
       if (!supplier) {
         throw new AppError("Supplier not found", 404);
@@ -108,6 +117,7 @@ const createPurchase = asyncHandler(async (req, res) => {
         const purchasePrice = Number(item.purchasePrice || 0);
         const tax = Number(item.tax || 0);
         const discount = Number(item.discount || 0);
+        const taxRate = Number(item.taxRate ?? product?.taxRate ?? 0);
         const lineTotal = quantity * purchasePrice + tax - discount;
 
         if (!product) {
@@ -124,13 +134,20 @@ const createPurchase = asyncHandler(async (req, res) => {
           quantity,
           purchasePrice,
           tax,
+          taxRate,
           discount,
           lineTotal,
         };
       });
 
       const totalAmount = normalizedItems.reduce((sum, item) => sum + item.lineTotal, 0);
-      const paidAmount = Number(req.body.paidAmount || 0);
+      if (business?.gstConfiguration?.enabled) {
+        if (!validateGstin(business.gstConfiguration.gstin || business.gstTaxId) || !validateStateCode(business.gstConfiguration.stateCode)) throw new AppError("Invalid business GST configuration", 400);
+        if (supplier.gstNumber && !validateGstin(supplier.gstNumber)) throw new AppError("Invalid supplier GSTIN", 400);
+        if (supplier.stateCode && !validateStateCode(supplier.stateCode)) throw new AppError("Invalid supplier state code", 400);
+      }
+      const gstSnapshot = business?.gstConfiguration?.enabled ? buildGstSnapshot({ business, counterparty: supplier, lineItems: normalizedItems.map((item) => ({ ...item, rate: item.purchasePrice, taxableAmount: item.quantity * item.purchasePrice - item.discount })), products, placeOfSupplyCode: supplier.stateCode }) : null;
+      const paidAmount = 0;
 
       createdPurchase = await Purchase.create(
         [
@@ -139,8 +156,10 @@ const createPurchase = asyncHandler(async (req, res) => {
             supplierId: supplier._id,
             productsPurchased: normalizedItems,
             totalAmount,
+            gstSnapshot,
+            gstBreakup: gstSnapshot ? { cgst: gstSnapshot.cgst, sgst: gstSnapshot.sgst, utgst: gstSnapshot.utgst, igst: gstSnapshot.igst, taxableValue: gstSnapshot.taxableValue, inputTaxCreditEligible: true } : undefined,
             paidAmount,
-            paymentStatus: req.body.paymentStatus || (paidAmount >= totalAmount ? "paid" : paidAmount > 0 ? "partial" : "unpaid"),
+            paymentStatus: "unpaid",
             purchaseDate: req.body.purchaseDate ? new Date(req.body.purchaseDate) : new Date(),
             createdBy: req.user._id,
           },
@@ -149,6 +168,7 @@ const createPurchase = asyncHandler(async (req, res) => {
       );
 
       const purchase = createdPurchase[0];
+      await SupplierLedger.updateOne({ businessId: req.tenant.businessId, sourceKey: `PURCHASE:${purchase._id}:PAYABLE` }, { $setOnInsert: { businessId: req.tenant.businessId, supplierId: supplier._id, eventType: "PURCHASE", amount: purchase.totalAmount, direction: "DEBIT", purchaseId: purchase._id, sourceKey: `PURCHASE:${purchase._id}:PAYABLE`, createdBy: req.user._id } }, { upsert: true, session });
 
       for (const item of normalizedItems) {
         const product = productMap.get(item.productId.toString());
@@ -209,4 +229,3 @@ module.exports = {
   getPurchaseById,
   listPurchases,
 };
-

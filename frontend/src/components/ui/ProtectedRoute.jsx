@@ -13,8 +13,12 @@ const ProtectedRoute = ({ requireOnboardingComplete = true }) => {
     return <Navigate to="/onboarding" replace />;
   }
 
-  if (business?.subscription?.isExpired && location.pathname !== "/dashboard/settings") {
-    return <Navigate to="/dashboard/settings" replace />;
+  if (
+    business?.deploymentMode !== "SELF_HOSTED" &&
+    business?.subscription?.isExpired &&
+    location.pathname !== "/dashboard/subscription"
+  ) {
+    return <Navigate to="/dashboard/subscription" replace />;
   }
 
   return <Outlet />;

@@ -4,6 +4,7 @@ const authMiddleware = require("../middlewares/auth.middleware");
 const { requireHRManageAccess, requireHRViewAccess } = require("../middlewares/hr-permission.middleware");
 const { validateObjectIdParam } = require("../middlewares/object-id.middleware");
 const { requireActiveSubscription } = require("../middlewares/subscription.middleware");
+const { requireModule } = require("../middlewares/module-guard.middleware");
 const tenantMiddleware = require("../middlewares/tenant.middleware");
 const validate = require("../middlewares/validate.middleware");
 const {
@@ -35,7 +36,7 @@ const {
 
 const router = express.Router();
 
-router.use(authMiddleware, tenantMiddleware, requireActiveSubscription());
+router.use(authMiddleware, tenantMiddleware, requireActiveSubscription(), requireModule("hr"));
 
 router.get("/employees/options", requireHRViewAccess, listEmployeeOptionsController);
 router.get("/employees", requireHRViewAccess, listEmployeesController);

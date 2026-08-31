@@ -62,6 +62,8 @@ const purchaseSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    gstSnapshot: { type: Object, default: null },
+    gstBreakup: { cgst: { type: Number, default: 0 }, sgst: { type: Number, default: 0 }, utgst: { type: Number, default: 0 }, igst: { type: Number, default: 0 }, taxableValue: { type: Number, default: 0 }, inputTaxCreditEligible: { type: Boolean, default: false } },
     paidAmount: {
       type: Number,
       default: 0,
@@ -90,4 +92,3 @@ const purchaseSchema = new mongoose.Schema(
 purchaseSchema.index({ businessId: 1, supplierId: 1, purchaseDate: -1 });
 
 module.exports = mongoose.model("Purchase", purchaseSchema);
-

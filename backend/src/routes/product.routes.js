@@ -11,6 +11,7 @@ const {
 } = require("../controllers/product.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
 const { requireFeature } = require("../middlewares/feature-guard.middleware");
+const { requireModule } = require("../middlewares/module-guard.middleware");
 const { validateObjectIdParam } = require("../middlewares/object-id.middleware");
 const { permit } = require("../middlewares/role.middleware");
 const { requireActiveSubscription } = require("../middlewares/subscription.middleware");
@@ -25,12 +26,14 @@ const {
 const router = express.Router();
 
 router.use(authMiddleware, tenantMiddleware, requireActiveSubscription());
+router.use(requireModule("products_services"));
 
 router.get("/", listProducts);
 router.get("/:productId", validateObjectIdParam("productId"), getProductById);
 router.get(
   "/:productId/movements",
   requireFeature("inventory"),
+  requireModule("inventory"),
   validateObjectIdParam("productId"),
   getProductMovements
 );
@@ -38,6 +41,7 @@ router.post("/", permit("owner", "admin", "staff"), validate(productCreateValida
 router.post(
   "/:productId/movements",
   requireFeature("inventory"),
+  requireModule("inventory"),
   validateObjectIdParam("productId"),
   permit("owner", "admin", "staff"),
   validate(stockMovementValidator),

@@ -24,6 +24,25 @@ const userSchema = new mongoose.Schema(
     password: {
       type: String,
       required: true,
+      default: "",
+    },
+    authProvider: {
+      type: String,
+      enum: ["password", "google", "password_google"],
+      default: "password",
+    },
+    googleSubject: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    googleEmailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    googleLinkedAt: {
+      type: Date,
+      default: null,
     },
     role: {
       type: String,
@@ -69,5 +88,6 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.index({ businessId: 1, email: 1 }, { unique: true });
+userSchema.index({ googleSubject: 1 }, { unique: true, partialFilterExpression: { googleSubject: { $type: "string", $gt: "" } } });
 
 module.exports = mongoose.model("User", userSchema);

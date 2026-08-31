@@ -1,4 +1,6 @@
-const defaultOrigins = [
+const { getConfiguredOrigins, isProduction } = require("./env");
+
+const devOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   "http://localhost:4173",
@@ -6,13 +8,9 @@ const defaultOrigins = [
 ];
 
 const getAllowedOrigins = () => {
-  const configuredOrigins = [process.env.CLIENT_URL || "", process.env.BASE_URL || ""]
-    .join(",")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  const configuredOrigins = getConfiguredOrigins();
 
-  return [...new Set([...defaultOrigins, ...configuredOrigins])];
+  return [...new Set(isProduction() ? configuredOrigins : [...devOrigins, ...configuredOrigins])];
 };
 
 const buildCorsOptions = () => {
@@ -21,7 +19,7 @@ const buildCorsOptions = () => {
 
   return {
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin) || localhostPattern.test(origin)) {
+      if (!origin || allowedOrigins.includes(origin) || (!isProduction() && localhostPattern.test(origin))) {
         callback(null, true);
         return;
       }

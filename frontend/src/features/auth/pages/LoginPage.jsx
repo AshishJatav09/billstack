@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import AuthCard from "../../../components/ui/AuthCard";
 import FormField from "../../../components/ui/FormField";
+import GoogleAuthButton from "../components/GoogleAuthButton";
 import { useAuth } from "../useAuth";
 
 const initialForm = {
@@ -14,7 +15,7 @@ const LoginPage = () => {
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { login } = useAuth();
+  const { googleAuth, login } = useAuth();
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -22,6 +23,19 @@ const LoginPage = () => {
       ...current,
       [name]: value,
     }));
+  };
+
+  const handleGoogle = async (payload) => {
+    setServerError("");
+    setErrors({});
+    setIsSubmitting(true);
+    try {
+      await googleAuth(payload);
+    } catch (error) {
+      setServerError(error.response?.data?.message || "Google login failed");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -45,6 +59,8 @@ const LoginPage = () => {
       title="Welcome back"
       subtitle="Sign in to continue to your workspace."
     >
+      <GoogleAuthButton mode="login" onSuccess={handleGoogle} onError={setServerError} />
+      <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-wide text-slate-400"><span className="h-px flex-1 bg-slate-200" />or continue with email<span className="h-px flex-1 bg-slate-200" /></div>
       <form className="space-y-4" onSubmit={handleSubmit}>
         <FormField label="Email" name="email" type="email" placeholder="founder@billstack.app" value={form.email} onChange={handleChange} error={errors.email} />
         <FormField label="Password" name="password" type="password" placeholder="Enter your password" value={form.password} onChange={handleChange} error={errors.password} />

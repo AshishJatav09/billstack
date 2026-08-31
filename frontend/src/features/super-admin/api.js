@@ -67,3 +67,38 @@ export const superAdminListPlansRequest = async () => {
   const response = await superAdminApi.get("/plans");
   return response.data.data;
 };
+
+export const superAdminProductConfigurationRequest = async () => {
+  const response = await superAdminApi.get("/super-admin/product-configuration");
+  return response.data.data;
+};
+
+export const superAdminReviewModuleRequest = async (requestId, payload) => {
+  const response = await superAdminApi.post(`/super-admin/module-requests/${requestId}/review`, payload);
+  return response.data.data;
+};
+
+export const superAdminSyncCommercialCatalogueRequest = async () => {
+  const response = await superAdminApi.post("/super-admin/product-configuration/sync");
+  return response.data.data;
+};
+
+export const superAdminUpdateCommercialModuleRequest = async (moduleKey, payload) => {
+  const response = await superAdminApi.put(`/super-admin/commercial-modules/${moduleKey}`, payload);
+  return response.data.data;
+};
+
+export const superAdminUpdateCommercialPlanRequest = async (planCode, payload) => {
+  const response = await superAdminApi.put(`/super-admin/commercial-plans/${planCode}`, payload);
+  return response.data.data;
+};
+
+export const superAdminCreateModuleOfferRequest = async (payload) => {
+  const response = await superAdminApi.post("/super-admin/module-offers", payload);
+  return response.data.data;
+};
+
+export const superAdminReviewCommercialOrderRequest = async (orderId, payload) => {
+  const response = await superAdminApi.post(`/super-admin/commercial-orders/${orderId}/review`, payload);
+  return response.data.data;
+};
