@@ -42,11 +42,16 @@ const safeDate = (value) => (value ? new Date(value).toLocaleDateString() : "N/A
 const normalizeOverview = (value = {}) => ({
   metrics: {
     totalBusinesses: Number(value?.metrics?.totalBusinesses || 0),
+    activeBusinesses: Number(value?.metrics?.activeBusinesses || 0),
+    disabledBusinesses: Number(value?.metrics?.disabledBusinesses || 0),
     totalUsers: Number(value?.metrics?.totalUsers || 0),
     activeSubscriptions: Number(value?.metrics?.activeSubscriptions || 0),
     monthlyRecurringRevenue: Number(value?.metrics?.monthlyRecurringRevenue || 0),
     trialUsers: Number(value?.metrics?.trialUsers || 0),
+    paidBusinesses: Number(value?.metrics?.paidBusinesses || 0),
     expiredSubscriptions: Number(value?.metrics?.expiredSubscriptions || 0),
+    pendingModuleRequests: Number(value?.metrics?.pendingModuleRequests || 0),
+    pendingCommercialPayments: Number(value?.metrics?.pendingCommercialPayments || 0),
   },
   revenueChart: asArray(value?.revenueChart),
 });
@@ -97,6 +102,7 @@ const SuperAdminDashboardPage = () => {
   const [businessError, setBusinessError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [busyBusinessId, setBusyBusinessId] = useState("");
+  const [busyAction, setBusyAction] = useState("");
   const [productConfig, setProductConfig] = useState(normalizeProductConfig());
   const [productConfigError, setProductConfigError] = useState("");
 
@@ -163,9 +169,8 @@ const SuperAdminDashboardPage = () => {
 
   const metrics = useMemo(() => {
     const metrics = overview?.metrics || {};
-    const pendingRequests = productConfig.requests.filter((request) => ["PENDING", "UNDER_REVIEW"].includes(request.status)).length;
-    const pendingPayments = productConfig.orders.filter((order) => order.paymentStatus === "AWAITING_VERIFICATION").length;
-    const paidBusinesses = businesses.filter((business) => business.planCode && business.planCode !== "free").length;
+    const pendingRequests = Number(metrics.pendingModuleRequests || 0);
+    const pendingPayments = Number(metrics.pendingCommercialPayments || 0);
 
     return [
       {
@@ -175,7 +180,7 @@ const SuperAdminDashboardPage = () => {
       },
       {
         label: "Active Businesses",
-        value: `${Math.max(0, Number(metrics.totalBusinesses || 0) - businesses.filter((business) => business.isDisabled).length)}`,
+        value: `${metrics.activeBusinesses}`,
         change: "Enabled tenant workspaces",
       },
       {
@@ -185,7 +190,7 @@ const SuperAdminDashboardPage = () => {
       },
       {
         label: "Paid Subscriptions",
-        value: `${metrics.activeSubscriptions || paidBusinesses}`,
+        value: `${metrics.activeSubscriptions || metrics.paidBusinesses}`,
         change: "Active paid subscription records",
       },
       {
@@ -235,13 +240,18 @@ const SuperAdminDashboardPage = () => {
   };
 
   const handleReviewModuleRequest = async (requestId, status) => {
+    const actionKey = `request:${requestId}:${status}`;
+    if (busyAction) return;
+    setBusyAction(actionKey);
     setProductConfigError("");
     try {
       await superAdminReviewModuleRequest(requestId, { status });
       const productConfiguration = await superAdminProductConfigurationRequest();
-      setProductConfig(productConfiguration);
+      setProductConfig(normalizeProductConfig(productConfiguration));
     } catch (error) {
       setProductConfigError(error.response?.data?.message || "Unable to review module request");
+    } finally {
+      setBusyAction("");
     }
   };
 
@@ -251,18 +261,25 @@ const SuperAdminDashboardPage = () => {
   };
 
   const handleSyncCommercialCatalogue = async () => {
+    if (busyAction) return;
+    setBusyAction("sync-catalogue");
     setProductConfigError("");
     try {
       await superAdminSyncCommercialCatalogueRequest();
       await refreshProductConfiguration();
     } catch (error) {
       setProductConfigError(error.response?.data?.message || "Unable to sync commercial catalogue");
+    } finally {
+      setBusyAction("");
     }
   };
 
   const handleCommercialPriceUpdate = async (module) => {
+    const actionKey = `module-price:${module.moduleKey}`;
+    if (busyAction) return;
     const nextPrice = window.prompt(`Standard price for ${module.displayName}`, module.defaultPrice ?? 0);
     if (nextPrice === null) return;
+    setBusyAction(actionKey);
     setProductConfigError("");
     try {
       await superAdminUpdateCommercialModuleRequest(module.moduleKey, {
@@ -276,10 +293,14 @@ const SuperAdminDashboardPage = () => {
       await refreshProductConfiguration();
     } catch (error) {
       setProductConfigError(error.response?.data?.message || "Unable to update commercial module");
+    } finally {
+      setBusyAction("");
     }
   };
 
   const handleCommercialPlanUpdate = async (plan) => {
+    const actionKey = `commercial-plan:${plan.code}`;
+    if (busyAction) return;
     const monthlyPrice = window.prompt(`Monthly price for ${plan.name}`, plan.monthlyPrice ?? 0);
     if (monthlyPrice === null) return;
     const yearlyPrice = window.prompt(`Yearly price for ${plan.name}`, plan.yearlyPrice ?? 0);
@@ -287,6 +308,7 @@ const SuperAdminDashboardPage = () => {
     const invoiceLimit = window.prompt(`Monthly invoice limit for ${plan.name}`, plan.limits?.monthlyInvoices ?? "");
     if (invoiceLimit === null) return;
 
+    setBusyAction(actionKey);
     setProductConfigError("");
     try {
       await superAdminUpdateCommercialPlanRequest(plan.code, {
@@ -302,15 +324,20 @@ const SuperAdminDashboardPage = () => {
       await refreshProductConfiguration();
     } catch (error) {
       setProductConfigError(error.response?.data?.message || "Unable to update commercial plan");
+    } finally {
+      setBusyAction("");
     }
   };
 
   const handleCreateOffer = async (request) => {
+    const actionKey = `offer:${request._id}`;
+    if (busyAction) return;
     const negotiatedPrice = window.prompt(
       `Offer base price for ${request.moduleKey}. Leave 0 for included/free.`,
       ""
     );
     if (negotiatedPrice === null) return;
+    setBusyAction(actionKey);
     setProductConfigError("");
     try {
       await superAdminCreateModuleOfferRequest({
@@ -321,19 +348,26 @@ const SuperAdminDashboardPage = () => {
       await refreshProductConfiguration();
     } catch (error) {
       setProductConfigError(error.response?.data?.message || "Unable to create module offer");
+    } finally {
+      setBusyAction("");
     }
   };
 
   const handleReviewCommercialOrder = async (orderId, status) => {
+    const actionKey = `order:${orderId}:${status}`;
+    if (busyAction) return;
     setProductConfigError("");
     try {
       if (status === "PAID" && !window.confirm("Verify this payment and activate the module?")) {
         return;
       }
+      setBusyAction(actionKey);
       await superAdminReviewCommercialOrderRequest(orderId, { status });
       await refreshProductConfiguration();
     } catch (error) {
       setProductConfigError(error.response?.data?.message || "Unable to review commercial payment");
+    } finally {
+      setBusyAction("");
     }
   };
 
@@ -347,6 +381,7 @@ const SuperAdminDashboardPage = () => {
   };
 
   const handleToggleBusiness = async (businessId) => {
+    if (busyBusinessId) return;
     setBusyBusinessId(businessId);
     setBusinessError("");
     setSuccessMessage("");
@@ -377,6 +412,7 @@ const SuperAdminDashboardPage = () => {
   };
 
   const handlePlanUpdate = async (businessId) => {
+    if (busyBusinessId) return;
     setBusyBusinessId(businessId);
     setBusinessError("");
     setSuccessMessage("");
@@ -535,8 +571,8 @@ const SuperAdminDashboardPage = () => {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={handleSyncCommercialCatalogue} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200">
-                Sync catalogue
+              <button type="button" onClick={handleSyncCommercialCatalogue} disabled={busyAction === "sync-catalogue"} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 disabled:opacity-50">
+                {busyAction === "sync-catalogue" ? "Syncing..." : "Sync catalogue"}
               </button>
               <span className="rounded-full bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-300">
                 {productConfig.modules.length} modules
@@ -571,8 +607,8 @@ const SuperAdminDashboardPage = () => {
                           <p className="text-sm font-semibold text-white">{module.displayName}</p>
                           <p className="mt-1 text-xs text-slate-400">{module.moduleKey} · {module.commercialType} · {module.pricingType}</p>
                         </div>
-                        <button type="button" onClick={() => handleCommercialPriceUpdate(module)} className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-slate-200">
-                          Edit price
+                        <button type="button" onClick={() => handleCommercialPriceUpdate(module)} disabled={busyAction === `module-price:${module.moduleKey}`} className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-slate-200 disabled:opacity-50">
+                          {busyAction === `module-price:${module.moduleKey}` ? "Saving..." : "Edit price"}
                         </button>
                       </div>
                       <p className="mt-2 text-xs text-slate-300">
@@ -597,8 +633,8 @@ const SuperAdminDashboardPage = () => {
                             {plan.code} · {formatCurrency(plan.monthlyPrice)}/mo · {formatCurrency(plan.yearlyPrice)}/yr
                           </p>
                         </div>
-                        <button type="button" onClick={() => handleCommercialPlanUpdate(plan)} className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-slate-200">
-                          Edit plan
+                        <button type="button" onClick={() => handleCommercialPlanUpdate(plan)} disabled={busyAction === `commercial-plan:${plan.code}`} className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-slate-200 disabled:opacity-50">
+                          {busyAction === `commercial-plan:${plan.code}` ? "Saving..." : "Edit plan"}
                         </button>
                       </div>
                       <p className="mt-2 text-xs text-slate-300">
@@ -623,13 +659,19 @@ const SuperAdminDashboardPage = () => {
                 <div className="mt-3 space-y-2">
                   {productConfig.requests.length ? productConfig.requests.map((request) => (
                     <div key={request._id} className="rounded-xl border border-white/10 bg-white/[.03] p-3">
-                      <p className="text-sm font-semibold text-white">{request.moduleKey || request.requestType}</p>
-                      <p className="mt-1 text-xs text-slate-400">{request.businessId?.name || "Business"} · {request.status}</p>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-white">{request.businessId?.name || "Business"}</p>
+                          <p className="mt-1 text-xs text-slate-400">{request.moduleKey || request.requestType} · {request.requestType || "MODULE"} · {safeDate(request.createdAt)}</p>
+                        </div>
+                        <StatusBadge>{request.status}</StatusBadge>
+                      </div>
                       {request.message ? <p className="mt-1 text-xs text-slate-500">{request.message}</p> : null}
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <button type="button" onClick={() => handleCreateOffer(request)} className="rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white">Create offer</button>
-                        <button type="button" onClick={() => handleReviewModuleRequest(request._id, "APPROVED")} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Approve</button>
-                        <button type="button" onClick={() => handleReviewModuleRequest(request._id, "REJECTED")} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-semibold text-white">Reject</button>
+                        {["PENDING", "UNDER_REVIEW", "APPROVED"].includes(request.status) ? <button type="button" onClick={() => handleCreateOffer(request)} disabled={busyAction === `offer:${request._id}`} className="rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{busyAction === `offer:${request._id}` ? "Creating..." : "Create offer"}</button> : null}
+                        {request.status === "PENDING" ? <button type="button" onClick={() => handleReviewModuleRequest(request._id, "UNDER_REVIEW")} disabled={busyAction === `request:${request._id}:UNDER_REVIEW`} className="rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-200 disabled:opacity-50">Review</button> : null}
+                        {["PENDING", "UNDER_REVIEW"].includes(request.status) ? <button type="button" onClick={() => handleReviewModuleRequest(request._id, "APPROVED")} disabled={busyAction === `request:${request._id}:APPROVED`} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Approve</button> : null}
+                        {["PENDING", "UNDER_REVIEW"].includes(request.status) ? <button type="button" onClick={() => handleReviewModuleRequest(request._id, "REJECTED")} disabled={busyAction === `request:${request._id}:REJECTED`} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Reject</button> : null}
                       </div>
                     </div>
                   )) : <p className="text-sm text-slate-400">No module requests yet.</p>}
@@ -640,8 +682,13 @@ const SuperAdminDashboardPage = () => {
                 <div className="mt-3 space-y-2">
                   {productConfig.offers.length ? productConfig.offers.map((offer) => (
                     <div key={offer._id} className="rounded-xl border border-white/10 bg-white/[.03] p-3">
-                      <p className="text-sm font-semibold text-white">{offer.moduleKey} · {formatCurrency(offer.finalAmount)}</p>
-                      <p className="mt-1 text-xs text-slate-400">{offer.businessId?.name || "Business"} · {offer.status}</p>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-white">{offer.businessId?.name || "Business"}</p>
+                          <p className="mt-1 text-xs text-slate-400">{offer.moduleKey} · {formatCurrency(offer.finalAmount)} · Valid {safeDate(offer.validUntil)}</p>
+                        </div>
+                        <StatusBadge>{offer.status}</StatusBadge>
+                      </div>
                     </div>
                   )) : <p className="text-sm text-slate-400">No commercial offers yet.</p>}
                 </div>
@@ -651,15 +698,19 @@ const SuperAdminDashboardPage = () => {
                 <div className="mt-3 space-y-2">
                   {productConfig.orders.length ? productConfig.orders.map((order) => (
                     <div key={order._id} className="rounded-xl border border-white/10 bg-white/[.03] p-3">
-                      <p className="text-sm font-semibold text-white">{order.moduleKey} · {formatCurrency(order.totalAmount)}</p>
-                      <p className="mt-1 text-xs text-slate-400">
-                        {order.businessId?.name || "Business"} · {order.paymentMethod} · {order.paymentStatus} · Activation {order.activationStatus}
-                      </p>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-white">{order.businessId?.name || "Business"}</p>
+                          <p className="mt-1 text-xs text-slate-400">{order.moduleKey} · {formatCurrency(order.totalAmount)} · {order.paymentMethod} · Submitted {safeDate(order.createdAt)}</p>
+                          <p className="mt-1 text-xs text-slate-500">Activation: {order.activationStatus || "PENDING"}</p>
+                        </div>
+                        <StatusBadge>{order.paymentStatus}</StatusBadge>
+                      </div>
                       {order.utrReference ? <p className="mt-1 text-xs text-slate-500">UTR: {order.utrReference}</p> : null}
                       {order.paymentStatus === "AWAITING_VERIFICATION" ? (
                         <div className="mt-3 flex flex-wrap gap-2">
-                          <button type="button" onClick={() => handleReviewCommercialOrder(order._id, "PAID")} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Verify paid</button>
-                          <button type="button" onClick={() => handleReviewCommercialOrder(order._id, "REJECTED")} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-semibold text-white">Reject</button>
+                          <button type="button" onClick={() => handleReviewCommercialOrder(order._id, "PAID")} disabled={busyAction === `order:${order._id}:PAID`} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Verify Payment</button>
+                          <button type="button" onClick={() => handleReviewCommercialOrder(order._id, "REJECTED")} disabled={busyAction === `order:${order._id}:REJECTED`} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Reject Payment</button>
                         </div>
                       ) : null}
                     </div>

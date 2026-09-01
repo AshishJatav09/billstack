@@ -76,7 +76,7 @@ const superAdminLogin = asyncHandler(async (req, res) => {
 });
 
 const getSuperAdminOverview = asyncHandler(async (_req, res) => {
-  const [businesses, totalUsers, activeSubscriptions, expiredSubscriptions, revenueAnalytics] =
+  const [businesses, totalUsers, activeSubscriptions, expiredSubscriptions, pendingModuleRequests, pendingCommercialPayments, revenueAnalytics] =
     await Promise.all([
       Business.find({}).sort("-createdAt"),
       User.countDocuments({}),
@@ -87,6 +87,8 @@ const getSuperAdminOverview = asyncHandler(async (_req, res) => {
       BusinessSubscription.countDocuments({
         status: { $in: ["expired", "cancelled", "completed"] },
       }),
+      ModuleRequest.countDocuments({ status: { $in: ["PENDING", "UNDER_REVIEW"] } }),
+      ModuleOrder.countDocuments({ paymentStatus: "AWAITING_VERIFICATION" }),
       BusinessSubscription.aggregate([
         {
           $match: {
@@ -103,7 +105,10 @@ const getSuperAdminOverview = asyncHandler(async (_req, res) => {
     ]);
 
   const totalBusinesses = businesses.length;
+  const activeBusinesses = businesses.filter((business) => !business.isDisabled).length;
+  const disabledBusinesses = totalBusinesses - activeBusinesses;
   const trialUsers = businesses.filter((business) => business.planCode === "free").length;
+  const paidBusinesses = businesses.filter((business) => business.planCode && business.planCode !== "free").length;
   const monthlyRecurringRevenue = businesses.reduce(
     (sum, business) => sum + (planMonthlyValue[business.planCode] || 0),
     0
@@ -125,11 +130,16 @@ const getSuperAdminOverview = asyncHandler(async (_req, res) => {
     data: {
       metrics: {
         totalBusinesses,
+        activeBusinesses,
+        disabledBusinesses,
         totalUsers,
         activeSubscriptions,
         monthlyRecurringRevenue,
         trialUsers,
+        paidBusinesses,
         expiredSubscriptions,
+        pendingModuleRequests,
+        pendingCommercialPayments,
       },
       revenueChart,
     },

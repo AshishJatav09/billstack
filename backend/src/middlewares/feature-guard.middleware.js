@@ -44,6 +44,10 @@ const requireInvoiceCapacity = () =>
       throw new AppError("Business not found", 404);
     }
 
+    if (business.deploymentMode === "SELF_HOSTED") {
+      return next();
+    }
+
     const subscription = await ensureBusinessSubscription({
       businessId: business._id,
       planCode: business.planCode,
@@ -92,6 +96,10 @@ const requireStaffCapacity = () =>
 
     if (!business) {
       throw new AppError("Business not found", 404);
+    }
+
+    if (business.deploymentMode === "SELF_HOSTED") {
+      return next();
     }
 
     const subscription = await ensureBusinessSubscription({

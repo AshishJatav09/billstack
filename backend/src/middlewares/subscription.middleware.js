@@ -23,6 +23,10 @@ const requireActiveSubscription = () =>
     req.business = business;
     req.subscription = subscription;
 
+    if (business.deploymentMode === "SELF_HOSTED") {
+      return next();
+    }
+
     if (!isSubscriptionAccessible(subscription)) {
       const message = isSubscriptionExpired(subscription)
         ? "Your subscription has expired. Renew or downgrade to continue."
@@ -36,4 +40,3 @@ const requireActiveSubscription = () =>
 module.exports = {
   requireActiveSubscription,
 };
-

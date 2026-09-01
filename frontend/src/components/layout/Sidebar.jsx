@@ -206,9 +206,17 @@ const Sidebar = () => {
             </nav>
 
             <div className="mx-4 rounded-xl border border-white/10 bg-white/5 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-brand-200">Current plan</p>
-              <p className="mt-1 text-sm font-semibold text-white">{business?.plan?.name || "Free"}</p>
-              <p className="mt-1 text-xs text-slate-400">Manage your plan in Subscription.</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-brand-200">
+                {business?.deploymentMode === "SELF_HOSTED" ? "Self-hosted" : "Current plan"}
+              </p>
+              <p className="mt-1 text-sm font-semibold text-white">
+                {business?.deploymentMode === "SELF_HOSTED" ? "Licensed workspace" : business?.plan?.name || "Free"}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                {business?.deploymentMode === "SELF_HOSTED"
+                  ? "Module access is managed by your license and workspace settings."
+                  : "Manage your plan in Subscription."}
+              </p>
             </div>
           </motion.aside>
         ) : null}

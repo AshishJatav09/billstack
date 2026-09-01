@@ -162,12 +162,14 @@ const ingestExternalOrder = async ({ credential, payload }) => {
     await session.withTransaction(async () => {
       const business = await Business.findById(credential.businessId).session(session);
       if (!business) throw new AppError("Business not found", 404);
-      const subscription = await ensureBusinessSubscription({ businessId: business._id, planCode: business.planCode, session });
-      if (!isSubscriptionAccessible(subscription)) throw new AppError("Your subscription is inactive or expired", 402);
-      const plan = getPlanEntitlements(subscription);
-      const currentMonthKey = new Date().toISOString().slice(0, 7);
-      const invoiceCount = await Invoice.countDocuments({ businessId: business._id, status: { $ne: "cancelled" }, invoiceDate: { $gte: new Date(`${currentMonthKey}-01T00:00:00.000Z`) } }).session(session);
-      if (invoiceCount >= plan.invoiceMonthlyLimit) throw new AppError(`Invoice limit reached for the ${plan.name} plan. Monthly limit: ${plan.invoiceMonthlyLimit}`, 403);
+      if (business.deploymentMode !== "SELF_HOSTED") {
+        const subscription = await ensureBusinessSubscription({ businessId: business._id, planCode: business.planCode, session });
+        if (!isSubscriptionAccessible(subscription)) throw new AppError("Your subscription is inactive or expired", 402);
+        const plan = getPlanEntitlements(subscription);
+        const currentMonthKey = new Date().toISOString().slice(0, 7);
+        const invoiceCount = await Invoice.countDocuments({ businessId: business._id, status: { $ne: "cancelled" }, invoiceDate: { $gte: new Date(`${currentMonthKey}-01T00:00:00.000Z`) } }).session(session);
+        if (invoiceCount >= plan.invoiceMonthlyLimit) throw new AppError(`Invoice limit reached for the ${plan.name} plan. Monthly limit: ${plan.invoiceMonthlyLimit}`, 403);
+      }
       [event] = await IntegrationEvent.create(
         [{
           businessId: credential.businessId,

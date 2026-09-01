@@ -517,6 +517,7 @@ const formatMoney = (value) =>
 
 const ModulesPanel = ({ moduleData, moduleError, moduleMessage, onRequest, onState, onAccept, onDecline, onRazorpay, onManualUpi }) => {
   const modules = moduleData?.catalog || [];
+  const isSelfHosted = moduleData?.deploymentMode === "SELF_HOSTED";
   const groups = {
     ACTIVE: modules.filter((item) => item.state === "ACTIVE"),
     AVAILABLE: modules.filter((item) => item.state === "AVAILABLE"),
@@ -582,10 +583,13 @@ const ModulesPanel = ({ moduleData, moduleError, moduleMessage, onRequest, onSta
                       {(item.state === "AVAILABLE" || item.state === "DISABLED") && !["OFFER_RECEIVED", "PAYMENT_PENDING"].includes(item.commercialState) ? (
                         <button type="button" onClick={() => onState(item.key, "ACTIVE")} className="rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white">Enable</button>
                       ) : null}
-                      {item.state === "REQUEST_REQUIRED" && item.commercialState !== "REQUESTED" ? (
+                      {item.state === "REQUEST_REQUIRED" && isSelfHosted ? (
+                        <span className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-100">Contact Nemnidhi to activate this module</span>
+                      ) : null}
+                      {item.state === "REQUEST_REQUIRED" && !isSelfHosted && item.commercialState !== "REQUESTED" ? (
                         <button type="button" onClick={() => onRequest(item.key)} className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-100">Request</button>
                       ) : null}
-                      {item.commercialState === "REQUESTED" ? (
+                      {item.commercialState === "REQUESTED" && !isSelfHosted ? (
                         <span className="rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-400">Requested</span>
                       ) : null}
                     </div>

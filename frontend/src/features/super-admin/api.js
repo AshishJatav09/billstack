@@ -6,6 +6,39 @@ const superAdminApi = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api",
 });
 
+const asArray = (value) => (Array.isArray(value) ? value : []);
+const normalizeOverview = (value = {}) => ({
+  metrics: {
+    totalBusinesses: Number(value?.metrics?.totalBusinesses || 0),
+    activeBusinesses: Number(value?.metrics?.activeBusinesses || 0),
+    disabledBusinesses: Number(value?.metrics?.disabledBusinesses || 0),
+    totalUsers: Number(value?.metrics?.totalUsers || 0),
+    activeSubscriptions: Number(value?.metrics?.activeSubscriptions || 0),
+    monthlyRecurringRevenue: Number(value?.metrics?.monthlyRecurringRevenue || 0),
+    trialUsers: Number(value?.metrics?.trialUsers || 0),
+    paidBusinesses: Number(value?.metrics?.paidBusinesses || 0),
+    expiredSubscriptions: Number(value?.metrics?.expiredSubscriptions || 0),
+    pendingModuleRequests: Number(value?.metrics?.pendingModuleRequests || 0),
+    pendingCommercialPayments: Number(value?.metrics?.pendingCommercialPayments || 0),
+  },
+  revenueChart: asArray(value?.revenueChart),
+});
+const normalizeProductConfiguration = (value = {}) => ({
+  modules: asArray(value?.modules),
+  industries: asArray(value?.industries),
+  capabilities: asArray(value?.capabilities),
+  commercialModules: asArray(value?.commercialModules),
+  commercialPlans: asArray(value?.commercialPlans),
+  presets: asArray(value?.presets),
+  requests: asArray(value?.requests),
+  offers: asArray(value?.offers),
+  orders: asArray(value?.orders),
+});
+const normalizeBusinesses = (value = {}) => ({
+  items: asArray(value?.items),
+  pagination: value?.pagination || { page: 1, limit: 10, total: 0, totalPages: 1 },
+});
+
 superAdminApi.interceptors.request.use((config) => {
   const accessToken = superAdminStore.getState().accessToken;
 
@@ -43,12 +76,12 @@ export const superAdminLoginRequest = async (payload) => {
 
 export const superAdminOverviewRequest = async () => {
   const response = await superAdminApi.get("/super-admin/overview");
-  return response.data.data;
+  return normalizeOverview(response.data.data);
 };
 
 export const superAdminBusinessesRequest = async (params) => {
   const response = await superAdminApi.get("/super-admin/businesses", { params });
-  return response.data.data;
+  return normalizeBusinesses(response.data.data);
 };
 
 export const superAdminToggleBusinessStatusRequest = async (businessId) => {
@@ -70,7 +103,7 @@ export const superAdminListPlansRequest = async () => {
 
 export const superAdminProductConfigurationRequest = async () => {
   const response = await superAdminApi.get("/super-admin/product-configuration");
-  return response.data.data;
+  return normalizeProductConfiguration(response.data.data);
 };
 
 export const superAdminReviewModuleRequest = async (requestId, payload) => {
