@@ -16,7 +16,8 @@ const {
   buildSearchFilter,
   buildSort,
 } = require("../utils/queryFeatures");
-const { moduleCatalog, presets, setBusinessModuleState } = require("../services/module.service");
+const { moduleCatalog, setBusinessModuleState } = require("../services/module.service");
+const { presets } = require("../constants/modules");
 const { capabilityCatalog, industryCatalog } = require("../constants/industry-presets");
 const CommercialModule = require("../models/CommercialModule");
 const ModuleOffer = require("../models/ModuleOffer");
@@ -45,6 +46,11 @@ const planMonthlyValue = {
 const validPlanCodes = Object.keys(planMonthlyValue);
 
 const listBusinessSortFields = ["name", "planCode", "createdAt"];
+const buildPresetConfiguration = (presetConfig = {}) =>
+  Object.entries(presetConfig || {}).map(([key, moduleKeys]) => ({
+    key,
+    moduleKeys: Array.isArray(moduleKeys) ? moduleKeys : [],
+  }));
 
 const superAdminLogin = asyncHandler(async (req, res) => {
   const email = (req.body.email || "").trim().toLowerCase();
@@ -259,7 +265,7 @@ const getProductConfiguration = asyncHandler(async (_req, res) => {
       capabilities: capabilityCatalog,
       commercialModules: commercialCatalogue,
       commercialPlans,
-      presets: Object.entries(presets).map(([key, moduleKeys]) => ({ key, moduleKeys })),
+      presets: buildPresetConfiguration(presets),
       requests,
       offers: await ModuleOffer.find({}).populate("businessId", "name email billingEmail").sort("-createdAt").limit(50),
       orders: await ModuleOrder.find({}).populate("businessId", "name email billingEmail").populate("offerId").sort("-createdAt").limit(50),
@@ -358,4 +364,7 @@ module.exports = {
   updateCommercialModuleByAdmin,
   updateCommercialPlanByAdmin,
   updateBusinessPlanBySuperAdmin,
+  _private: {
+    buildPresetConfiguration,
+  },
 };
