@@ -37,10 +37,44 @@ const formatCurrency = (value) =>
 const planFeatureLabel = (value) => (value ? "Enabled" : "Locked");
 const formatLimit = (value) =>
   Number(value) === Number.MAX_SAFE_INTEGER ? "Unlimited" : Number(value || 0);
+const asArray = (value) => (Array.isArray(value) ? value : []);
+const safeDate = (value) => (value ? new Date(value).toLocaleDateString() : "N/A");
+const normalizeOverview = (value = {}) => ({
+  metrics: {
+    totalBusinesses: Number(value?.metrics?.totalBusinesses || 0),
+    totalUsers: Number(value?.metrics?.totalUsers || 0),
+    activeSubscriptions: Number(value?.metrics?.activeSubscriptions || 0),
+    monthlyRecurringRevenue: Number(value?.metrics?.monthlyRecurringRevenue || 0),
+    trialUsers: Number(value?.metrics?.trialUsers || 0),
+    expiredSubscriptions: Number(value?.metrics?.expiredSubscriptions || 0),
+  },
+  revenueChart: asArray(value?.revenueChart),
+});
+const normalizeProductConfig = (value = {}) => ({
+  modules: asArray(value?.modules),
+  commercialModules: asArray(value?.commercialModules),
+  commercialPlans: asArray(value?.commercialPlans),
+  presets: asArray(value?.presets),
+  requests: asArray(value?.requests),
+  offers: asArray(value?.offers),
+  orders: asArray(value?.orders),
+});
+const statusBadgeClass = (status = "") => {
+  const key = String(status || "").toUpperCase();
+  if (["ACTIVE", "APPROVED", "PAID", "ACTIVATED"].includes(key)) return "bg-emerald-500/15 text-emerald-200";
+  if (["PENDING", "UNDER_REVIEW", "AWAITING_VERIFICATION", "PAYMENT_PENDING", "OFFERED"].includes(key)) return "bg-amber-500/15 text-amber-100";
+  if (["REJECTED", "FAILED", "EXPIRED", "CANCELLED", "DISABLED"].includes(key)) return "bg-rose-500/15 text-rose-200";
+  return "bg-white/10 text-slate-300";
+};
+const StatusBadge = ({ children }) => (
+  <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClass(children)}`}>
+    {String(children || "N/A").replaceAll("_", " ")}
+  </span>
+);
 
 const SuperAdminDashboardPage = () => {
   const { email, clearSession } = superAdminStore();
-  const [overview, setOverview] = useState(null);
+  const [overview, setOverview] = useState(normalizeOverview());
   const [businesses, setBusinesses] = useState([]);
   const [plans, setPlans] = useState([]);
   const [pagination, setPagination] = useState({
@@ -63,7 +97,7 @@ const SuperAdminDashboardPage = () => {
   const [businessError, setBusinessError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [busyBusinessId, setBusyBusinessId] = useState("");
-  const [productConfig, setProductConfig] = useState(null);
+  const [productConfig, setProductConfig] = useState(normalizeProductConfig());
   const [productConfigError, setProductConfigError] = useState("");
 
   useEffect(() => {
@@ -77,9 +111,9 @@ const SuperAdminDashboardPage = () => {
           superAdminListPlansRequest(),
           superAdminProductConfigurationRequest(),
         ]);
-        setOverview(overviewData);
-        setPlans(plansData);
-        setProductConfig(productConfiguration);
+        setOverview(normalizeOverview(overviewData));
+        setPlans(asArray(plansData));
+        setProductConfig(normalizeProductConfig(productConfiguration));
       } catch (error) {
         setOverviewError(error.response?.data?.message || "Unable to load platform overview");
       } finally {
@@ -106,13 +140,13 @@ const SuperAdminDashboardPage = () => {
           sortOrder: "desc",
         });
 
-        setBusinesses(data.items || []);
+        setBusinesses(asArray(data.items));
         setPagination(
           data.pagination || { page: 1, limit: 10, total: 0, totalPages: 1 }
         );
         setPlanSelections((current) => {
           const nextState = { ...current };
-          (data.items || []).forEach((business) => {
+          asArray(data.items).forEach((business) => {
             nextState[business.id] = current[business.id] || business.planCode;
           });
           return nextState;
@@ -128,43 +162,44 @@ const SuperAdminDashboardPage = () => {
   }, [query]);
 
   const metrics = useMemo(() => {
-    if (!overview) {
-      return [];
-    }
+    const metrics = overview?.metrics || {};
+    const pendingRequests = productConfig.requests.filter((request) => ["PENDING", "UNDER_REVIEW"].includes(request.status)).length;
+    const pendingPayments = productConfig.orders.filter((order) => order.paymentStatus === "AWAITING_VERIFICATION").length;
+    const paidBusinesses = businesses.filter((business) => business.planCode && business.planCode !== "free").length;
 
     return [
       {
-        label: "Total businesses",
-        value: `${overview.metrics.totalBusinesses}`,
+        label: "Total Businesses",
+        value: `${metrics.totalBusinesses}`,
         change: "All onboarded tenants",
       },
       {
-        label: "Total users",
-        value: `${overview.metrics.totalUsers}`,
-        change: "Across every tenant",
+        label: "Active Businesses",
+        value: `${Math.max(0, Number(metrics.totalBusinesses || 0) - businesses.filter((business) => business.isDisabled).length)}`,
+        change: "Enabled tenant workspaces",
       },
       {
-        label: "Active subscriptions",
-        value: `${overview.metrics.activeSubscriptions}`,
-        change: "Paid and currently usable",
-      },
-      {
-        label: "MRR",
-        value: formatCurrency(overview.metrics.monthlyRecurringRevenue),
-        change: "Estimated monthly recurring revenue",
-      },
-      {
-        label: "Trial users",
-        value: `${overview.metrics.trialUsers}`,
+        label: "Trials",
+        value: `${metrics.trialUsers}`,
         change: "Businesses on Free plan",
       },
       {
-        label: "Expired subscriptions",
-        value: `${overview.metrics.expiredSubscriptions}`,
-        change: "Need renewal or downgrade",
+        label: "Paid Subscriptions",
+        value: `${metrics.activeSubscriptions || paidBusinesses}`,
+        change: "Active paid subscription records",
+      },
+      {
+        label: "Monthly Revenue",
+        value: formatCurrency(metrics.monthlyRecurringRevenue),
+        change: "Estimated monthly recurring revenue",
+      },
+      {
+        label: "Pending Requests",
+        value: `${pendingRequests + pendingPayments}`,
+        change: `${pendingRequests} requests · ${pendingPayments} payments`,
       },
     ];
-  }, [overview]);
+  }, [businesses, overview, productConfig]);
 
   const refreshAll = async () => {
     setSuccessMessage("");
@@ -186,9 +221,9 @@ const SuperAdminDashboardPage = () => {
         superAdminProductConfigurationRequest(),
       ]);
 
-      setOverview(overviewData);
-      setProductConfig(productConfiguration);
-      setBusinesses(businessData.items || []);
+      setOverview(normalizeOverview(overviewData));
+      setProductConfig(normalizeProductConfig(productConfiguration));
+      setBusinesses(asArray(businessData.items));
       setPagination(
         businessData.pagination || { page: 1, limit: 10, total: 0, totalPages: 1 }
       );
@@ -212,7 +247,7 @@ const SuperAdminDashboardPage = () => {
 
   const refreshProductConfiguration = async () => {
     const productConfiguration = await superAdminProductConfigurationRequest();
-    setProductConfig(productConfiguration);
+    setProductConfig(normalizeProductConfig(productConfiguration));
   };
 
   const handleSyncCommercialCatalogue = async () => {
@@ -292,6 +327,9 @@ const SuperAdminDashboardPage = () => {
   const handleReviewCommercialOrder = async (orderId, status) => {
     setProductConfigError("");
     try {
+      if (status === "PAID" && !window.confirm("Verify this payment and activate the module?")) {
+        return;
+      }
       await superAdminReviewCommercialOrderRequest(orderId, { status });
       await refreshProductConfiguration();
     } catch (error) {
@@ -314,6 +352,11 @@ const SuperAdminDashboardPage = () => {
     setSuccessMessage("");
 
     try {
+      const business = businesses.find((item) => item.id === businessId);
+      if (business && !business.isDisabled && !window.confirm(`Disable ${business.name}? This will block tenant access.`)) {
+        setBusyBusinessId("");
+        return;
+      }
       const updatedBusiness = await superAdminToggleBusinessStatusRequest(businessId);
       setBusinesses((current) =>
         current.map((business) => (business.id === businessId ? updatedBusiness : business))
@@ -346,10 +389,10 @@ const SuperAdminDashboardPage = () => {
       setBusinesses((current) =>
         current.map((business) => (business.id === businessId ? updatedBusiness : business))
       );
-      setSuccessMessage(`Plan updated to ${updatedBusiness.plan.name}.`);
+      setSuccessMessage(`Plan updated to ${updatedBusiness.plan?.name || updatedBusiness.planCode || "selected plan"}.`);
       uiStore.getState().pushToast({
         tone: "success",
-        message: `Plan updated to ${updatedBusiness.plan.name}.`,
+        message: `Plan updated to ${updatedBusiness.plan?.name || updatedBusiness.planCode || "selected plan"}.`,
       });
       await refreshAll();
     } catch (error) {
@@ -362,22 +405,19 @@ const SuperAdminDashboardPage = () => {
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-6 text-white sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <section className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-slate-900 via-slate-800 to-brand-700 p-6 sm:p-8">
+        <section className="rounded-[2rem] border border-white/10 bg-slate-900/90 p-6 shadow-2xl shadow-slate-950/30 sm:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-brand-200">Super Admin Panel</p>
-              <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">
-                Platform health, revenue analytics, and business control in one place.
-              </h1>
+              <p className="text-sm font-semibold uppercase tracking-[0.32em] text-brand-200">SUPER ADMIN</p>
+              <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">BillStack Platform Control Center</h1>
               <p className="mt-3 max-w-3xl text-sm text-slate-200">
-                This view is platform-wide. You can review subscription health, track recurring
-                revenue, assign plans, and disable businesses that should no longer access BillStack.
+                Manage businesses, subscriptions, modules, commercial requests and platform health.
               </p>
             </div>
 
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
-              <p className="font-semibold text-white">{email}</p>
-              <p className="mt-1">Platform owner session</p>
+            <div className="rounded-3xl border border-white/10 bg-white/[.04] p-4 text-sm text-slate-200">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Logged in admin</p>
+              <p className="mt-2 font-semibold text-white">{email}</p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <button
                   type="button"
@@ -408,7 +448,7 @@ const SuperAdminDashboardPage = () => {
               ))
             : metrics.length
               ? metrics.map((metric) => <MetricCard key={metric.label} {...metric} />)
-              : <EmptyState title="No platform metrics yet" description="Businesses and subscriptions will appear here once the platform is in use." />}
+              : <EmptyState title="No platform metrics available" description="The API returned no metric payload. Try refreshing the dashboard." />}
         </section>
 
         <section className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
@@ -459,7 +499,7 @@ const SuperAdminDashboardPage = () => {
               Assign these plans to businesses from the management table below.
             </p>
             <div className="mt-4 space-y-3">
-              {plans.map((plan) => (
+              {plans.length ? plans.map((plan) => (
                 <div key={plan.code} className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-base font-semibold text-white">{plan.name}</p>
@@ -481,7 +521,7 @@ const SuperAdminDashboardPage = () => {
                     <p>Sharing: {planFeatureLabel(plan.sharingAccess)}</p>
                   </div>
                 </div>
-              ))}
+              )) : <EmptyState title="No plans available" description="Plan catalogue is empty or unavailable." />}
             </div>
           </div>
         </section>
@@ -499,7 +539,7 @@ const SuperAdminDashboardPage = () => {
                 Sync catalogue
               </button>
               <span className="rounded-full bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-300">
-                {productConfig?.modules?.length || 0} modules
+                {productConfig.modules.length} modules
               </span>
             </div>
           </div>
@@ -508,22 +548,23 @@ const SuperAdminDashboardPage = () => {
             <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
               <p className="text-sm font-semibold text-white">Module catalogue</p>
               <div className="mt-3 grid max-h-80 gap-2 overflow-y-auto pr-1">
-                {(productConfig?.modules || []).map((module) => (
+                {productConfig.modules.length ? productConfig.modules.map((module) => (
                   <div key={module.key} className="rounded-xl border border-white/10 bg-white/[.03] p-3">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-semibold text-white">{module.name}</p>
-                      <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] text-slate-300">{module.status}</span>
+                      <StatusBadge>{module.status}</StatusBadge>
                     </div>
-                    <p className="mt-1 text-xs text-slate-400">{module.description}</p>
+                    <p className="mt-1 text-xs text-slate-400">{module.key} · {module.category}</p>
+                    <p className="mt-1 text-xs text-slate-500">{module.description}</p>
                   </div>
-                ))}
+                )) : <p className="text-sm text-slate-400">No module catalogue entries returned.</p>}
               </div>
             </div>
             <div className="space-y-4">
               <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
                 <p className="text-sm font-semibold text-white">Commercial catalogue</p>
                 <div className="mt-3 space-y-2">
-                  {(productConfig?.commercialModules || []).length ? productConfig.commercialModules.map((module) => (
+                  {productConfig.commercialModules.length ? productConfig.commercialModules.map((module) => (
                     <div key={module._id || module.moduleKey} className="rounded-xl border border-white/10 bg-white/[.03] p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -547,7 +588,7 @@ const SuperAdminDashboardPage = () => {
                   Backend-authoritative prices and limits used by customer subscription screens.
                 </p>
                 <div className="mt-3 space-y-2">
-                  {(productConfig?.commercialPlans || []).length ? productConfig.commercialPlans.map((plan) => (
+                  {productConfig.commercialPlans.length ? productConfig.commercialPlans.map((plan) => (
                     <div key={plan._id || plan.code} className="rounded-xl border border-white/10 bg-white/[.03] p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -570,17 +611,17 @@ const SuperAdminDashboardPage = () => {
               <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
                 <p className="text-sm font-semibold text-white">Presets</p>
                 <div className="mt-3 space-y-2">
-                  {(productConfig?.presets || []).map((preset) => (
+                  {productConfig.presets.length ? productConfig.presets.map((preset) => (
                     <p key={preset.key} className="rounded-xl bg-white/[.03] p-3 text-xs text-slate-300">
-                      <span className="font-semibold text-white">{preset.key}</span> · {preset.moduleKeys.join(", ") || "custom selection"}
+                      <span className="font-semibold text-white">{preset.key}</span> · {asArray(preset.moduleKeys).join(", ") || "custom selection"}
                     </p>
-                  ))}
+                  )) : <p className="text-sm text-slate-400">No presets returned.</p>}
                 </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
                 <p className="text-sm font-semibold text-white">Module Requests</p>
                 <div className="mt-3 space-y-2">
-                  {(productConfig?.requests || []).length ? productConfig.requests.map((request) => (
+                  {productConfig.requests.length ? productConfig.requests.map((request) => (
                     <div key={request._id} className="rounded-xl border border-white/10 bg-white/[.03] p-3">
                       <p className="text-sm font-semibold text-white">{request.moduleKey || request.requestType}</p>
                       <p className="mt-1 text-xs text-slate-400">{request.businessId?.name || "Business"} · {request.status}</p>
@@ -597,7 +638,7 @@ const SuperAdminDashboardPage = () => {
               <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
                 <p className="text-sm font-semibold text-white">Commercial Offers</p>
                 <div className="mt-3 space-y-2">
-                  {(productConfig?.offers || []).length ? productConfig.offers.map((offer) => (
+                  {productConfig.offers.length ? productConfig.offers.map((offer) => (
                     <div key={offer._id} className="rounded-xl border border-white/10 bg-white/[.03] p-3">
                       <p className="text-sm font-semibold text-white">{offer.moduleKey} · {formatCurrency(offer.finalAmount)}</p>
                       <p className="mt-1 text-xs text-slate-400">{offer.businessId?.name || "Business"} · {offer.status}</p>
@@ -608,7 +649,7 @@ const SuperAdminDashboardPage = () => {
               <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
                 <p className="text-sm font-semibold text-white">Commercial Payments</p>
                 <div className="mt-3 space-y-2">
-                  {(productConfig?.orders || []).length ? productConfig.orders.map((order) => (
+                  {productConfig.orders.length ? productConfig.orders.map((order) => (
                     <div key={order._id} className="rounded-xl border border-white/10 bg-white/[.03] p-3">
                       <p className="text-sm font-semibold text-white">{order.moduleKey} · {formatCurrency(order.totalAmount)}</p>
                       <p className="mt-1 text-xs text-slate-400">
@@ -694,6 +735,8 @@ const SuperAdminDashboardPage = () => {
               <thead>
                 <tr className="border-b border-white/10 text-xs uppercase tracking-[0.2em] text-slate-400">
                   <th className="pb-3 pr-4">Business</th>
+                  <th className="pb-3 pr-4">Owner</th>
+                  <th className="pb-3 pr-4">Deployment</th>
                   <th className="pb-3 pr-4">Status</th>
                   <th className="pb-3 pr-4">Subscription</th>
                   <th className="pb-3 pr-4">Created</th>
@@ -704,7 +747,7 @@ const SuperAdminDashboardPage = () => {
               <tbody>
                 {isLoadingBusinesses ? (
                   <tr>
-                    <td colSpan="6" className="py-8 text-center text-slate-400">
+                    <td colSpan="8" className="py-8 text-center text-slate-400">
                       Loading businesses...
                     </td>
                   </tr>
@@ -713,11 +756,12 @@ const SuperAdminDashboardPage = () => {
                     <tr key={business.id} className="border-b border-white/5 align-top">
                       <td className="py-4 pr-4">
                         <p className="font-semibold text-white">{business.name}</p>
-                        <p className="mt-1 text-xs text-slate-400">{business.email || business.billingEmail || ""}</p>
                         <p className="mt-1 text-xs text-slate-400">
-                          {business.billingEmail || business.email || "No email"}
+                          {business.billingEmail || business.email || "No billing email"}
                         </p>
                       </td>
+                      <td className="py-4 pr-4 text-xs text-slate-400">{business.email || business.billingEmail || "No owner email"}</td>
+                      <td className="py-4 pr-4"><StatusBadge>{business.deploymentMode || "SAAS"}</StatusBadge></td>
                       <td className="py-4 pr-4">
                         <span
                           className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
@@ -730,7 +774,7 @@ const SuperAdminDashboardPage = () => {
                         </span>
                       </td>
                       <td className="py-4 pr-4">
-                        <p>{business.subscription?.status || "inactive"}</p>
+                        <StatusBadge>{business.subscription?.status || "inactive"}</StatusBadge>
                         <p className="mt-1 text-xs text-slate-400">
                           {business.subscription?.currentEnd
                             ? `Ends ${new Date(business.subscription.currentEnd).toLocaleDateString()}`
@@ -738,9 +782,7 @@ const SuperAdminDashboardPage = () => {
                         </p>
                       </td>
                       <td className="py-4 pr-4 text-xs text-slate-400">
-                        {business.createdAt
-                          ? new Date(business.createdAt).toLocaleDateString()
-                          : "N/A"}
+                        {safeDate(business.createdAt)}
                       </td>
                       <td className="py-4 pr-4">
                         <select
@@ -753,11 +795,11 @@ const SuperAdminDashboardPage = () => {
                           }
                           className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none"
                         >
-                          {plans.map((plan) => (
+                          {plans.length ? plans.map((plan) => (
                             <option key={plan.code} value={plan.code}>
                               {plan.name}
                             </option>
-                          ))}
+                          )) : <option value={business.planCode || "free"}>{business.planCode || "free"}</option>}
                         </select>
                       </td>
                       <td className="py-4">
@@ -768,7 +810,7 @@ const SuperAdminDashboardPage = () => {
                             disabled={busyBusinessId === business.id}
                             className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-60"
                           >
-                            Save plan
+                            Change Plan
                           </button>
                           <button
                             type="button"
@@ -786,7 +828,7 @@ const SuperAdminDashboardPage = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="6" className="py-8 text-center text-slate-400">
+                    <td colSpan="8" className="py-8 text-center text-slate-400">
                       No businesses match the current filters.
                     </td>
                   </tr>
