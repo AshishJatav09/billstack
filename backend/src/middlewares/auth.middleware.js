@@ -32,7 +32,7 @@ const authMiddleware = asyncHandler(async (req, _res, next) => {
   }
 
   req.user = user;
-  const business = await Business.findById(user.businessId).select("planCode isDisabled");
+  const business = await Business.findById(user.businessId);
   if (business?.isDisabled) {
     throw new AppError("This business has been disabled by the platform owner", 403);
   }
@@ -40,6 +40,7 @@ const authMiddleware = asyncHandler(async (req, _res, next) => {
     businessId: user.businessId,
     planCode: business?.planCode || "free",
   });
+  req.business = business;
   next();
 });
 

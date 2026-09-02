@@ -71,9 +71,12 @@ const BusinessSettingsPage = () => {
   const [integrationEvents, setIntegrationEvents] = useState([]);
   const [newIntegrationKey, setNewIntegrationKey] = useState("");
   const [integrationError, setIntegrationError] = useState("");
+  const [pendingRevokeCredential, setPendingRevokeCredential] = useState(null);
   const [moduleData, setModuleData] = useState(null);
   const [moduleMessage, setModuleMessage] = useState("");
   const [moduleError, setModuleError] = useState("");
+  const [manualUpiOfferId, setManualUpiOfferId] = useState("");
+  const [manualUpiReference, setManualUpiReference] = useState("");
 
   const logoPreviewUrl = useMemo(() => {
     if (logoFile) return URL.createObjectURL(logoFile);
@@ -159,6 +162,7 @@ const BusinessSettingsPage = () => {
     setIntegrationError("");
     try {
       await revokeIntegrationCredentialRequest(credentialId);
+      setPendingRevokeCredential(null);
       await refreshIntegrationData();
     } catch (error) {
       setIntegrationError(error.response?.data?.message || "Unable to revoke integration key");
@@ -266,16 +270,28 @@ const BusinessSettingsPage = () => {
     }
   };
 
-  const handleManualUpi = async (offerId) => {
-    const utrReference = window.prompt("Enter UTR / transaction reference for manual UPI payment");
-    if (!utrReference) return;
+  const openManualUpi = (offerId) => {
+    setManualUpiOfferId(offerId);
+    setManualUpiReference("");
+    setModuleError("");
+    setModuleMessage("");
+  };
+
+  const handleManualUpi = async () => {
+    const utrReference = manualUpiReference.trim();
+    if (!utrReference) {
+      setModuleError("Enter the UTR / transaction reference to submit manual UPI payment.");
+      return;
+    }
     setModuleError("");
     setModuleMessage("");
     try {
-      await submitModuleManualUpiRequest(offerId, {
+      await submitModuleManualUpiRequest(manualUpiOfferId, {
         utrReference,
         paymentDate: new Date().toISOString(),
       });
+      setManualUpiOfferId("");
+      setManualUpiReference("");
       setModuleMessage("Manual UPI payment submitted. Activation waits for super-admin verification.");
       await refreshModules();
     } catch (error) {
@@ -455,7 +471,15 @@ const BusinessSettingsPage = () => {
             </div>
             {newIntegrationKey ? (
               <div className="mt-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3">
-                <p className="text-xs font-semibold text-emerald-200">Copy this key now. It will not be shown again.</p>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-emerald-200">Copy this key now. It will not be shown again.</p>
+                    <p className="mt-1 text-xs text-emerald-100/80">BillStack stores only the key prefix and hash after creation.</p>
+                  </div>
+                  <button type="button" onClick={() => setNewIntegrationKey("")} className="rounded-lg border border-emerald-300/30 px-3 py-1.5 text-xs font-semibold text-emerald-100">
+                    Done
+                  </button>
+                </div>
                 <code className="mt-2 block break-all text-xs text-emerald-100">{newIntegrationKey}</code>
               </div>
             ) : null}
@@ -464,7 +488,7 @@ const BusinessSettingsPage = () => {
               {integrationCredentials.length ? integrationCredentials.map((credential) => (
                 <div key={credential._id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[.03] px-3 py-2 text-sm text-slate-300">
                   <span>{credential.name} · {credential.source} · {credential.keyPrefix}••••</span>
-                  <button type="button" disabled={credential.status === "REVOKED"} onClick={() => handleRevokeIntegrationKey(credential._id)} className="text-xs text-rose-300 disabled:text-slate-500">
+                  <button type="button" disabled={credential.status === "REVOKED"} onClick={() => setPendingRevokeCredential(credential)} className="text-xs text-rose-300 disabled:text-slate-500">
                     {credential.status === "REVOKED" ? "Revoked" : "Revoke"}
                   </button>
                 </div>
@@ -497,10 +521,55 @@ const BusinessSettingsPage = () => {
             onAccept={handleAcceptOffer}
             onDecline={handleDeclineOffer}
             onRazorpay={handleRazorpayAddon}
-            onManualUpi={handleManualUpi}
+            onManualUpi={openManualUpi}
           />
         </div>
       </section>
+      {pendingRevokeCredential ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-black/40">
+            <h3 className="text-xl font-semibold text-white">Revoke integration key?</h3>
+            <p className="mt-3 text-sm text-slate-300">
+              This will immediately stop API authentication for{" "}
+              <span className="font-semibold text-white">{pendingRevokeCredential.name}</span>.
+              Existing events remain available for audit.
+            </p>
+            <p className="mt-3 rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-xs text-slate-400">
+              Key shown in list: {pendingRevokeCredential.keyPrefix}••••
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setPendingRevokeCredential(null)} className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-200">
+                Cancel
+              </button>
+              <button type="button" onClick={() => handleRevokeIntegrationKey(pendingRevokeCredential._id)} className="rounded-2xl bg-rose-600 px-5 py-3 text-sm font-semibold text-white">
+                Revoke key
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {manualUpiOfferId ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-black/40">
+            <h3 className="text-xl font-semibold text-white">Submit manual UPI payment</h3>
+            <p className="mt-3 text-sm text-slate-300">
+              Enter the UTR or transaction reference after completing payment. Super Admin verification is required before activation.
+            </p>
+            <label className="mt-5 block">
+              <span className="mb-2 block text-sm font-medium text-slate-200">UTR / transaction reference</span>
+              <input value={manualUpiReference} onChange={(event) => setManualUpiReference(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-brand-500" />
+            </label>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setManualUpiOfferId("")} className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-200">
+                Cancel
+              </button>
+              <button type="button" onClick={handleManualUpi} className="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white">
+                Submit for verification
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

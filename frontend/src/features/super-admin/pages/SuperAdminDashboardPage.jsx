@@ -77,6 +77,19 @@ const StatusBadge = ({ children }) => (
   </span>
 );
 
+const getModuleDisplayName = (moduleKey, productConfig) => {
+  const key = String(moduleKey || "");
+  return (
+    productConfig.commercialModules.find((item) => item.moduleKey === key)?.displayName ||
+    productConfig.modules.find((item) => item.key === key)?.name ||
+    key ||
+    "Module"
+  );
+};
+
+const modalInputClass =
+  "w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-brand-500";
+
 const SuperAdminDashboardPage = () => {
   const { email, clearSession } = superAdminStore();
   const [overview, setOverview] = useState(normalizeOverview());
@@ -105,6 +118,9 @@ const SuperAdminDashboardPage = () => {
   const [busyAction, setBusyAction] = useState("");
   const [productConfig, setProductConfig] = useState(normalizeProductConfig());
   const [productConfigError, setProductConfigError] = useState("");
+  const [actionModal, setActionModal] = useState(null);
+  const [actionForm, setActionForm] = useState({});
+  const [confirmDialog, setConfirmDialog] = useState(null);
 
   useEffect(() => {
     const loadOverview = async () => {
@@ -275,92 +291,102 @@ const SuperAdminDashboardPage = () => {
   };
 
   const handleCommercialPriceUpdate = async (module) => {
-    const actionKey = `module-price:${module.moduleKey}`;
     if (busyAction) return;
-    const nextPrice = window.prompt(`Standard price for ${module.displayName}`, module.defaultPrice ?? 0);
-    if (nextPrice === null) return;
-    setBusyAction(actionKey);
     setProductConfigError("");
-    try {
-      await superAdminUpdateCommercialModuleRequest(module.moduleKey, {
-        defaultPrice: Number(nextPrice),
-        commercialType: module.commercialType,
-        pricingType: module.pricingType,
-        gstApplicable: module.gstApplicable,
-        gstRate: module.gstRate,
-        active: module.active,
-      });
-      await refreshProductConfiguration();
-    } catch (error) {
-      setProductConfigError(error.response?.data?.message || "Unable to update commercial module");
-    } finally {
-      setBusyAction("");
-    }
+    setActionModal({ type: "module-price", module });
+    setActionForm({
+      defaultPrice: module.defaultPrice ?? 0,
+      gstRate: module.gstRate ?? 18,
+      gstApplicable: module.gstApplicable !== false,
+      active: module.active !== false,
+    });
   };
 
   const handleCommercialPlanUpdate = async (plan) => {
-    const actionKey = `commercial-plan:${plan.code}`;
     if (busyAction) return;
-    const monthlyPrice = window.prompt(`Monthly price for ${plan.name}`, plan.monthlyPrice ?? 0);
-    if (monthlyPrice === null) return;
-    const yearlyPrice = window.prompt(`Yearly price for ${plan.name}`, plan.yearlyPrice ?? 0);
-    if (yearlyPrice === null) return;
-    const invoiceLimit = window.prompt(`Monthly invoice limit for ${plan.name}`, plan.limits?.monthlyInvoices ?? "");
-    if (invoiceLimit === null) return;
-
-    setBusyAction(actionKey);
     setProductConfigError("");
-    try {
-      await superAdminUpdateCommercialPlanRequest(plan.code, {
-        monthlyPrice: Number(monthlyPrice),
-        yearlyPrice: Number(yearlyPrice),
-        limits: {
-          ...plan.limits,
-          monthlyInvoices: invoiceLimit === "" ? plan.limits?.monthlyInvoices : Number(invoiceLimit),
-        },
-        active: plan.active,
-        publicVisible: plan.publicVisible,
-      });
-      await refreshProductConfiguration();
-    } catch (error) {
-      setProductConfigError(error.response?.data?.message || "Unable to update commercial plan");
-    } finally {
-      setBusyAction("");
-    }
+    setActionModal({ type: "commercial-plan", plan });
+    setActionForm({
+      monthlyPrice: plan.monthlyPrice ?? 0,
+      yearlyPrice: plan.yearlyPrice ?? 0,
+      monthlyInvoices: plan.limits?.monthlyInvoices ?? "",
+      users: plan.limits?.users ?? "",
+      whatsappQuota: plan.limits?.whatsappQuota ?? "",
+      active: plan.active !== false,
+      publicVisible: plan.publicVisible !== false,
+    });
   };
 
   const handleCreateOffer = async (request) => {
-    const actionKey = `offer:${request._id}`;
     if (busyAction) return;
-    const negotiatedPrice = window.prompt(
-      `Offer base price for ${request.moduleKey}. Leave 0 for included/free.`,
-      ""
-    );
-    if (negotiatedPrice === null) return;
+    setProductConfigError("");
+    const commercialModule = productConfig.commercialModules.find((item) => item.moduleKey === request.moduleKey);
+    setActionModal({ type: "offer", request });
+    setActionForm({
+      negotiatedPrice: commercialModule?.defaultPrice ?? "",
+      validUntil: "",
+      adminNote: "Commercial offer created from Super Admin",
+    });
+  };
+
+  const submitActionModal = async () => {
+    if (!actionModal || busyAction) return;
+    const actionKey =
+      actionModal.type === "module-price"
+        ? `module-price:${actionModal.module.moduleKey}`
+        : actionModal.type === "commercial-plan"
+          ? `commercial-plan:${actionModal.plan.code}`
+          : `offer:${actionModal.request._id}`;
     setBusyAction(actionKey);
     setProductConfigError("");
     try {
-      await superAdminCreateModuleOfferRequest({
-        moduleRequestId: request._id,
-        negotiatedPrice: negotiatedPrice === "" ? undefined : Number(negotiatedPrice),
-        adminNote: "Commercial offer created from Super Admin",
-      });
+      if (actionModal.type === "module-price") {
+        const module = actionModal.module;
+        await superAdminUpdateCommercialModuleRequest(module.moduleKey, {
+          defaultPrice: Number(actionForm.defaultPrice || 0),
+          commercialType: module.commercialType,
+          pricingType: module.pricingType,
+          gstApplicable: Boolean(actionForm.gstApplicable),
+          gstRate: Number(actionForm.gstRate || 0),
+          active: Boolean(actionForm.active),
+        });
+      } else if (actionModal.type === "commercial-plan") {
+        const plan = actionModal.plan;
+        await superAdminUpdateCommercialPlanRequest(plan.code, {
+          monthlyPrice: Number(actionForm.monthlyPrice || 0),
+          yearlyPrice: Number(actionForm.yearlyPrice || 0),
+          limits: {
+            ...plan.limits,
+            monthlyInvoices: actionForm.monthlyInvoices === "" ? plan.limits?.monthlyInvoices : Number(actionForm.monthlyInvoices),
+            users: actionForm.users === "" ? plan.limits?.users : Number(actionForm.users),
+            whatsappQuota: actionForm.whatsappQuota === "" ? plan.limits?.whatsappQuota : Number(actionForm.whatsappQuota),
+          },
+          active: Boolean(actionForm.active),
+          publicVisible: Boolean(actionForm.publicVisible),
+        });
+      } else if (actionModal.type === "offer") {
+        await superAdminCreateModuleOfferRequest({
+          moduleRequestId: actionModal.request._id,
+          negotiatedPrice: actionForm.negotiatedPrice === "" ? undefined : Number(actionForm.negotiatedPrice),
+          adminNote: actionForm.adminNote || "Commercial offer created from Super Admin",
+          validUntil: actionForm.validUntil || undefined,
+        });
+      }
+      setActionModal(null);
+      setActionForm({});
       await refreshProductConfiguration();
     } catch (error) {
-      setProductConfigError(error.response?.data?.message || "Unable to create module offer");
+      setProductConfigError(error.response?.data?.message || "Unable to complete action");
     } finally {
       setBusyAction("");
     }
   };
 
-  const handleReviewCommercialOrder = async (orderId, status) => {
+  const executeReviewCommercialOrder = async (orderId, status) => {
     const actionKey = `order:${orderId}:${status}`;
     if (busyAction) return;
     setProductConfigError("");
     try {
-      if (status === "PAID" && !window.confirm("Verify this payment and activate the module?")) {
-        return;
-      }
       setBusyAction(actionKey);
       await superAdminReviewCommercialOrderRequest(orderId, { status });
       await refreshProductConfiguration();
@@ -369,6 +395,20 @@ const SuperAdminDashboardPage = () => {
     } finally {
       setBusyAction("");
     }
+  };
+
+  const handleReviewCommercialOrder = async (orderId, status) => {
+    if (status !== "PAID") {
+      await executeReviewCommercialOrder(orderId, status);
+      return;
+    }
+    setConfirmDialog({
+      title: "Verify commercial payment?",
+      message: "This marks the payment as paid and activates the purchased module through the controlled commercial workflow.",
+      confirmLabel: "Verify and activate",
+      tone: "success",
+      onConfirm: () => executeReviewCommercialOrder(orderId, status),
+    });
   };
 
   const handleSearchSubmit = (event) => {
@@ -380,18 +420,13 @@ const SuperAdminDashboardPage = () => {
     }));
   };
 
-  const handleToggleBusiness = async (businessId) => {
+  const executeToggleBusiness = async (businessId) => {
     if (busyBusinessId) return;
     setBusyBusinessId(businessId);
     setBusinessError("");
     setSuccessMessage("");
 
     try {
-      const business = businesses.find((item) => item.id === businessId);
-      if (business && !business.isDisabled && !window.confirm(`Disable ${business.name}? This will block tenant access.`)) {
-        setBusyBusinessId("");
-        return;
-      }
       const updatedBusiness = await superAdminToggleBusinessStatusRequest(businessId);
       setBusinesses((current) =>
         current.map((business) => (business.id === businessId ? updatedBusiness : business))
@@ -409,6 +444,21 @@ const SuperAdminDashboardPage = () => {
     } finally {
       setBusyBusinessId("");
     }
+  };
+
+  const handleToggleBusiness = async (businessId) => {
+    const business = businesses.find((item) => item.id === businessId);
+    if (business && !business.isDisabled) {
+      setConfirmDialog({
+        title: `Disable ${business.name}?`,
+        message: "This will block tenant access until a super admin enables the business again.",
+        confirmLabel: "Disable business",
+        tone: "danger",
+        onConfirm: () => executeToggleBusiness(businessId),
+      });
+      return;
+    }
+    await executeToggleBusiness(businessId);
   };
 
   const handlePlanUpdate = async (businessId) => {
@@ -662,7 +712,7 @@ const SuperAdminDashboardPage = () => {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-white">{request.businessId?.name || "Business"}</p>
-                          <p className="mt-1 text-xs text-slate-400">{request.moduleKey || request.requestType} · {request.requestType || "MODULE"} · {safeDate(request.createdAt)}</p>
+                          <p className="mt-1 text-xs text-slate-400">{getModuleDisplayName(request.moduleKey, productConfig)} · {request.requestType || "MODULE"} · {safeDate(request.createdAt)}</p>
                         </div>
                         <StatusBadge>{request.status}</StatusBadge>
                       </div>
@@ -685,7 +735,7 @@ const SuperAdminDashboardPage = () => {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-white">{offer.businessId?.name || "Business"}</p>
-                          <p className="mt-1 text-xs text-slate-400">{offer.moduleKey} · {formatCurrency(offer.finalAmount)} · Valid {safeDate(offer.validUntil)}</p>
+                          <p className="mt-1 text-xs text-slate-400">{getModuleDisplayName(offer.moduleKey, productConfig)} · {formatCurrency(offer.finalAmount)} · Valid {safeDate(offer.validUntil)}</p>
                         </div>
                         <StatusBadge>{offer.status}</StatusBadge>
                       </div>
@@ -701,7 +751,7 @@ const SuperAdminDashboardPage = () => {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-white">{order.businessId?.name || "Business"}</p>
-                          <p className="mt-1 text-xs text-slate-400">{order.moduleKey} · {formatCurrency(order.totalAmount)} · {order.paymentMethod} · Submitted {safeDate(order.createdAt)}</p>
+                          <p className="mt-1 text-xs text-slate-400">{getModuleDisplayName(order.moduleKey, productConfig)} · {formatCurrency(order.totalAmount)} · {order.paymentMethod} · Submitted {safeDate(order.createdAt)}</p>
                           <p className="mt-1 text-xs text-slate-500">Activation: {order.activationStatus || "PENDING"}</p>
                         </div>
                         <StatusBadge>{order.paymentStatus}</StatusBadge>
@@ -923,8 +973,178 @@ const SuperAdminDashboardPage = () => {
           </div>
         </section>
       </div>
+      {actionModal ? (
+        <AdminActionModal
+          modal={actionModal}
+          form={actionForm}
+          productConfig={productConfig}
+          isSaving={Boolean(busyAction)}
+          onChange={(field, value) => setActionForm((current) => ({ ...current, [field]: value }))}
+          onClose={() => {
+            if (!busyAction) {
+              setActionModal(null);
+              setActionForm({});
+            }
+          }}
+          onSubmit={submitActionModal}
+        />
+      ) : null}
+      {confirmDialog ? (
+        <ConfirmDialog
+          dialog={confirmDialog}
+          isSaving={Boolean(busyAction || busyBusinessId)}
+          onCancel={() => setConfirmDialog(null)}
+          onConfirm={async () => {
+            const action = confirmDialog.onConfirm;
+            setConfirmDialog(null);
+            await action();
+          }}
+        />
+      ) : null}
     </div>
   );
 };
+
+const AdminActionModal = ({ modal, form, productConfig, isSaving, onChange, onClose, onSubmit }) => {
+  const title =
+    modal.type === "module-price"
+      ? `Edit ${modal.module.displayName || modal.module.moduleKey}`
+      : modal.type === "commercial-plan"
+        ? `Edit ${modal.plan.name}`
+        : `Create offer for ${getModuleDisplayName(modal.request.moduleKey, productConfig)}`;
+  const description =
+    modal.type === "module-price"
+      ? "Update the commercial catalogue entry used for future module offers."
+      : modal.type === "commercial-plan"
+        ? "Update the public plan catalogue values shown to tenants."
+        : "Create a controlled add-on offer. Backend pricing and activation rules remain authoritative.";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-xl rounded-[2rem] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-black/40">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-brand-200">Super Admin</p>
+            <h3 className="mt-2 text-2xl font-semibold text-white">{title}</h3>
+            <p className="mt-2 text-sm text-slate-400">{description}</p>
+          </div>
+          <button type="button" onClick={onClose} disabled={isSaving} className="rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-300 disabled:opacity-50">
+            Close
+          </button>
+        </div>
+
+        <div className="mt-6 grid gap-4">
+          {modal.type === "module-price" ? (
+            <>
+              <label>
+                <span className="mb-2 block text-sm font-medium text-slate-200">Standard price</span>
+                <input type="number" min="0" step="0.01" value={form.defaultPrice} onChange={(event) => onChange("defaultPrice", event.target.value)} className={modalInputClass} />
+              </label>
+              <label>
+                <span className="mb-2 block text-sm font-medium text-slate-200">GST rate</span>
+                <input type="number" min="0" step="0.01" value={form.gstRate} onChange={(event) => onChange("gstRate", event.target.value)} className={modalInputClass} />
+              </label>
+              <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-slate-200">
+                <input type="checkbox" checked={Boolean(form.gstApplicable)} onChange={(event) => onChange("gstApplicable", event.target.checked)} />
+                GST applicable
+              </label>
+              <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-slate-200">
+                <input type="checkbox" checked={Boolean(form.active)} onChange={(event) => onChange("active", event.target.checked)} />
+                Catalogue active
+              </label>
+            </>
+          ) : null}
+
+          {modal.type === "commercial-plan" ? (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label>
+                  <span className="mb-2 block text-sm font-medium text-slate-200">Monthly price</span>
+                  <input type="number" min="0" step="0.01" value={form.monthlyPrice} onChange={(event) => onChange("monthlyPrice", event.target.value)} className={modalInputClass} />
+                </label>
+                <label>
+                  <span className="mb-2 block text-sm font-medium text-slate-200">Yearly price</span>
+                  <input type="number" min="0" step="0.01" value={form.yearlyPrice} onChange={(event) => onChange("yearlyPrice", event.target.value)} className={modalInputClass} />
+                </label>
+                <label>
+                  <span className="mb-2 block text-sm font-medium text-slate-200">Monthly invoice limit</span>
+                  <input type="number" min="0" value={form.monthlyInvoices} onChange={(event) => onChange("monthlyInvoices", event.target.value)} className={modalInputClass} />
+                </label>
+                <label>
+                  <span className="mb-2 block text-sm font-medium text-slate-200">User limit</span>
+                  <input type="number" min="0" value={form.users} onChange={(event) => onChange("users", event.target.value)} className={modalInputClass} />
+                </label>
+                <label>
+                  <span className="mb-2 block text-sm font-medium text-slate-200">WhatsApp quota</span>
+                  <input type="number" min="0" value={form.whatsappQuota} onChange={(event) => onChange("whatsappQuota", event.target.value)} className={modalInputClass} />
+                </label>
+              </div>
+              <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-slate-200">
+                <input type="checkbox" checked={Boolean(form.active)} onChange={(event) => onChange("active", event.target.checked)} />
+                Plan active
+              </label>
+              <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-slate-200">
+                <input type="checkbox" checked={Boolean(form.publicVisible)} onChange={(event) => onChange("publicVisible", event.target.checked)} />
+                Publicly visible
+              </label>
+            </>
+          ) : null}
+
+          {modal.type === "offer" ? (
+            <>
+              <div className="rounded-2xl border border-white/10 bg-white/[.03] p-4 text-sm text-slate-300">
+                <p>Business: <span className="font-semibold text-white">{modal.request.businessId?.name || "Business"}</span></p>
+                <p className="mt-1">Module: <span className="font-semibold text-white">{getModuleDisplayName(modal.request.moduleKey, productConfig)}</span></p>
+              </div>
+              <label>
+                <span className="mb-2 block text-sm font-medium text-slate-200">Offer base price</span>
+                <input type="number" min="0" step="0.01" value={form.negotiatedPrice} onChange={(event) => onChange("negotiatedPrice", event.target.value)} className={modalInputClass} />
+              </label>
+              <label>
+                <span className="mb-2 block text-sm font-medium text-slate-200">Valid until</span>
+                <input type="date" value={form.validUntil} onChange={(event) => onChange("validUntil", event.target.value)} className={modalInputClass} />
+              </label>
+              <label>
+                <span className="mb-2 block text-sm font-medium text-slate-200">Admin note</span>
+                <textarea rows="3" value={form.adminNote} onChange={(event) => onChange("adminNote", event.target.value)} className={modalInputClass} />
+              </label>
+            </>
+          ) : null}
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onClose} disabled={isSaving} className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-200 disabled:opacity-50">
+            Cancel
+          </button>
+          <button type="button" onClick={onSubmit} disabled={isSaving} className="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">
+            {isSaving ? "Saving..." : "Save changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ConfirmDialog = ({ dialog, isSaving, onCancel, onConfirm }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+    <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-black/40">
+      <h3 className="text-xl font-semibold text-white">{dialog.title}</h3>
+      <p className="mt-3 text-sm text-slate-300">{dialog.message}</p>
+      <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <button type="button" onClick={onCancel} disabled={isSaving} className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-200 disabled:opacity-50">
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={isSaving}
+          className={`rounded-2xl px-5 py-3 text-sm font-semibold text-white disabled:opacity-50 ${dialog.tone === "danger" ? "bg-rose-600" : "bg-emerald-600"}`}
+        >
+          {isSaving ? "Working..." : dialog.confirmLabel || "Confirm"}
+        </button>
+      </div>
+    </div>
+  </div>
+);
 
 export default SuperAdminDashboardPage;

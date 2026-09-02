@@ -42,6 +42,15 @@ const getTrialDaysRemaining = (trialEndsAt) => {
   return Math.max(0, remaining);
 };
 
+const mergePlanIntoBusiness = (business, planData) => ({
+  ...(business || {}),
+  planCode: planData?.planCode || business?.planCode || "free",
+  plan: planData?.plan || business?.plan,
+  entitlements: planData?.entitlements || business?.entitlements,
+  subscription: planData?.subscription || business?.subscription,
+  invoiceUsage: planData?.invoiceUsage || business?.invoiceUsage,
+});
+
 let razorpayScriptPromise = null;
 
 const ensureRazorpayCheckout = () => {
@@ -111,6 +120,7 @@ const SubscriptionPage = () => {
         setCurrentPlan(activePlan);
         setSelectedPlanCode(activePlan.subscription?.pendingPlanCode || activePlan.planCode);
         setSubscriptionState(activePlan.subscription);
+        updateBusiness(mergePlanIntoBusiness(business, activePlan));
       } catch (error) {
         setPlanError(error.response?.data?.message || "Unable to load plan data");
       } finally {
