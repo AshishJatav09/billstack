@@ -3,11 +3,11 @@ const mongoose = require("mongoose");
 const Invoice = require("../models/Invoice");
 const CreditNote = require("../models/CreditNote");
 const SalesReturn = require("../models/SalesReturn");
-const CustomerLedger = require("../models/CustomerLedger");
 const Product = require("../models/Product");
 const StockMovement = require("../models/StockMovement");
 const AppError = require("../utils/appError");
 const { buildInventoryFlags } = require("./inventory.service");
+const { createCustomerLedgerEntryOnce } = require("./ledger.service");
 
 const cents = (value) => Math.round(Number(value || 0) * 100);
 const money = (minor) => Math.round(Number(minor || 0)) / 100;
@@ -105,11 +105,7 @@ const createCreditNote = async ({ businessId, userId, payload }) => {
         { session }
       );
 
-      await CustomerLedger.updateOne(
-        { businessId, sourceKey: `CREDIT_NOTE:${note._id}` },
-        { $setOnInsert: { businessId, customerId: inv.customerId, eventType: "CREDIT", amount: note.totalAmount, direction: "CREDIT", invoiceId: inv._id, sourceKey: `CREDIT_NOTE:${note._id}`, createdBy: userId, notes: "Credit note issued" } },
-        { upsert: true, session }
-      );
+      await createCustomerLedgerEntryOnce({ businessId, customerId: inv.customerId, eventType: "CREDIT", amount: note.totalAmount, direction: "CREDIT", invoiceId: inv._id, sourceKey: `CREDIT_NOTE:${note._id}`, createdBy: userId, notes: "Credit note issued" }, { session });
     });
     return note;
   } finally {
@@ -163,11 +159,7 @@ const createSalesReturn = async ({ businessId, userId, payload }) => {
         [{ businessId, invoiceId: inv._id, customerId: inv.customerId, returnNumber: payload.returnNumber || `RET-${Date.now()}`, sourceKey, lineItems: lines, totalAmount: money(totalMinor), createdBy: userId }],
         { session }
       );
-      await CustomerLedger.updateOne(
-        { businessId, sourceKey: `SALES_RETURN:${ret._id}` },
-        { $setOnInsert: { businessId, customerId: inv.customerId, eventType: "CREDIT", amount: ret.totalAmount, direction: "CREDIT", invoiceId: inv._id, sourceKey: `SALES_RETURN:${ret._id}`, createdBy: userId, notes: "Sales return adjustment" } },
-        { upsert: true, session }
-      );
+      await createCustomerLedgerEntryOnce({ businessId, customerId: inv.customerId, eventType: "CREDIT", amount: ret.totalAmount, direction: "CREDIT", invoiceId: inv._id, sourceKey: `SALES_RETURN:${ret._id}`, createdBy: userId, notes: "Sales return adjustment" }, { session });
     });
     return ret;
   } finally {

@@ -18,6 +18,7 @@ const RegisterPage = () => {
   const [serverError, setServerError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { googleAuth, register } = useAuth();
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -28,6 +29,7 @@ const RegisterPage = () => {
   };
 
   const handleGoogle = async (payload) => {
+    if (isSubmitting) return;
     setServerError("");
     setErrors({});
     if (!form.businessName.trim()) {
@@ -46,6 +48,7 @@ const RegisterPage = () => {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (isSubmitting) return;
     setErrors({});
     setServerError("");
     setIsSubmitting(true);
@@ -62,14 +65,18 @@ const RegisterPage = () => {
 
   return (
     <AuthCard
-      title="Create your workspace"
-      subtitle="Create a tenant-safe business and its owner account in one step."
+      title="Create account"
+      subtitle="Create your BillStack workspace."
     >
       <div className="mb-4">
-        <FormField label="Business name for Google signup" name="businessName" placeholder="BillStack Labs" value={form.businessName} onChange={handleChange} error={errors.businessName} />
+        <FormField label="Business name" name="businessName" placeholder="BillStack Labs" value={form.businessName} onChange={handleChange} error={errors.businessName} />
       </div>
-      <GoogleAuthButton mode="signup" businessName={form.businessName} name={form.name} onSuccess={handleGoogle} onError={setServerError} />
-      <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-wide text-slate-400"><span className="h-px flex-1 bg-slate-200" />or create with email<span className="h-px flex-1 bg-slate-200" /></div>
+      {googleClientId ? (
+        <>
+          <GoogleAuthButton mode="signup" businessName={form.businessName} name={form.name} onSuccess={handleGoogle} onError={setServerError} />
+          <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-wide text-slate-400"><span className="h-px flex-1 bg-slate-200" />or create with email<span className="h-px flex-1 bg-slate-200" /></div>
+        </>
+      ) : null}
       <form className="space-y-4" onSubmit={handleSubmit}>
         <FormField label="Full name" name="name" placeholder="Aarav Sharma" value={form.name} onChange={handleChange} error={errors.name} />
         <FormField label="Work email" name="email" type="email" placeholder="team@billstack.app" value={form.email} onChange={handleChange} error={errors.email} />

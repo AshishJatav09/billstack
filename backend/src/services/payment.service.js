@@ -10,6 +10,9 @@ const SupplierLedger = require("../models/SupplierLedger");
 const PaymentAllocationReversal = require("../models/PaymentAllocationReversal");
 const AppError = require("../utils/appError");
 const { fromMinorUnits, toMinorUnits } = require("../utils/money");
+const { log } = require("../utils/logger");
+const { dispatchPaymentRecordedAutomation } = require("./communication.service");
+const { createCustomerLedgerEntryOnce, createSupplierLedgerEntryOnce } = require("./ledger.service");
 
 const sumAmounts = (rows) => rows.reduce((sum, row) => sum + toMinorUnits(row.allocatedAmount), 0);
 const validateAllocationCounterparty = ({ sourceType, document, payment }) => {
@@ -68,7 +71,7 @@ const allocatePayment = async ({ businessId, userId, paymentId, payload }) => {
         const allocations = await PaymentAllocation.find({ businessId, invoiceId: invoice._id }).session(session).select("allocatedAmount");
         if (toMinorUnits(amount) > toMinorUnits(invoice.balanceDue, "Invoice outstanding amount", { allowZero: true }) - sumAmounts(allocations)) throw new AppError("Allocation exceeds invoice outstanding amount", 400);
         [allocation] = await PaymentAllocation.create([{ paymentId: payment._id, businessId, invoiceId: invoice._id, allocatedAmount: amount, createdBy: userId }], { session });
-        await CustomerLedger.updateOne({ businessId, allocationId: allocation._id }, { $setOnInsert: { businessId, customerId: invoice.customerId, eventType: "PAYMENT", amount, direction: "CREDIT", invoiceId: invoice._id, paymentId: payment._id, allocationId: allocation._id, referenceNumber: payment.referenceNumber, notes: "Payment allocation", createdBy: userId } }, { upsert: true, session });
+        await createCustomerLedgerEntryOnce({ businessId, customerId: invoice.customerId, eventType: "PAYMENT", amount, direction: "CREDIT", invoiceId: invoice._id, paymentId: payment._id, allocationId: allocation._id, referenceNumber: payment.referenceNumber, notes: "Payment allocation", createdBy: userId }, { session });
       } else {
         if (payment.direction !== "PAID") throw new AppError("Only paid payments can be allocated to purchases", 400);
         const purchase = await Purchase.findOne({ _id: purchaseId, businessId }).session(session);
@@ -79,9 +82,13 @@ const allocatePayment = async ({ businessId, userId, paymentId, payload }) => {
         const outstanding = toMinorUnits(purchase.totalAmount, "Purchase total amount", { allowZero: true }) - toMinorUnits(purchase.paidAmount, "Purchase paid amount", { allowZero: true }) - sumAmounts(allocations);
         if (toMinorUnits(amount) > outstanding) throw new AppError("Allocation exceeds purchase outstanding amount", 400);
         [allocation] = await PaymentAllocation.create([{ paymentId: payment._id, businessId, purchaseId: purchase._id, allocatedAmount: amount, createdBy: userId }], { session });
-        await SupplierLedger.updateOne({ businessId, allocationId: allocation._id }, { $setOnInsert: { businessId, supplierId: purchase.supplierId, eventType: "PAYMENT", amount, direction: "CREDIT", purchaseId: purchase._id, paymentId: payment._id, allocationId: allocation._id, referenceNumber: payment.referenceNumber, notes: "Payment allocation", createdBy: userId } }, { upsert: true, session });
+        await createSupplierLedgerEntryOnce({ businessId, supplierId: purchase.supplierId, eventType: "PAYMENT", amount, direction: "CREDIT", purchaseId: purchase._id, paymentId: payment._id, allocationId: allocation._id, referenceNumber: payment.referenceNumber, notes: "Payment allocation", createdBy: userId }, { session });
       }
     });
+    if (allocation?.invoiceId) {
+      await dispatchPaymentRecordedAutomation({ businessId, allocationId: allocation._id, createdBy: userId })
+        .catch((error) => log("warn", "Payment recorded automation failed", { allocationId: allocation._id.toString(), error: error.message }));
+    }
     return allocation;
   } finally { session.endSession(); }
 };
@@ -123,10 +130,10 @@ const reverseAllocation = async ({ businessId, userId, allocationId, amount, rea
     [reversal] = await PaymentAllocationReversal.create([{ businessId, allocationId, amount: requested, reason, createdBy: userId }], { session });
     if (allocation.invoiceId) {
       const invoice = await Invoice.findOne({ _id: allocation.invoiceId, businessId }).select("customerId").session(session);
-      if (invoice) await CustomerLedger.updateOne({ businessId, reversalId: reversal._id }, { $setOnInsert: { businessId, customerId: invoice.customerId, eventType: "REVERSAL", amount: requested, direction: "DEBIT", invoiceId: invoice._id, paymentId: allocation.paymentId, reversalId: reversal._id, notes: reason, createdBy: userId } }, { upsert: true, session });
+      if (invoice) await createCustomerLedgerEntryOnce({ businessId, customerId: invoice.customerId, eventType: "REVERSAL", amount: requested, direction: "DEBIT", invoiceId: invoice._id, paymentId: allocation.paymentId, reversalId: reversal._id, notes: reason, createdBy: userId }, { session });
     } else if (allocation.purchaseId) {
       const purchase = await Purchase.findOne({ _id: allocation.purchaseId, businessId }).select("supplierId").session(session);
-      if (purchase) await SupplierLedger.updateOne({ businessId, reversalId: reversal._id }, { $setOnInsert: { businessId, supplierId: purchase.supplierId, eventType: "REVERSAL", amount: requested, direction: "DEBIT", purchaseId: purchase._id, paymentId: allocation.paymentId, reversalId: reversal._id, notes: reason, createdBy: userId } }, { upsert: true, session });
+      if (purchase) await createSupplierLedgerEntryOnce({ businessId, supplierId: purchase.supplierId, eventType: "REVERSAL", amount: requested, direction: "DEBIT", purchaseId: purchase._id, paymentId: allocation.paymentId, reversalId: reversal._id, notes: reason, createdBy: userId }, { session });
     }
   }); return reversal; } finally { session.endSession(); }
 };

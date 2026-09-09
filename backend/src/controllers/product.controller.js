@@ -109,6 +109,8 @@ const createProduct = asyncHandler(async (req, res) => {
     purchasePrice: Number(req.body.purchasePrice || 0),
     sellingPrice: Number(req.body.sellingPrice || 0),
     taxRate: Number(req.body.taxRate || 0),
+    hsnSac: req.body.hsnSac?.trim() || "",
+    gstClassification: req.body.gstClassification?.trim().toUpperCase() || "TAXABLE",
     discount: Number(req.body.discount || 0),
     currentStock: openingStock,
     openingStock,
@@ -161,6 +163,8 @@ const updateProduct = asyncHandler(async (req, res) => {
   product.purchasePrice = Number(req.body.purchasePrice || 0);
   product.sellingPrice = Number(req.body.sellingPrice || 0);
   product.taxRate = Number(req.body.taxRate || 0);
+  product.hsnSac = req.body.hsnSac?.trim() || "";
+  product.gstClassification = req.body.gstClassification?.trim().toUpperCase() || "TAXABLE";
   product.discount = Number(req.body.discount || 0);
   product.minimumStockLevel = Number(req.body.minimumStockLevel || 0);
   product.trackInventory =

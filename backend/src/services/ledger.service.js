@@ -1,10 +1,31 @@
-const mongoose = require("mongoose");
-const InvoiceLedgerEvent = require("../models/InvoiceLedgerEvent");
+const CustomerLedger = require("../models/CustomerLedger");
 const SupplierLedger = require("../models/SupplierLedger");
-const AppError = require("../utils/appError");
-const recordInvoiceEvent = async ({ businessId, invoiceId, customerId, eventType, amount, direction, source, createdBy = null, session }) => {
-  const [event] = await InvoiceLedgerEvent.create([{ businessId, invoiceId, customerId, eventType, amount, direction, source, createdBy }], { session });
-  return event;
+
+const isDuplicateKeyError = (error) => error?.code === 11000;
+
+const createLedgerEntryOnce = async (Model, entry, options = {}) => {
+  try {
+    const [created] = await Model.create([entry], { session: options.session });
+    return created;
+  } catch (error) {
+    if (!isDuplicateKeyError(error)) throw error;
+    return Model.findOne({
+      businessId: entry.businessId,
+      ...(entry.sourceKey ? { sourceKey: entry.sourceKey } : {}),
+      ...(entry.paymentId ? { paymentId: entry.paymentId } : {}),
+      ...(entry.allocationId ? { allocationId: entry.allocationId } : {}),
+      ...(entry.reversalId ? { reversalId: entry.reversalId } : {}),
+    }).session(options.session || null);
+  }
 };
-const listSupplierLedger = ({ businessId, supplierId }) => SupplierLedger.find({ businessId, supplierId }).sort("-createdAt");
-module.exports = { listSupplierLedger, recordInvoiceEvent };
+
+const createCustomerLedgerEntryOnce = (entry, options) =>
+  createLedgerEntryOnce(CustomerLedger, entry, options);
+
+const createSupplierLedgerEntryOnce = (entry, options) =>
+  createLedgerEntryOnce(SupplierLedger, entry, options);
+
+module.exports = {
+  createCustomerLedgerEntryOnce,
+  createSupplierLedgerEntryOnce,
+};

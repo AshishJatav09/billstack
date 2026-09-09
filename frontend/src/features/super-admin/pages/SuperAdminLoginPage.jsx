@@ -25,12 +25,16 @@ const SuperAdminLoginPage = () => {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (isSubmitting) return;
     setErrors({});
     setServerError("");
     setIsSubmitting(true);
 
     try {
-      const data = await superAdminLoginRequest(form);
+      const data = await superAdminLoginRequest({
+        email: form.email.trim(),
+        password: form.password,
+      });
       setSession(data);
       navigate("/super-admin");
     } catch (error) {
@@ -43,8 +47,8 @@ const SuperAdminLoginPage = () => {
 
   return (
     <AuthCard
-      title="Platform owner access"
-      subtitle="Sign in to the BillStack control room for platform analytics, plans, and business controls."
+      title="Super Admin Login"
+      subtitle="Sign in to manage BillStack platform controls."
     >
       <form className="space-y-4" onSubmit={handleSubmit}>
         <FormField

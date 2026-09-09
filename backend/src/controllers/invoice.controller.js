@@ -4,16 +4,18 @@ const Business = require("../models/Business");
 const Customer = require("../models/Customer");
 const EInvoiceMetadata = require("../models/EInvoiceMetadata");
 const Invoice = require("../models/Invoice");
-const CustomerLedger = require("../models/CustomerLedger");
 const Product = require("../models/Product");
 const StockMovement = require("../models/StockMovement");
 const asyncHandler = require("../utils/asyncHandler");
 const AppError = require("../utils/appError");
 const { sendInvoiceEmail } = require("../services/email.service");
+const { dispatchInvoiceIssuedAutomation } = require("../services/communication.service");
 const { buildInventoryFlags } = require("../services/inventory.service");
 const { generateInvoicePdfBuffer } = require("../utils/pdfInvoice");
 const { buildInvoiceNumber, buildInvoiceTotals } = require("../utils/invoice");
 const { buildGstSnapshot, validateGstin, validateStateCode } = require("../utils/gst");
+const { createCustomerLedgerEntryOnce } = require("../services/ledger.service");
+const { log } = require("../utils/logger");
   const { applyFinancialRead, applyFinancialReads, hasDocumentAllocations, hasMigratedFinancialState, documentUpdateDecision, legacyPaymentWriteDecision } = require("../services/financial-read.service");
 const {
   buildPaginatedResponse,
@@ -91,6 +93,15 @@ const syncCustomerInvoiceHistory = async ({ customer, businessId, session }) => 
   await customer.save({ session });
 };
 
+const invoiceProductIds = (items = []) => [
+  ...new Set(
+    items
+      .map((item) => item.productId)
+      .filter((productId) => productId && mongoose.Types.ObjectId.isValid(productId))
+      .map((productId) => productId.toString())
+  ),
+];
+
 const applyInvoiceStockDelta = async ({
   business,
   businessId,
@@ -104,10 +115,12 @@ const applyInvoiceStockDelta = async ({
   const nextMap = new Map();
 
   previousItems.forEach((item) => {
+    if (!item.productId) return;
     previousMap.set(item.productId.toString(), item);
   });
 
   nextItems.forEach((item) => {
+    if (!item.productId) return;
     nextMap.set(item.productId.toString(), item);
   });
 
@@ -175,21 +188,31 @@ const buildInvoiceLineItems = ({ items, products }) => {
   const productMap = new Map(products.map((product) => [product._id.toString(), product]));
 
   return items.map((item) => {
-    const product = productMap.get(item.productId);
+    const productId = item.productId && mongoose.Types.ObjectId.isValid(item.productId)
+      ? item.productId.toString()
+      : "";
+    const product = productId ? productMap.get(productId) : null;
 
-    if (!product) {
+    if (productId && !product) {
       throw new AppError("One or more invoice products are invalid", 400);
+    }
+    const manualName = item.productName || item.description || item.name;
+    if (!product && (!manualName || String(manualName).trim().length < 2)) {
+      throw new AppError("Product or item/service description is required", 400);
     }
 
     return {
-      productId: product._id,
-      productName: product.name,
+      productId: product?._id || null,
+      productName: product ? product.name : String(manualName).trim(),
+      hsnSac: product?.hsnSac || item.hsnSac?.trim?.() || "",
+      gstClassification: String(product?.gstClassification || item.gstClassification || "TAXABLE").toUpperCase(),
+      isManual: !product,
       quantity: Number(item.quantity || 0),
-      rate: Number(item.rate ?? product.sellingPrice ?? 0),
-      taxRate: Number(item.taxRate ?? item.tax ?? product.taxRate ?? 0),
+      rate: Number(item.rate ?? product?.sellingPrice ?? 0),
+      taxRate: Number(item.taxRate ?? item.tax ?? product?.taxRate ?? 0),
       discountType: item.discountType === "amount" ? "amount" : "percent",
       discountValue: Number(
-        item.discountValue !== undefined ? item.discountValue : item.discount ?? product.discount ?? 0
+        item.discountValue !== undefined ? item.discountValue : item.discount ?? product?.discount ?? 0
       ),
     };
   });
@@ -284,7 +307,7 @@ const createInvoice = asyncHandler(async (req, res) => {
       }
 
       const products = await Product.find({
-        _id: { $in: rawItems.map((item) => item.productId) },
+        _id: { $in: invoiceProductIds(rawItems) },
         businessId: req.tenant.businessId,
       }).session(session);
 
@@ -356,7 +379,7 @@ const createInvoice = asyncHandler(async (req, res) => {
 
       const invoice = created[0];
       createdInvoiceId = invoice._id;
-      await CustomerLedger.updateOne({ businessId: req.tenant.businessId, sourceKey: `INVOICE:${invoice._id}:DEBIT` }, { $setOnInsert: { businessId: req.tenant.businessId, customerId: customer._id, eventType: "INVOICE", amount: invoice.grandTotal, direction: "DEBIT", invoiceId: invoice._id, sourceKey: `INVOICE:${invoice._id}:DEBIT`, createdBy: req.user._id } }, { upsert: true, session });
+      await createCustomerLedgerEntryOnce({ businessId: req.tenant.businessId, customerId: customer._id, eventType: "INVOICE", amount: invoice.grandTotal, direction: "DEBIT", invoiceId: invoice._id, sourceKey: `INVOICE:${invoice._id}:DEBIT`, createdBy: req.user._id }, { session });
       business.invoiceNumbering.nextSequence = sequence + 1;
       await business.save({ session });
 
@@ -380,6 +403,12 @@ const createInvoice = asyncHandler(async (req, res) => {
     const invoice = await Invoice.findById(createdInvoiceId)
       .populate("customerId", "name email phone")
       .populate("createdBy", "name email");
+
+    await dispatchInvoiceIssuedAutomation({
+      businessId: req.tenant.businessId,
+      invoiceId: createdInvoiceId,
+      createdBy: req.user._id,
+    }).catch((error) => log("warn", "Invoice issued automation failed", { invoiceId: createdInvoiceId.toString(), error: error.message }));
 
     res.status(201).json({
       message: "Invoice created successfully",
@@ -446,7 +475,7 @@ const updateInvoice = asyncHandler(async (req, res) => {
       }
 
       const products = await Product.find({
-        _id: { $in: rawItems.map((item) => item.productId) },
+        _id: { $in: invoiceProductIds(rawItems) },
         businessId: req.tenant.businessId,
       }).session(session);
 
@@ -455,7 +484,7 @@ const updateInvoice = asyncHandler(async (req, res) => {
         lineItems: normalizedItems,
         shippingCharges: req.body.shippingCharges,
         roundOff: req.body.roundOff,
-        amountPaid: req.body.amountPaid,
+        amountPaid: req.body.amountPaid !== undefined ? req.body.amountPaid : invoice.amountPaid,
       });
 
       if (business.gstConfiguration?.enabled) {
@@ -589,7 +618,7 @@ const cancelInvoice = asyncHandler(async (req, res) => {
       invoice.paymentStatus = "cancelled";
         invoice.balanceDue = 0;
         await invoice.save({ session });
-        await CustomerLedger.updateOne({ businessId: req.tenant.businessId, sourceKey: `INVOICE:${invoice._id}:CANCEL` }, { $setOnInsert: { businessId: req.tenant.businessId, customerId: invoice.customerId, eventType: "REVERSAL", amount: invoice.grandTotal, direction: "CREDIT", invoiceId: invoice._id, sourceKey: `INVOICE:${invoice._id}:CANCEL`, createdBy: req.user._id, notes: "Invoice cancellation" } }, { upsert: true, session });
+        await createCustomerLedgerEntryOnce({ businessId: req.tenant.businessId, customerId: invoice.customerId, eventType: "REVERSAL", amount: invoice.grandTotal, direction: "CREDIT", invoiceId: invoice._id, sourceKey: `INVOICE:${invoice._id}:CANCEL`, createdBy: req.user._id, notes: "Invoice cancellation" }, { session });
 
       if (customer) {
         await syncCustomerInvoiceHistory({

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, CircleAlert, FileText, RefreshCw, RotateCcw, Send, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { EmptyState, LoadingState } from "../../../components/ui/PageState";
@@ -48,6 +48,19 @@ const SalesLifecyclePage = () => {
   const [creditForm, setCreditForm] = useState(blankCreditForm);
   const [returnForm, setReturnForm] = useState(blankReturnForm);
   const [saving, setSaving] = useState("");
+  const pendingActionRef = useRef("");
+
+  const beginAction = (key) => {
+    if (pendingActionRef.current) return false;
+    pendingActionRef.current = key;
+    setSaving(key);
+    return true;
+  };
+
+  const endAction = () => {
+    pendingActionRef.current = "";
+    setSaving("");
+  };
 
   const load = async () => {
     setLoading(true);
@@ -90,7 +103,7 @@ const SalesLifecyclePage = () => {
 
   const saveQuote = async (event) => {
     event.preventDefault();
-    setSaving("quote");
+    if (!beginAction("quote")) return;
     try {
       const payload = normalizeQuotePayload(quoteForm, productMap);
       const row = editingQuote ? await updateQuoteRequest(editingQuote._id, payload) : await createQuoteRequest(payload);
@@ -102,12 +115,12 @@ const SalesLifecyclePage = () => {
     } catch (saveError) {
       setError(saveError.response?.data?.message || "Unable to save quote.");
     } finally {
-      setSaving("");
+      endAction();
     }
   };
 
   const transitionQuote = async (quote, status) => {
-    setSaving(`${quote._id}-${status}`);
+    if (!beginAction(`${quote._id}-${status}`)) return;
     try {
       const row = await updateQuoteStatusRequest(quote._id, status);
       setSelectedQuote(row);
@@ -116,12 +129,12 @@ const SalesLifecyclePage = () => {
     } catch (transitionError) {
       setError(transitionError.response?.data?.message || "Unable to update quote status.");
     } finally {
-      setSaving("");
+      endAction();
     }
   };
 
   const convertQuote = async (quote) => {
-    setSaving(`${quote._id}-convert`);
+    if (!beginAction(`${quote._id}-convert`)) return;
     try {
       const invoice = await convertQuoteRequest(quote._id);
       uiStore.getState().pushToast({ tone: "success", message: "Quote converted to invoice." });
@@ -129,7 +142,7 @@ const SalesLifecyclePage = () => {
     } catch (convertError) {
       setError(convertError.response?.data?.message || "Unable to convert quote.");
     } finally {
-      setSaving("");
+      endAction();
     }
   };
 
@@ -150,7 +163,7 @@ const SalesLifecyclePage = () => {
 
   const submitCreditNote = async (event) => {
     event.preventDefault();
-    setSaving("credit");
+    if (!beginAction("credit")) return;
     try {
       const payload = { ...creditForm, lineItems: creditForm.lineItems.filter((line) => Number(line.quantity) > 0 || Number(line.amount) > 0), sourceKey: sourceKey("CREDIT_NOTE_UI", creditForm) };
       const row = await createCreditNoteRequest(payload);
@@ -163,13 +176,13 @@ const SalesLifecyclePage = () => {
     } catch (creditError) {
       setError(creditError.response?.data?.message || "Unable to issue credit note.");
     } finally {
-      setSaving("");
+      endAction();
     }
   };
 
   const submitReturn = async (event) => {
     event.preventDefault();
-    setSaving("return");
+    if (!beginAction("return")) return;
     try {
       const payload = { ...returnForm, lineItems: returnForm.lineItems.filter((line) => Number(line.quantity) > 0), sourceKey: sourceKey("SALES_RETURN_UI", returnForm) };
       await createSalesReturnRequest(payload);
@@ -181,7 +194,7 @@ const SalesLifecyclePage = () => {
     } catch (returnError) {
       setError(returnError.response?.data?.message || "Unable to issue sales return.");
     } finally {
-      setSaving("");
+      endAction();
     }
   };
 
@@ -190,7 +203,7 @@ const SalesLifecyclePage = () => {
   return <div className="mx-auto max-w-[1500px] space-y-6 pb-8">
     <section className="flex flex-col gap-4 rounded-2xl border p-5 sm:p-7 xl:flex-row xl:items-end xl:justify-between" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
       <div><p className="text-sm font-medium text-brand-600">Sales lifecycle</p><h2 className="mt-2 text-3xl font-semibold tracking-tight">Quotes, credit notes and sales returns</h2><p className="mt-2 max-w-3xl text-sm" style={{ color: "var(--text-muted)" }}>Create quotes, convert accepted quotes to invoices, issue customer credits, and process sales returns without mutating historical invoice/payment records.</p></div>
-      <button onClick={load} className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold" style={{ borderColor: "var(--panel-border)" }}><RefreshCw size={16} /> Refresh</button>
+      <button type="button" onClick={load} disabled={loading || Boolean(saving)} className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold disabled:opacity-60" style={{ borderColor: "var(--panel-border)" }}><RefreshCw size={16} /> Refresh</button>
     </section>
     {error ? <div className="flex items-start justify-between gap-3 rounded-xl border border-rose-500/25 bg-rose-500/5 p-4 text-sm text-rose-700 dark:text-rose-200"><span className="flex gap-2"><CircleAlert size={18} />{error}</span><button onClick={() => setError("")}><X size={16} /></button></div> : null}
     <nav className="flex overflow-x-auto rounded-xl border p-1" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>{[["quotes", "Quotations"], ["creditNotes", "Credit Notes"], ["returns", "Sales Returns"]].map(([key, label]) => <button key={key} onClick={() => openTab(key)} className="whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium" style={tab === key ? { background: "var(--accent)", color: "white" } : { color: "var(--text-muted)" }}>{label}</button>)}</nav>

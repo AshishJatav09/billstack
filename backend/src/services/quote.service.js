@@ -2,7 +2,6 @@ const mongoose = require("mongoose");
 
 const Business = require("../models/Business");
 const Customer = require("../models/Customer");
-const CustomerLedger = require("../models/CustomerLedger");
 const Invoice = require("../models/Invoice");
 const Product = require("../models/Product");
 const Quote = require("../models/Quote");
@@ -10,7 +9,10 @@ const StockMovement = require("../models/StockMovement");
 const AppError = require("../utils/appError");
 const { buildGstSnapshot, validateGstin, validateStateCode } = require("../utils/gst");
 const { buildInvoiceNumber, buildInvoiceTotals } = require("../utils/invoice");
+const { log } = require("../utils/logger");
+const { dispatchInvoiceIssuedAutomation } = require("./communication.service");
 const { buildInventoryFlags } = require("./inventory.service");
+const { createCustomerLedgerEntryOnce } = require("./ledger.service");
 
 const normalizeLineItems = async ({ businessId, rawItems, session }) => {
   const items = Array.isArray(rawItems) ? rawItems : [];
@@ -271,11 +273,7 @@ const convertQuote = async ({ businessId, userId, id }) => {
       );
       invoice = created;
 
-      await CustomerLedger.updateOne(
-        { businessId, sourceKey: `INVOICE:${invoice._id}:DEBIT` },
-        { $setOnInsert: { businessId, customerId: customer._id, eventType: "INVOICE", amount: invoice.grandTotal, direction: "DEBIT", invoiceId: invoice._id, sourceKey: `INVOICE:${invoice._id}:DEBIT`, createdBy: userId } },
-        { upsert: true, session }
-      );
+      await createCustomerLedgerEntryOnce({ businessId, customerId: customer._id, eventType: "INVOICE", amount: invoice.grandTotal, direction: "DEBIT", invoiceId: invoice._id, sourceKey: `INVOICE:${invoice._id}:DEBIT`, createdBy: userId }, { session });
       business.invoiceNumbering.nextSequence = sequence + 1;
       await business.save({ session });
 
@@ -286,6 +284,10 @@ const convertQuote = async ({ businessId, userId, id }) => {
       quote.status = "CONVERTED";
       await quote.save({ session });
     });
+    if (invoice?._id) {
+      await dispatchInvoiceIssuedAutomation({ businessId, invoiceId: invoice._id, createdBy: userId })
+        .catch((error) => log("warn", "Quote invoice issued automation failed", { invoiceId: invoice._id.toString(), error: error.message }));
+    }
     return invoice;
   } finally {
     session.endSession();

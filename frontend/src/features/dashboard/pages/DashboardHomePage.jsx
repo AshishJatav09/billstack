@@ -14,14 +14,14 @@ import {
   FilePlus2,
   ListChecks,
   PackagePlus,
-  Plus,
   ReceiptText,
   RefreshCw,
   UsersRound,
 } from "lucide-react";
 import { ErrorState, LoadingState } from "../../../components/ui/PageState";
-import { dashboardSummaryRequest } from "../../auth/api";
+import { dashboardSummaryRequest, getBusinessModulesRequest } from "../../auth/api";
 import { useAuth } from "../../auth/useAuth";
+import { isActiveModule, isSelfHostedWorkspace, productLabelForWorkspace, visibleModuleKeys } from "../../workspace/workspaceVisibility";
 
 const formatMoney = (value) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -38,8 +38,11 @@ const badgeTone = (status) =>
         ? "bg-slate-500/10 text-slate-500"
         : "bg-rose-500/10 text-rose-600 dark:text-rose-300";
 
+const canRoleUse = (user, roles) => !roles?.length || roles.includes(user?.role);
+
 const DashboardHomePage = () => {
   const [data, setData] = useState(null);
+  const [moduleData, setModuleData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const navigate = useNavigate();
@@ -48,7 +51,9 @@ const DashboardHomePage = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        setData(await dashboardSummaryRequest());
+        const [summary, modules] = await Promise.all([dashboardSummaryRequest(), getBusinessModulesRequest()]);
+        setData(summary);
+        setModuleData(modules);
       } catch (loadError) {
         setError(loadError.response?.data?.message || "Unable to load dashboard");
       } finally {
@@ -71,7 +76,7 @@ const DashboardHomePage = () => {
               action: "Review sales",
               to: "/dashboard/invoices",
             },
-            data.metrics.lowStockProducts > 0 && {
+            isActiveModule(moduleData, "inventory") && data.metrics.lowStockProducts > 0 && {
               tone: "amber",
               icon: Box,
               title: `${data.metrics.lowStockProducts} low-stock item${data.metrics.lowStockProducts === 1 ? "" : "s"}`,
@@ -86,10 +91,10 @@ const DashboardHomePage = () => {
                 title: "Subscription access needs attention",
                 detail: "Some workspace features may be restricted",
                 action: "Open subscription",
-                to: "/dashboard/subscription",
-              },
+              to: isSelfHostedWorkspace(moduleData, business) ? "/dashboard/settings" : "/dashboard/subscription",
+            },
           ].filter(Boolean),
-    [data, business]
+    [data, business, moduleData]
   );
 
   if (isLoading) {
@@ -101,14 +106,17 @@ const DashboardHomePage = () => {
   }
 
   const metrics = data.metrics;
+  const activeModules = visibleModuleKeys(moduleData);
+  const showModule = (moduleKey) => !moduleKey || activeModules.has(moduleKey);
   const quickActions = [
-    { label: "Create invoice", detail: "Start a sale", icon: FilePlus2, to: "/dashboard/invoices", primary: true },
-    { label: "Create quotation", detail: "Draft an estimate", icon: BadgeIndianRupee, to: "/dashboard/quotes" },
-    { label: "Record expense", detail: "Track operating spend", icon: ReceiptText, to: "/dashboard/expenses" },
-    { label: "Record payment", detail: "Coming soon", icon: Plus, disabled: true },
-    { label: "Add customer", detail: "New contact", icon: UsersRound, to: "/dashboard/customers" },
-    { label: "Add product", detail: "Catalog item", icon: PackagePlus, to: "/dashboard/products" },
-  ];
+    { label: "Create invoice", detail: "Start a sale", icon: FilePlus2, to: "/dashboard/invoices", moduleKey: "invoices", primary: true },
+    { label: "Create quotation", detail: "Draft an estimate", icon: BadgeIndianRupee, to: "/dashboard/quotes", moduleKey: "quotations" },
+    { label: "Add customer", detail: "New contact", icon: UsersRound, to: "/dashboard/customers", moduleKey: "customers" },
+    { label: `Add ${productLabelForWorkspace(moduleData).replace("Products / ", "").replace("Products & ", "").toLowerCase()}`, detail: productLabelForWorkspace(moduleData), icon: PackagePlus, to: "/dashboard/products", moduleKey: "products_services" },
+    { label: "Record expense", detail: "Track operating spend", icon: ReceiptText, to: "/dashboard/expenses", moduleKey: "expenses", roles: ["owner", "admin", "accountant"] },
+    { label: "New appointment", detail: "Schedule customer time", icon: CalendarClock, to: "/dashboard/appointments", moduleKey: "appointments_scheduling" },
+    { label: "New production job", detail: "Plan stock output", icon: ClipboardList, to: "/dashboard/production-jobs", moduleKey: "production_job_work" },
+  ].filter((action) => showModule(action.moduleKey) && canRoleUse(user, action.roles));
   const checklist = data.onboardingChecklist || [];
   const completedChecklist = checklist.filter((item) => item.complete).length;
   const remainingChecklist = checklist.length - completedChecklist;
@@ -134,15 +142,15 @@ const DashboardHomePage = () => {
   ];
   const workflowMetrics = data.workflowMetrics || metrics.workflowMetrics || {};
   const workflowStats = [
-    { label: "Active orders", value: workflowMetrics.activeOrders || 0, detail: `${workflowMetrics.processingOrders || 0} in processing`, icon: ClipboardList, to: "/dashboard/orders" },
-    { label: "Overdue tasks", value: workflowMetrics.overdueTasks || 0, detail: "Past due and not completed", icon: ListChecks, to: "/dashboard/tasks" },
-    { label: "Appointments", value: workflowMetrics.upcomingAppointments || 0, detail: "Next 7 days", icon: CalendarClock, to: "/dashboard/appointments" },
-    { label: "Recurring due", value: workflowMetrics.recurringDueSoon || 0, detail: "Due within 7 days", icon: RefreshCw, to: "/dashboard/recurring-billing" },
-    { label: "Production jobs", value: workflowMetrics.openProductionJobs || 0, detail: "Open job-work items", icon: ClipboardList, to: "/dashboard/production-jobs" },
-    { label: "Expiring batches", value: workflowMetrics.expiringBatches || 0, detail: "Within 30 days", icon: Box, to: "/dashboard/batches" },
-    { label: "Pending dispatches", value: workflowMetrics.pendingDispatches || 0, detail: "Not delivered yet", icon: PackagePlus, to: "/dashboard/dispatches" },
-    { label: "Approvals", value: workflowMetrics.pendingApprovals || 0, detail: "Waiting for decision", icon: FilePlus2, to: "/dashboard/approvals" },
-  ];
+    { label: "Active orders", value: workflowMetrics.activeOrders || 0, detail: `${workflowMetrics.processingOrders || 0} in processing`, icon: ClipboardList, to: "/dashboard/orders", moduleKey: "order_management" },
+    { label: "Overdue tasks", value: workflowMetrics.overdueTasks || 0, detail: "Past due and not completed", icon: ListChecks, to: "/dashboard/tasks", moduleKey: "projects_tasks" },
+    { label: "Appointments", value: workflowMetrics.upcomingAppointments || 0, detail: "Next 7 days", icon: CalendarClock, to: "/dashboard/appointments", moduleKey: "appointments_scheduling" },
+    { label: "Recurring due", value: workflowMetrics.recurringDueSoon || 0, detail: "Due within 7 days", icon: RefreshCw, to: "/dashboard/recurring-billing", moduleKey: "recurring_billing" },
+    { label: "Production jobs", value: workflowMetrics.openProductionJobs || 0, detail: "Open job-work items", icon: ClipboardList, to: "/dashboard/production-jobs", moduleKey: "production_job_work" },
+    { label: "Expiring batches", value: workflowMetrics.expiringBatches || 0, detail: "Within 30 days", icon: Box, to: "/dashboard/batches", moduleKey: "batch_expiry" },
+    { label: "Pending dispatches", value: workflowMetrics.pendingDispatches || 0, detail: "Not delivered yet", icon: PackagePlus, to: "/dashboard/dispatches", moduleKey: "dispatch_fulfilment" },
+    { label: "Approvals", value: workflowMetrics.pendingApprovals || 0, detail: "Waiting for decision", icon: FilePlus2, to: "/dashboard/approvals", moduleKey: "documents_approvals" },
+  ].filter((item) => showModule(item.moduleKey));
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-6 pb-6">
@@ -164,10 +172,10 @@ const DashboardHomePage = () => {
           </p>
         </div>
         <button
-          onClick={() => navigate("/dashboard/invoices")}
+          onClick={() => navigate(showModule("invoices") ? "/dashboard/invoices" : "/dashboard/customers")}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
         >
-          <FilePlus2 size={17} /> Create invoice
+          <FilePlus2 size={17} /> {showModule("invoices") ? "Create invoice" : "Open workspace"}
         </button>
       </section>
 
@@ -185,7 +193,7 @@ const DashboardHomePage = () => {
         ))}
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {workflowStats.length ? <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {workflowStats.map((item) => {
           const Icon = item.icon;
           return (
@@ -212,7 +220,7 @@ const DashboardHomePage = () => {
             </button>
           );
         })}
-      </section>
+      </section> : null}
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(290px,0.8fr)]">
         <div className="rounded-2xl border p-5 sm:p-6" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
@@ -362,10 +370,11 @@ const DashboardHomePage = () => {
                         </span>
                       </span>
                     </span>
-                    {action.disabled ? <span className="text-[10px] uppercase tracking-wide">Soon</span> : <ArrowRight size={15} />}
+                    <ArrowRight size={15} />
                   </button>
                 );
               })}
+              {!quickActions.length ? <p className="rounded-xl bg-slate-500/5 p-3 text-sm" style={{ color: "var(--text-muted)" }}>No quick actions are available for your current role.</p> : null}
             </div>
           </div>
 

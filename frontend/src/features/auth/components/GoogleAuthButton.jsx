@@ -48,9 +48,7 @@ const GoogleAuthButton = ({ mode = "login", businessName = "", name = "", onSucc
     });
   }, [businessName, clientId, mode, name, nonce, onError, onSuccess, ready]);
 
-  if (!clientId) {
-    return <p className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-700">Google login is not configured for this environment.</p>;
-  }
+  if (!clientId) return null;
 
   return <div ref={buttonRef} className="flex min-h-[44px] w-full justify-center" />;
 };

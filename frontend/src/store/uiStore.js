@@ -32,16 +32,27 @@ export const uiStore = create((set) => ({
       return { isSidebarPinned: nextPinned };
     }),
   pushToast: (toast) =>
-    set((state) => ({
-      toasts: [
-        ...state.toasts,
-        {
-          id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          tone: "info",
-          ...toast,
-        },
-      ],
-    })),
+    set((state) => {
+      const now = Date.now();
+      const duplicate = state.toasts.some(
+        (row) =>
+          row.title === toast.title &&
+          row.message === toast.message &&
+          now - Number(row.createdAt || 0) < 1500
+      );
+      if (duplicate) return state;
+      return {
+        toasts: [
+          ...state.toasts,
+          {
+            id: `${now}-${Math.random().toString(16).slice(2)}`,
+            createdAt: now,
+            tone: "info",
+            ...toast,
+          },
+        ],
+      };
+    }),
   removeToast: (id) =>
     set((state) => ({
       toasts: state.toasts.filter((toast) => toast.id !== id),

@@ -3,7 +3,6 @@ const mongoose = require("mongoose");
 const Appointment = require("../models/Appointment");
 const Business = require("../models/Business");
 const Customer = require("../models/Customer");
-const CustomerLedger = require("../models/CustomerLedger");
 const Invoice = require("../models/Invoice");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
@@ -16,9 +15,11 @@ const User = require("../models/User");
 const AppError = require("../utils/appError");
 const { buildGstSnapshot } = require("../utils/gst");
 const { buildInvoiceNumber, buildInvoiceTotals } = require("../utils/invoice");
+const { log } = require("../utils/logger");
 const { buildInventoryFlags } = require("./inventory.service");
 const { writeAuditLog } = require("./audit.service");
-const { scheduleWorkflowMessage } = require("./communication.service");
+const { createCustomerLedgerEntryOnce } = require("./ledger.service");
+const { dispatchInvoiceIssuedAutomation, scheduleWorkflowMessage } = require("./communication.service");
 
 const ORDER_TRANSITIONS = {
   DRAFT: ["CONFIRMED", "CANCELLED"],
@@ -246,11 +247,7 @@ const createInvoiceFromWorkflow = async ({ business, customer, lineItems, source
     createdBy: userId,
     session,
   });
-  await CustomerLedger.updateOne(
-    { businessId: business._id, sourceKey: `INVOICE:${invoice._id}:DEBIT` },
-    { $setOnInsert: { businessId: business._id, customerId: customer._id, eventType: "INVOICE", amount: invoice.grandTotal, direction: "DEBIT", invoiceId: invoice._id, sourceKey: `INVOICE:${invoice._id}:DEBIT`, createdBy: userId } },
-    { upsert: true, session }
-  );
+  await createCustomerLedgerEntryOnce({ businessId: business._id, customerId: customer._id, eventType: "INVOICE", amount: invoice.grandTotal, direction: "DEBIT", invoiceId: invoice._id, sourceKey: `INVOICE:${invoice._id}:DEBIT`, createdBy: userId }, { session });
   await business.save({ session });
   return invoice;
 };
@@ -386,6 +383,10 @@ const convertOrderToInvoice = async ({ businessId, userId, id, req }) => {
       await order.save({ session });
     });
     await writeAuditLog({ req, businessId, action: "ORDER_CONVERTED_TO_INVOICE", entityType: "Invoice", entityId: invoice._id });
+    if (invoice?._id) {
+      await dispatchInvoiceIssuedAutomation({ businessId, invoiceId: invoice._id, createdBy: userId })
+        .catch((error) => log("warn", "Order invoice issued automation failed", { invoiceId: invoice._id.toString(), error: error.message }));
+    }
     return invoice;
   } finally {
     session.endSession();
@@ -662,6 +663,10 @@ const generateRecurringInvoice = async ({ businessId, userId, id, runDate = new 
       await profile.save({ session });
     });
     await writeAuditLog({ req, businessId, action: "RECURRING_INVOICE_GENERATED", entityType: "Invoice", entityId: invoice._id });
+    if (invoice?._id) {
+      await dispatchInvoiceIssuedAutomation({ businessId, invoiceId: invoice._id, createdBy: userId || invoice.createdBy })
+        .catch((error) => log("warn", "Recurring invoice issued automation failed", { invoiceId: invoice._id.toString(), error: error.message }));
+    }
     return invoice;
   } finally {
     session.endSession();

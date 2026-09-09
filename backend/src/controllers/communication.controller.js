@@ -5,15 +5,20 @@ const MessageTemplate = require("../models/MessageTemplate");
 const ReminderRule = require("../models/ReminderRule");
 const ScheduledReminder = require("../models/ScheduledReminder");
 const asyncHandler = require("../utils/asyncHandler");
+const AppError = require("../utils/appError");
 const {
   createReminderRule,
   ensureDefaultTemplates,
   getWhatsAppProviderStatus,
+  extractTemplateVariables,
+  normalizeChannel,
+  normalizeTemplateCategory,
   processDueReminders,
   scheduleReminder,
   sendInvoiceMessage,
   updateDeliveryStatus,
   updateProviderDeliveryStatus,
+  validateTemplateVariables,
 } = require("../services/communication.service");
 const { mapDeliveryStatus, verifyWhatsAppWebhookSignature } = require("../services/whatsapp-provider.service");
 const { writeAuditLog } = require("../services/audit.service");
@@ -39,18 +44,33 @@ const templates = asyncHandler(async (req, res) => {
 
 const upsertTemplate = asyncHandler(async (req, res) => {
   const businessId = req.tenant.businessId;
-  const channel = String(req.body.channel || "EMAIL").toUpperCase();
-  const code = String(req.body.code || `${req.body.category || "CUSTOM"}_${channel}`).toUpperCase();
+  const channel = normalizeChannel(req.body.channel || "EMAIL");
+  const category = normalizeTemplateCategory(req.body.category || "CUSTOM");
+  const name = String(req.body.name || "").trim();
+  const body = String(req.body.body || "").trim();
+  const subject = String(req.body.subject || "").trim();
+  if (!name) throw new AppError("Template name is required", 400);
+  if (!body) throw new AppError("Template body is required", 400);
+  validateTemplateVariables(`${subject}\n${body}`);
+  const codeSeed = name.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 36) || "TEMPLATE";
+  const code = String(req.body.code || `${category}_${channel}_${codeSeed}_${Date.now()}`).toUpperCase();
+  const isDefault = req.body.isDefault === true;
+  if (isDefault) {
+    await MessageTemplate.updateMany(
+      { businessId, category, channel, code: { $ne: code }, isDefault: true },
+      { $set: { isDefault: false } }
+    );
+  }
   const row = await MessageTemplate.findOneAndUpdate(
     { businessId, code, channel },
-    { $set: { name: req.body.name, category: req.body.category || "CUSTOM", subject: req.body.subject || "", body: req.body.body, variables: req.body.variables || [], isActive: req.body.isActive !== false, createdBy: req.user._id } },
+    { $set: { name, category, subject, body, variables: extractTemplateVariables(`${subject}\n${body}`), isActive: req.body.isActive !== false || isDefault, isDefault, createdBy: req.user._id } },
     { upsert: true, new: true }
   );
   res.status(201).json({ data: row });
 });
 
 const rules = asyncHandler(async (req, res) => {
-  res.json({ data: await ReminderRule.find({ businessId: req.tenant.businessId }).populate("templateId", "name channel").sort("-createdAt") });
+  res.json({ data: await ReminderRule.find({ businessId: req.tenant.businessId }).populate("templateId", "name channel category").sort("-createdAt") });
 });
 
 const createRule = asyncHandler(async (req, res) => {

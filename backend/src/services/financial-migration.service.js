@@ -2,8 +2,7 @@ const mongoose = require("mongoose");
 const Invoice = require("../models/Invoice");
 const Purchase = require("../models/Purchase");
 const FinancialMigrationProvenance = require("../models/FinancialMigrationProvenance");
-const CustomerLedger = require("../models/CustomerLedger");
-const SupplierLedger = require("../models/SupplierLedger");
+const { createCustomerLedgerEntryOnce, createSupplierLedgerEntryOnce } = require("./ledger.service");
 const { fromMinorUnits, toMinorUnits } = require("../utils/money");
 
 const MIGRATION_TYPE = "LEGACY_PAYMENT_BACKFILL";
@@ -35,8 +34,8 @@ const migrateDocument = async ({ businessId, sourceType, document, dryRun = fals
       if (duplicate) { report.outcome = "SKIPPED"; report.state = duplicate.state; return; }
       await FinancialMigrationProvenance.create([{ ...key, state: result.state, legacyPaidAmount: fromMinorUnits(result.paid), migratedAllocatedAmount: fromMinorUnits(result.allocated || 0), exceptionCode: result.code || "", exceptionMessage: result.message, completedAt: new Date() }], { session });
       if (result.state === "MIGRATED") {
-        if (sourceType === "INVOICE" && document.customerId) await CustomerLedger.updateOne({ businessId, sourceKey: `INVOICE:${document._id}:DEBIT` }, { $setOnInsert: { businessId, customerId: document.customerId, eventType: "INVOICE", amount: document.grandTotal || 0, direction: "DEBIT", invoiceId: document._id, sourceKey: `INVOICE:${document._id}:DEBIT`, createdBy: null } }, { upsert: true, session });
-        if (sourceType === "PURCHASE" && document.supplierId) await SupplierLedger.updateOne({ businessId, sourceKey: `PURCHASE:${document._id}:PAYABLE` }, { $setOnInsert: { businessId, supplierId: document.supplierId, eventType: "PURCHASE", amount: document.totalAmount || 0, direction: "DEBIT", purchaseId: document._id, sourceKey: `PURCHASE:${document._id}:PAYABLE`, createdBy: null } }, { upsert: true, session });
+        if (sourceType === "INVOICE" && document.customerId) await createCustomerLedgerEntryOnce({ businessId, customerId: document.customerId, eventType: "INVOICE", amount: document.grandTotal || 0, direction: "DEBIT", invoiceId: document._id, sourceKey: `INVOICE:${document._id}:DEBIT`, createdBy: null }, { session });
+        if (sourceType === "PURCHASE" && document.supplierId) await createSupplierLedgerEntryOnce({ businessId, supplierId: document.supplierId, eventType: "PURCHASE", amount: document.totalAmount || 0, direction: "DEBIT", purchaseId: document._id, sourceKey: `PURCHASE:${document._id}:PAYABLE`, createdBy: null }, { session });
       }
     });
     return report;

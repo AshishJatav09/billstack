@@ -158,5 +158,5 @@ test("frontend hides SaaS subscription purchase copy in SELF_HOSTED sidebar", ()
   assert.match(sidebar, /deploymentMode === "SELF_HOSTED"/);
   assert.match(sidebar, /Licensed workspace/);
   assert.match(sidebar, /Module access is managed by your license/);
-  assert.match(sidebar, /item\.to === "\/dashboard\/subscription"/);
+  assert.match(sidebar, /saasOnly && isSelfHostedWorkspace/);
 });

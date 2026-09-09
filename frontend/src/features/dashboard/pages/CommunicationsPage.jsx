@@ -4,9 +4,111 @@ import { communicationDeliveriesRequest, communicationRulesRequest, communicatio
 import { EmptyState, LoadingState } from "../../../components/ui/PageState";
 import { uiStore } from "../../../store/uiStore";
 
+const templateCategories = [
+  { value: "INVOICE_CREATED", label: "Invoice Created" },
+  { value: "DUE_TODAY", label: "Payment Due Today" },
+  { value: "PAYMENT_OVERDUE", label: "Payment Overdue" },
+  { value: "PAYMENT_REMINDER", label: "Payment Reminder" },
+  { value: "PAYMENT_RECEIVED", label: "Payment Received" },
+  { value: "CREDIT_NOTE", label: "Credit Note" },
+  { value: "SALES_RETURN", label: "Sales Return" },
+  { value: "QUOTATION", label: "Quotation" },
+  { value: "CUSTOM", label: "Custom" },
+];
+const categoryLabel = (value) => templateCategories.find((item) => item.value === value)?.label || String(value || "Custom").replaceAll("_", " ");
+const defaultTemplateForm = () => ({ code: "", name: "", category: "PAYMENT_OVERDUE", channel: "EMAIL", subject: "", body: "", isActive: true, isDefault: false });
+const templateToForm = (template) => ({
+  code: template?.code || "",
+  name: template?.name || "",
+  category: template?.category || "CUSTOM",
+  channel: template?.channel || "EMAIL",
+  subject: template?.subject || "",
+  body: template?.body || "",
+  isActive: template?.isActive !== false,
+  isDefault: Boolean(template?.isDefault),
+});
+const sampleVariables = {
+  customer_name: "Aarav Sharma",
+  invoice_number: "INV-00042",
+  invoice_amount: "₹25,000.00",
+  outstanding_amount: "₹8,500.00",
+  due_date: "12 Sep 2026",
+  business_name: "BillStack Demo",
+  business_phone: "+91 98765 43210",
+  business_email: "billing@example.com",
+  payment_link: "https://example.com/pay/INV-00042",
+  payment_amount: "₹16,500.00",
+  credit_note_number: "CN-00012",
+  credit_note_amount: "₹2,500.00",
+  return_amount: "₹1,250.00",
+  quotation_number: "QUO-00018",
+  quotation_amount: "₹32,000.00",
+  valid_until: "30 Sep 2026",
+};
+const renderPreview = (value) => String(value || "").replace(/{{\s*([a-zA-Z0-9_]+)\s*}}/g, (match, key) => sampleVariables[key] || match);
 const dateTime = (value) => value ? new Date(value).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "-";
 const money = (value) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(value || 0));
 const statusClass = (status) => status === "SENT" || status === "DELIVERED" || status === "READ" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : status === "FAILED" ? "bg-rose-500/10 text-rose-700 dark:text-rose-300" : status === "SKIPPED" || status === "CANCELLED" ? "bg-slate-500/10 text-slate-600 dark:text-slate-300" : "bg-brand-500/10 text-brand-700 dark:text-brand-200";
+const reminderTypeLabels = {
+  BEFORE_DUE_DATE: "Before due date",
+  ON_DUE_DATE: "On due date",
+  AFTER_DUE_DATE: "After due date",
+  RECURRING_OVERDUE: "Recurring overdue",
+};
+const eventTypeLabels = {
+  INVOICE_ISSUED: "Invoice Issued",
+  PAYMENT_RECORDED: "Payment Successfully Recorded",
+};
+const paymentConditionLabels = {
+  ANY_PAYMENT: "Any payment",
+  PARTIAL_PAYMENT: "Partial payment",
+  FULL_PAYMENT: "Full payment",
+};
+const generatedRuleName = (form) => {
+  if (form.trigger === "INVOICE_ISSUED") return "Invoice Issued";
+  if (form.trigger === "PAYMENT_RECORDED") return `Payment Successfully Recorded - ${paymentConditionLabels[form.condition] || "Any payment"}`;
+  const days = Number(form.offsetDays || 0);
+  const repeat = Number(form.repeatEveryDays || 0);
+  if (form.trigger === "ON_DUE_DATE") return "On due date";
+  if (form.trigger === "BEFORE_DUE_DATE") return `${days} ${days === 1 ? "day" : "days"} before due date`;
+  if (form.trigger === "AFTER_DUE_DATE") return `${days} ${days === 1 ? "day" : "days"} after due date`;
+  return `Every ${repeat} ${repeat === 1 ? "day" : "days"} after overdue`;
+};
+const normalizeRuleFormForType = (current, trigger) => ({
+  ...current,
+  trigger,
+  category: trigger === "INVOICE_ISSUED" ? "INVOICE_CREATED" : trigger === "PAYMENT_RECORDED" ? "PAYMENT_RECEIVED" : current.category,
+  isEnabled: trigger === "INVOICE_ISSUED" || trigger === "PAYMENT_RECORDED" ? false : current.isEnabled,
+  offsetDays: trigger === "ON_DUE_DATE" || trigger === "RECURRING_OVERDUE" || trigger === "INVOICE_ISSUED" || trigger === "PAYMENT_RECORDED" ? 0 : current.offsetDays || 1,
+  repeatEveryDays: trigger === "RECURRING_OVERDUE" ? current.repeatEveryDays || 1 : 0,
+  sendTime: trigger === "INVOICE_ISSUED" || trigger === "PAYMENT_RECORDED" ? "" : current.sendTime || "10:00",
+  condition: trigger === "PAYMENT_RECORDED" ? current.condition || "ANY_PAYMENT" : "ANY_PAYMENT",
+  templateId: "",
+});
+const isEventTrigger = (trigger) => trigger === "INVOICE_ISSUED" || trigger === "PAYMENT_RECORDED";
+const communicationTabs = [
+  { id: "overview", label: "Overview" },
+  { id: "templates", label: "Templates" },
+  { id: "automation", label: "Automation" },
+  { id: "delivery", label: "Delivery / History" },
+  { id: "settings", label: "Settings" },
+];
+const ruleToForm = (rule = {}) => {
+  const trigger = rule.trigger || "BEFORE_DUE_DATE";
+  const channel = Array.isArray(rule.channels) ? rule.channels[0] : rule.channel;
+  return {
+    sourceKey: rule.sourceKey || "",
+    trigger,
+    offsetDays: rule.offsetDays ?? (trigger === "BEFORE_DUE_DATE" ? 3 : 0),
+    repeatEveryDays: rule.repeatEveryDays ?? 0,
+    channel: channel || "EMAIL",
+    category: rule.category || (trigger === "INVOICE_ISSUED" ? "INVOICE_CREATED" : trigger === "PAYMENT_RECORDED" ? "PAYMENT_RECEIVED" : "PAYMENT_OVERDUE"),
+    condition: rule.condition || "ANY_PAYMENT",
+    templateId: typeof rule.templateId === "object" ? rule.templateId?._id || "" : rule.templateId || "",
+    sendTime: rule.sendTime || (isEventTrigger(trigger) ? "" : "10:00"),
+    isEnabled: rule.isEnabled !== false,
+  };
+};
 
 const CommunicationsPage = () => {
   const [tab, setTab] = useState("overview");
@@ -17,8 +119,8 @@ const CommunicationsPage = () => {
   const [deliveries, setDeliveries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [ruleForm, setRuleForm] = useState({ name: "3 days before due date", trigger: "BEFORE_DUE", offsetDays: 3, channel: "EMAIL", sendTime: "10:00" });
-  const [templateForm, setTemplateForm] = useState({ name: "", category: "PAYMENT_REMINDER", channel: "EMAIL", subject: "", body: "" });
+  const [ruleForm, setRuleForm] = useState({ sourceKey: "", trigger: "BEFORE_DUE_DATE", offsetDays: 3, repeatEveryDays: 0, channel: "EMAIL", category: "PAYMENT_OVERDUE", condition: "ANY_PAYMENT", templateId: "", sendTime: "10:00", isEnabled: true });
+  const [templateForm, setTemplateForm] = useState(defaultTemplateForm);
 
   const load = async () => {
     setLoading(true);
@@ -48,8 +150,8 @@ const CommunicationsPage = () => {
   const createRule = async (event) => {
     event.preventDefault();
     try {
-      await createCommunicationRuleRequest(ruleForm);
-      uiStore.getState().pushToast({ tone: "success", message: "Reminder rule saved." });
+      await createCommunicationRuleRequest({ ...ruleForm, name: generatedRuleName(ruleForm) });
+      uiStore.getState().pushToast({ tone: "success", message: "Automation rule saved." });
       await load();
     } catch (saveError) {
       setError(saveError.response?.data?.message || "Unable to save reminder rule.");
@@ -61,7 +163,7 @@ const CommunicationsPage = () => {
     try {
       await upsertCommunicationTemplateRequest(templateForm);
       uiStore.getState().pushToast({ tone: "success", message: "Communication template saved." });
-      setTemplateForm({ name: "", category: "PAYMENT_REMINDER", channel: "EMAIL", subject: "", body: "" });
+      setTemplateForm(defaultTemplateForm());
       await load();
     } catch (saveError) {
       setError(saveError.response?.data?.message || "Unable to save template.");
@@ -84,19 +186,18 @@ const CommunicationsPage = () => {
     </section>
     {error ? <div className="rounded-xl border border-rose-500/25 bg-rose-500/5 p-4 text-sm text-rose-700 dark:text-rose-200">{error}</div> : null}
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{metrics.map(([label, value, Icon]) => <div key={label} className="rounded-xl border p-4" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><div className="flex items-center justify-between"><p className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>{label}</p><Icon size={18} className="text-brand-600" /></div><p className="mt-3 text-2xl font-semibold">{value}</p></div>)}</section>
-    <div className="flex gap-2 overflow-x-auto">{["overview", "reminders", "templates", "scheduled", "delivery logs", "settings"].map((item) => <button key={item} onClick={() => setTab(item)} className={`rounded-xl px-3 py-2 text-sm font-medium capitalize ${tab === item ? "bg-brand-600 text-white" : "border"}`} style={tab === item ? {} : { borderColor: "var(--panel-border)", color: "var(--text-muted)" }}>{item}</button>)}</div>
-    {tab === "overview" ? <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]"><ReminderTable rows={summary?.upcoming || []} /><ProviderSettings status={summary?.providerStatus} /></section> : null}
-    {tab === "reminders" ? <section className="grid gap-6 xl:grid-cols-[1fr_0.8fr]"><ReminderTable rows={scheduled} /><RuleForm form={ruleForm} setForm={setRuleForm} providerStatus={summary?.providerStatus} onSubmit={createRule} /></section> : null}
-    {tab === "templates" ? <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]"><TemplateGrid templates={templates} /><TemplateForm form={templateForm} setForm={setTemplateForm} providerStatus={summary?.providerStatus} onSubmit={saveTemplate} /></section> : null}
-    {tab === "scheduled" ? <ReminderTable rows={scheduled} /> : null}
-    {tab === "delivery logs" ? <DeliveryTable rows={deliveries} /> : null}
+    <div className="flex gap-2 overflow-x-auto">{communicationTabs.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={`whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium ${tab === item.id ? "bg-brand-600 text-white" : "border"}`} style={tab === item.id ? {} : { borderColor: "var(--panel-border)", color: "var(--text-muted)" }}>{item.label}</button>)}</div>
+    {tab === "overview" ? <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]"><ReminderTable title="Upcoming reminders" rows={summary?.upcoming || []} /><ProviderSettings status={summary?.providerStatus} /></section> : null}
+    {tab === "automation" ? <AutomationPanel scheduled={scheduled} rules={rules} form={ruleForm} setForm={setRuleForm} templates={templates} providerStatus={summary?.providerStatus} onSubmit={createRule} /> : null}
+    {tab === "templates" ? <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]"><TemplateGrid templates={templates} onEdit={(template) => setTemplateForm(templateToForm(template))} onDuplicate={(template) => setTemplateForm({ ...templateToForm(template), code: "", name: `${template.name} Copy`, isDefault: false })} onQuickSave={async (template, patch) => { await upsertCommunicationTemplateRequest({ ...templateToForm(template), ...patch }); await load(); }} /><TemplateForm form={templateForm} setForm={setTemplateForm} providerStatus={summary?.providerStatus} onSubmit={saveTemplate} onCancel={() => setTemplateForm(defaultTemplateForm())} /></section> : null}
+    {tab === "delivery" ? <DeliveryTable rows={deliveries} /> : null}
     {tab === "settings" ? <ProviderSettings status={summary?.providerStatus} /> : null}
   </div>;
 };
 
-const ReminderTable = ({ rows }) => (
+const ReminderTable = ({ rows, title = "Payment reminders" }) => (
   <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
-    <h3 className="text-lg font-semibold">Payment reminders</h3>
+    <h3 className="text-lg font-semibold">{title}</h3>
     <div className="mt-4 overflow-x-auto rounded-xl border" style={{ borderColor: "var(--panel-border)" }}>
       <table className="min-w-[780px] w-full text-left text-sm">
         <thead className="bg-slate-500/5 text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
@@ -146,50 +247,162 @@ const DeliveryTable = ({ rows }) => (
     </div>
   </section>
 );
-const TemplateGrid = ({ templates }) => (
+
+const AutomationPanel = ({ scheduled, rules, form, setForm, templates, providerStatus, onSubmit }) => {
+  const chooseTrigger = (trigger) => setForm((value) => ({ ...normalizeRuleFormForType(value, trigger), sourceKey: "" }));
+  return (
+    <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="space-y-6">
+        <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold">Automation</h3>
+              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>Configure scheduled reminders and event-based communication rules. Rules are visible even before any reminder has been generated.</p>
+            </div>
+            <span className="rounded-full bg-brand-500/10 px-3 py-1 text-xs font-semibold text-brand-700 dark:text-brand-200">{rules.length} rules</span>
+          </div>
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <AutomationTriggerGroup title="Scheduled" description="Use invoice due dates to schedule payment reminders." items={reminderTypeLabels} activeTrigger={form.trigger} onChoose={chooseTrigger} />
+            <AutomationTriggerGroup title="Event Based" description="Send only after the authoritative BillStack event succeeds." items={eventTypeLabels} activeTrigger={form.trigger} onChoose={chooseTrigger} />
+          </div>
+        </section>
+        <RulesList rows={rules} onEdit={(rule) => setForm(ruleToForm(rule))} />
+        <ReminderTable title="Scheduled reminder queue" rows={scheduled} />
+      </div>
+      <RuleForm form={form} setForm={setForm} templates={templates} providerStatus={providerStatus} onSubmit={onSubmit} />
+    </section>
+  );
+};
+
+const AutomationTriggerGroup = ({ title, description, items, activeTrigger, onChoose }) => (
+  <div className="rounded-xl border p-4" style={{ borderColor: "var(--panel-border)" }}>
+    <h4 className="font-semibold">{title}</h4>
+    <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{description}</p>
+    <div className="mt-4 grid gap-2">
+      {Object.entries(items).map(([trigger, label]) => (
+        <button
+          key={trigger}
+          type="button"
+          onClick={() => onChoose(trigger)}
+          className={`rounded-lg border px-3 py-2 text-left text-sm font-medium ${activeTrigger === trigger ? "bg-brand-600 text-white" : ""}`}
+          style={activeTrigger === trigger ? {} : { borderColor: "var(--panel-border)", color: "var(--text-muted)" }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
+const RulesList = ({ rows, onEdit }) => (
+  <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
+    <h3 className="text-lg font-semibold">Configured automation rules</h3>
+    <div className="mt-4 overflow-x-auto rounded-xl border" style={{ borderColor: "var(--panel-border)" }}>
+      <table className="min-w-[760px] w-full text-left text-sm">
+        <thead className="bg-slate-500/5 text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+          <tr><th className="p-3">Rule</th><th className="p-3">Type</th><th className="p-3">Channel</th><th className="p-3">Template</th><th className="p-3">Status</th><th className="p-3 text-right">Action</th></tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const triggerLabel = eventTypeLabels[row.trigger] || reminderTypeLabels[row.trigger] || row.trigger;
+            return (
+              <tr key={row._id} className="border-t" style={{ borderColor: "var(--panel-border)" }}>
+                <td className="p-3 font-medium">{row.name || triggerLabel}</td>
+                <td className="p-3">{triggerLabel}</td>
+                <td className="p-3">{Array.isArray(row.channels) ? row.channels.join(", ") : row.channel || "-"}</td>
+                <td className="p-3">{row.templateId?.name || "Default template"}</td>
+                <td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${row.isEnabled === false ? "bg-slate-500/10 text-slate-500" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"}`}>{row.isEnabled === false ? "Inactive" : "Active"}</span></td>
+                <td className="p-3 text-right"><button type="button" onClick={() => onEdit(row)} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: "var(--panel-border)" }}>Edit</button></td>
+              </tr>
+            );
+          })}
+          {!rows.length ? <tr><td colSpan="6" className="p-8"><EmptyState title="No automation rules yet" description="Choose a scheduled or event-based trigger, then save a rule." /></td></tr> : null}
+        </tbody>
+      </table>
+    </div>
+  </section>
+);
+
+const TemplateGrid = ({ templates, onEdit, onDuplicate, onQuickSave }) => (
   <section className="grid gap-4 md:grid-cols-2">
     {templates.map((template) => (
       <article key={template._id} className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
         <div className="flex items-center justify-between gap-3">
-          <h3 className="font-semibold">{template.name}</h3>
-          <span className="rounded-full bg-brand-500/10 px-2 py-1 text-xs text-brand-700 dark:text-brand-200">{template.channel}</span>
+          <button type="button" onClick={() => onEdit(template)} className="text-left font-semibold hover:text-brand-600">{template.name}</button>
+          <div className="flex flex-wrap justify-end gap-2">
+            {template.isDefault ? <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-700 dark:text-emerald-300">Default</span> : null}
+            <span className="rounded-full bg-brand-500/10 px-2 py-1 text-xs text-brand-700 dark:text-brand-200">{template.channel}</span>
+            <span className={`rounded-full px-2 py-1 text-xs ${template.isActive === false ? "bg-slate-500/10 text-slate-500" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"}`}>{template.isActive === false ? "Inactive" : "Active"}</span>
+          </div>
         </div>
+        {template.subject ? <p className="mt-3 text-sm font-medium">{template.subject}</p> : null}
         <p className="mt-3 text-sm" style={{ color: "var(--text-muted)" }}>{template.body}</p>
-        <p className="mt-4 text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>{template.category}</p>
+        <p className="mt-4 text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>{categoryLabel(template.category)}</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" onClick={() => onEdit(template)} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: "var(--panel-border)" }}>Edit</button>
+          <button type="button" onClick={() => onDuplicate(template)} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: "var(--panel-border)" }}>Duplicate</button>
+          <button type="button" onClick={() => onQuickSave(template, { isActive: template.isActive === false, isDefault: template.isDefault && template.isActive === false ? true : template.isDefault })} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: "var(--panel-border)" }}>{template.isActive === false ? "Activate" : "Deactivate"}</button>
+          {!template.isDefault ? <button type="button" onClick={() => onQuickSave(template, { isDefault: true, isActive: true })} className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white">Set default</button> : null}
+        </div>
       </article>
     ))}
   </section>
 );
 
-const TemplateForm = ({ form, setForm, providerStatus, onSubmit }) => {
+const TemplateForm = ({ form, setForm, providerStatus, onSubmit, onCancel }) => {
   const channels = channelOptions(providerStatus);
   return <form onSubmit={onSubmit} className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
     <h3 className="text-lg font-semibold">Template management</h3>
-    <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>Create or update templates supported by the communications backend. Provider-gated channels remain disabled until configured.</p>
+    <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>Create, edit, duplicate and preview templates. Delivery still uses the selected/default active template from the backend.</p>
     <div className="mt-4 grid gap-4">
       <Field label="Template name"><input required value={form.name} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} className="field" /></Field>
-      <Field label="Category"><select value={form.category} onChange={(event) => setForm((value) => ({ ...value, category: event.target.value }))} className="field"><option value="PAYMENT_REMINDER">Payment reminder</option><option value="INVOICE_SHARE">Invoice share</option><option value="CUSTOM">Custom</option></select></Field>
+      <Field label="Category"><select value={form.category} onChange={(event) => setForm((value) => ({ ...value, category: event.target.value }))} className="field">{templateCategories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
       <Field label="Channel"><select value={form.channel} onChange={(event) => setForm((value) => ({ ...value, channel: event.target.value }))} className="field">{channels.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}</select></Field>
-      <Field label="Subject"><input value={form.subject} onChange={(event) => setForm((value) => ({ ...value, subject: event.target.value }))} className="field" /></Field>
+      {form.channel === "EMAIL" ? <Field label="Subject"><input value={form.subject} onChange={(event) => setForm((value) => ({ ...value, subject: event.target.value }))} className="field" /></Field> : null}
       <Field label="Body"><textarea required rows="6" value={form.body} onChange={(event) => setForm((value) => ({ ...value, body: event.target.value }))} className="field" /></Field>
+      <div className="grid gap-3 rounded-xl border p-3 text-sm" style={{ borderColor: "var(--panel-border)" }}>
+        <label className="flex items-center gap-3"><input type="checkbox" checked={form.isActive !== false} onChange={(event) => setForm((value) => ({ ...value, isActive: event.target.checked }))} /> Active</label>
+        <label className="flex items-center gap-3"><input type="checkbox" checked={Boolean(form.isDefault)} onChange={(event) => setForm((value) => ({ ...value, isDefault: event.target.checked, isActive: event.target.checked ? true : value.isActive }))} /> Set as default for {categoryLabel(form.category)} / {form.channel}</label>
+      </div>
+      <div className="rounded-xl border p-3" style={{ borderColor: "var(--panel-border)" }}>
+        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>Preview only</p>
+        {form.subject && form.channel === "EMAIL" ? <p className="mt-2 text-sm font-semibold">{renderPreview(form.subject)}</p> : null}
+        <p className="mt-2 whitespace-pre-line text-sm" style={{ color: "var(--text-muted)" }}>{renderPreview(form.body) || "Write a template body to preview sample values."}</p>
+      </div>
     </div>
-    <button className="mt-5 inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white"><Mail size={16} /> Save template</button>
+    <div className="mt-5 flex flex-wrap gap-2">
+      <button className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white"><Mail size={16} /> Save template</button>
+      <button type="button" onClick={onCancel} className="rounded-xl border px-4 py-3 text-sm font-semibold" style={{ borderColor: "var(--panel-border)" }}>New blank template</button>
+    </div>
   </form>;
 };
 
-const RuleForm = ({ form, setForm, providerStatus, onSubmit }) => {
+const RuleForm = ({ form, setForm, templates, providerStatus, onSubmit }) => {
   const channels = channelOptions(providerStatus);
+  const ruleName = generatedRuleName(form);
+  const isEventRule = form.trigger === "INVOICE_ISSUED" || form.trigger === "PAYMENT_RECORDED";
+  const matchingTemplates = templates.filter((template) => template.isActive !== false && template.channel === form.channel && template.category === form.category);
   return (
   <form onSubmit={onSubmit} className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
     <h3 className="text-lg font-semibold">Automation rule</h3>
+    <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>Scheduled reminders use due dates. Event-based rules run only after the authoritative invoice/payment event succeeds.</p>
     <div className="mt-4 grid gap-4">
-      <Field label="Rule name"><input value={form.name} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} className="field" /></Field>
-      <Field label="Trigger"><select value={form.trigger} onChange={(event) => setForm((value) => ({ ...value, trigger: event.target.value }))} className="field"><option value="BEFORE_DUE">Before due date</option><option value="ON_DUE_DATE">Due date</option><option value="AFTER_DUE">After due date</option><option value="RECURRING_OVERDUE">Recurring overdue</option></select></Field>
-      <Field label="Offset days"><input type="number" value={form.offsetDays} onChange={(event) => setForm((value) => ({ ...value, offsetDays: event.target.value }))} className="field" /></Field>
-      <Field label="Channel"><select value={form.channel} onChange={(event) => setForm((value) => ({ ...value, channel: event.target.value }))} className="field">{channels.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}</select></Field>
-      <Field label="Send time"><input value={form.sendTime} onChange={(event) => setForm((value) => ({ ...value, sendTime: event.target.value }))} className="field" /></Field>
+      <div className="rounded-xl border px-4 py-3" style={{ borderColor: "var(--panel-border)" }}>
+        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>Generated rule name</p>
+        <p className="mt-1 font-semibold">{ruleName}</p>
+      </div>
+      <Field label="Trigger"><select value={form.trigger} onChange={(event) => setForm((value) => ({ ...normalizeRuleFormForType(value, event.target.value), sourceKey: "" }))} className="field"><optgroup label="Scheduled">{Object.entries(reminderTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</optgroup><optgroup label="Event Based">{Object.entries(eventTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</optgroup></select></Field>
+      {form.trigger === "PAYMENT_RECORDED" ? <Field label="Condition"><select value={form.condition || "ANY_PAYMENT"} onChange={(event) => setForm((value) => ({ ...value, condition: event.target.value, templateId: "" }))} className="field">{Object.entries(paymentConditionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field> : null}
+      <Field label="Template category"><select value={form.category} disabled={isEventRule} onChange={(event) => setForm((value) => ({ ...value, category: event.target.value, templateId: "" }))} className="field">{templateCategories.filter((item) => isEventRule ? ["INVOICE_CREATED", "PAYMENT_RECEIVED"].includes(item.value) : ["DUE_TODAY", "PAYMENT_OVERDUE", "PAYMENT_REMINDER", "CUSTOM"].includes(item.value)).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
+      {form.trigger === "BEFORE_DUE_DATE" ? <Field label="Days before due date"><input required type="number" min="1" step="1" value={form.offsetDays} onChange={(event) => setForm((value) => ({ ...value, offsetDays: event.target.value }))} className="field" /></Field> : null}
+      {form.trigger === "AFTER_DUE_DATE" ? <Field label="Days after due date"><input required type="number" min="1" step="1" value={form.offsetDays} onChange={(event) => setForm((value) => ({ ...value, offsetDays: event.target.value }))} className="field" /></Field> : null}
+      {form.trigger === "RECURRING_OVERDUE" ? <Field label="Repeat every X days"><input required type="number" min="1" step="1" value={form.repeatEveryDays} onChange={(event) => setForm((value) => ({ ...value, repeatEveryDays: event.target.value }))} className="field" /></Field> : null}
+      <Field label="Channel"><select value={form.channel} onChange={(event) => setForm((value) => ({ ...value, channel: event.target.value, templateId: "" }))} className="field">{channels.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}</select></Field>
+      <Field label="Template"><select value={form.templateId || ""} onChange={(event) => setForm((value) => ({ ...value, templateId: event.target.value }))} className="field"><option value="">Use default template</option>{matchingTemplates.map((template) => <option key={template._id} value={template._id}>{template.name}{template.isDefault ? " (default)" : ""}</option>)}</select></Field>
+      {!isEventRule ? <Field label="Send time"><input required type="time" value={form.sendTime} onChange={(event) => setForm((value) => ({ ...value, sendTime: event.target.value }))} className="field" /></Field> : null}
+      <label className="flex items-center gap-3 rounded-xl border p-3" style={{ borderColor: "var(--panel-border)" }}><input type="checkbox" checked={form.isEnabled === true} onChange={(event) => setForm((value) => ({ ...value, isEnabled: event.target.checked }))} /> <span className="text-sm font-medium">Active{isEventRule ? " (off by default)" : ""}</span></label>
     </div>
-    <button className="mt-5 inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white"><BellRing size={16} /> Enable rule</button>
+    <button className="mt-5 inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white"><BellRing size={16} /> Save rule</button>
   </form>
   );
 };

@@ -148,8 +148,9 @@ const invoiceCreateValidator = (body) => {
 
   if (Array.isArray(body.lineItems)) {
     body.lineItems.forEach((item, index) => {
-      if (!item.productId) {
-        errors[`lineItems.${index}.productId`] = "Product is required";
+      const description = item.productName || item.description || item.name;
+      if (!item.productId && (!description || String(description).trim().length < 2)) {
+        errors[`lineItems.${index}.productName`] = "Product or item/service description is required";
       }
       if (Number(item.quantity) <= 0 || Number.isNaN(Number(item.quantity))) {
         errors[`lineItems.${index}.quantity`] = "Quantity must be greater than zero";
@@ -157,7 +158,7 @@ const invoiceCreateValidator = (body) => {
       if (Number(item.rate) < 0 || Number.isNaN(Number(item.rate))) {
         errors[`lineItems.${index}.rate`] = "Rate must be valid";
       }
-      if (item.taxRate !== undefined && (Number(item.taxRate) < 0 || Number.isNaN(Number(item.taxRate)))) {
+      if (item.taxRate !== undefined && (Number(item.taxRate) < 0 || Number(item.taxRate) > 100 || Number.isNaN(Number(item.taxRate)))) {
         errors[`lineItems.${index}.taxRate`] = "Tax rate must be valid";
       }
       if (

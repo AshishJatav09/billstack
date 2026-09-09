@@ -58,6 +58,10 @@ const superAdminLogin = asyncHandler(async (req, res) => {
 
   const expectedEmail = (process.env.SUPER_ADMIN_EMAIL || "").trim().toLowerCase();
   const expectedPassword = process.env.SUPER_ADMIN_PASSWORD || "";
+  if (!expectedEmail || !expectedPassword) {
+    throw new AppError("Super admin login is not configured", 503);
+  }
+
   const hashStr = (s) => crypto.createHash("sha256").update(s).digest();
 
   const emailMatch = crypto.timingSafeEqual(hashStr(email), hashStr(expectedEmail));

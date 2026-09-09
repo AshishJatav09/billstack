@@ -3,7 +3,6 @@ const mongoose = require("mongoose");
 
 const Business = require("../models/Business");
 const Customer = require("../models/Customer");
-const CustomerLedger = require("../models/CustomerLedger");
 const IntegrationCredential = require("../models/IntegrationCredential");
 const IntegrationEvent = require("../models/IntegrationEvent");
 const Invoice = require("../models/Invoice");
@@ -13,8 +12,9 @@ const AppError = require("../utils/appError");
 const { buildGstSnapshot, validateGstin, validateStateCode } = require("../utils/gst");
 const { buildInvoiceNumber, buildInvoiceTotals } = require("../utils/invoice");
 const { toMinorUnits, fromMinorUnits } = require("../utils/money");
-const { sendInvoiceMessage } = require("./communication.service");
+const { dispatchInvoiceIssuedAutomation, sendInvoiceMessage } = require("./communication.service");
 const { allocatePayment, createPayment } = require("./payment.service");
+const { createCustomerLedgerEntryOnce } = require("./ledger.service");
 const { ensureBusinessSubscription, getPlanEntitlements, isSubscriptionAccessible } = require("../utils/subscription");
 const { buildInventoryFlags } = require("./inventory.service");
 
@@ -244,7 +244,7 @@ const ingestExternalOrder = async ({ credential, payload }) => {
         }],
         { session }
       );
-      await CustomerLedger.updateOne({ businessId: credential.businessId, sourceKey: `INVOICE:${invoice._id}:DEBIT` }, { $setOnInsert: { businessId: credential.businessId, customerId: customer._id, eventType: "INVOICE", amount: invoice.grandTotal, direction: "DEBIT", invoiceId: invoice._id, sourceKey: `INVOICE:${invoice._id}:DEBIT`, createdBy: credential.createdBy } }, { upsert: true, session });
+      await createCustomerLedgerEntryOnce({ businessId: credential.businessId, customerId: customer._id, eventType: "INVOICE", amount: invoice.grandTotal, direction: "DEBIT", invoiceId: invoice._id, sourceKey: `INVOICE:${invoice._id}:DEBIT`, createdBy: credential.createdBy }, { session });
       await applyIntegrationInvoiceStock({ business, businessId: credential.businessId, invoiceId: invoice._id, lineItems: totals.lineItems, createdBy: credential.createdBy, session });
       business.invoiceNumbering.nextSequence = sequence + 1;
       await business.save({ session });
@@ -265,6 +265,9 @@ const ingestExternalOrder = async ({ credential, payload }) => {
     throw error;
   } finally {
     session.endSession();
+  }
+  if (event.invoiceId) {
+    await dispatchInvoiceIssuedAutomation({ businessId: credential.businessId, invoiceId: event.invoiceId, createdBy: credential.createdBy }).catch(() => {});
   }
   if (pendingConfirmedPayment) {
     const payment = await createPayment({

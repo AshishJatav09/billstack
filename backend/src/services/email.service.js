@@ -27,6 +27,17 @@ const getTransporter = () => {
   return cachedTransporter;
 };
 
+const buildFromAddress = () => {
+  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER;
+  const fromName = String(process.env.EMAIL_FROM_NAME || "").trim();
+  return fromName && fromEmail ? `"${fromName.replace(/"/g, "")}" <${fromEmail}>` : fromEmail;
+};
+
+const commonMailFields = () => ({
+  from: buildFromAddress(),
+  replyTo: process.env.EMAIL_REPLY_TO || undefined,
+});
+
 const sendInvoiceEmail = async ({
   to,
   subject,
@@ -41,7 +52,7 @@ const sendInvoiceEmail = async ({
   }
 
   return transporter.sendMail({
-    from: process.env.EMAIL_FROM || process.env.SMTP_USER,
+    ...commonMailFields(),
     to,
     subject,
     html,
@@ -62,7 +73,7 @@ const sendEmail = async ({ to, subject, html, text }) => {
   }
 
   return transporter.sendMail({
-    from: process.env.EMAIL_FROM || process.env.SMTP_USER,
+    ...commonMailFields(),
     to,
     subject,
     html,

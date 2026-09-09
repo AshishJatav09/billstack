@@ -15,6 +15,7 @@ const ResetPasswordPage = () => {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (isSubmitting) return;
     setError("");
     setMessage("");
 

@@ -12,6 +12,7 @@ const ForgotPasswordPage = () => {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (isSubmitting) return;
     setError("");
     setMessage("");
     setIsSubmitting(true);

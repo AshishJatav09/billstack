@@ -3,7 +3,6 @@ const mongoose = require("mongoose");
 const Product = require("../models/Product");
 const Business = require("../models/Business");
 const Purchase = require("../models/Purchase");
-const SupplierLedger = require("../models/SupplierLedger");
 const StockMovement = require("../models/StockMovement");
 const Supplier = require("../models/Supplier");
 const asyncHandler = require("../utils/asyncHandler");
@@ -11,6 +10,7 @@ const AppError = require("../utils/appError");
 const { buildInventoryFlags } = require("../services/inventory.service");
 const { buildGstSnapshot, validateGstin, validateStateCode } = require("../utils/gst");
 const { applyFinancialRead, applyFinancialReads } = require("../services/financial-read.service");
+const { createSupplierLedgerEntryOnce } = require("../services/ledger.service");
 const {
   buildPaginatedResponse,
   buildPagination,
@@ -168,7 +168,7 @@ const createPurchase = asyncHandler(async (req, res) => {
       );
 
       const purchase = createdPurchase[0];
-      await SupplierLedger.updateOne({ businessId: req.tenant.businessId, sourceKey: `PURCHASE:${purchase._id}:PAYABLE` }, { $setOnInsert: { businessId: req.tenant.businessId, supplierId: supplier._id, eventType: "PURCHASE", amount: purchase.totalAmount, direction: "DEBIT", purchaseId: purchase._id, sourceKey: `PURCHASE:${purchase._id}:PAYABLE`, createdBy: req.user._id } }, { upsert: true, session });
+      await createSupplierLedgerEntryOnce({ businessId: req.tenant.businessId, supplierId: supplier._id, eventType: "PURCHASE", amount: purchase.totalAmount, direction: "DEBIT", purchaseId: purchase._id, sourceKey: `PURCHASE:${purchase._id}:PAYABLE`, createdBy: req.user._id }, { session });
 
       for (const item of normalizedItems) {
         const product = productMap.get(item.productId.toString());

@@ -29,8 +29,8 @@ const buildGstSnapshot = ({ business, counterparty, lineItems, products = [], pl
   const productMap = new Map(products.map((product) => [product._id.toString(), product]));
   const summary = { cgst: 0, sgst: 0, utgst: 0, igst: 0, taxableValue: 0, totalTax: 0, hsnSacSummary: {} };
   const lines = lineItems.map((line) => {
-    const product = productMap.get(line.productId.toString());
-    const gstClassification = String(product?.gstClassification || "TAXABLE").toUpperCase();
+    const product = line.productId ? productMap.get(line.productId.toString()) : null;
+    const gstClassification = String(line.gstClassification || product?.gstClassification || "TAXABLE").toUpperCase();
     if (!validateGstClassification(gstClassification)) {
       throw new Error("Invalid GST classification");
     }
@@ -42,7 +42,7 @@ const buildGstSnapshot = ({ business, counterparty, lineItems, products = [], pl
     summary.igst = roundMoney(summary.igst + gst.igst);
     summary.taxableValue = roundMoney(summary.taxableValue + gst.taxableValue);
     summary.totalTax = roundMoney(summary.totalTax + gst.totalTax);
-    const hsnSac = product?.hsnSac || "";
+    const hsnSac = product?.hsnSac || line.hsnSac || "";
     if (hsnSac) summary.hsnSacSummary[hsnSac] = roundMoney((summary.hsnSacSummary[hsnSac] || 0) + gst.taxableValue);
     return { ...gst, hsnSac, gstClassification };
   });

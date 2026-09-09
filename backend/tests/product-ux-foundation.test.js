@@ -1,0 +1,131 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const { MODULE_STATES, moduleCatalog } = require("../src/constants/modules");
+const { _private } = require("../src/services/module.service");
+const Invoice = require("../src/models/Invoice");
+const { invoiceCreateValidator } = require("../src/validators/resource.validation");
+const { buildGstSnapshot } = require("../src/utils/gst");
+
+const byKey = (key) => moduleCatalog.find((module) => module.key === key);
+
+test("profile-scoped workspace activates preset modules without globally exposing unrelated modules", () => {
+  const business = {
+    businessProfile: {
+      onboardingStatus: "COMPLETED",
+      recommendedModules: ["customers", "invoices", "payments", "ledger", "expenses", "reports"],
+    },
+  };
+
+  assert.equal(_private.resolveDefaultModuleState({ business, moduleMeta: byKey("customers") }), MODULE_STATES.ACTIVE);
+  assert.equal(_private.resolveDefaultModuleState({ business, moduleMeta: byKey("expenses") }), MODULE_STATES.ACTIVE);
+  assert.equal(_private.resolveDefaultModuleState({ business, moduleMeta: byKey("inventory") }), MODULE_STATES.AVAILABLE);
+  assert.equal(_private.resolveDefaultModuleState({ business, moduleMeta: byKey("production_job_work") }), MODULE_STATES.REQUEST_REQUIRED);
+});
+
+test("explicit BusinessModuleConfig continues to win over preset-derived defaults", () => {
+  const business = {
+    businessProfile: {
+      onboardingStatus: "COMPLETED",
+      recommendedModules: ["customers", "invoices"],
+    },
+  };
+
+  const serialized = _private.serializeModuleConfig({
+    business,
+    deploymentMode: "SAAS",
+    moduleMeta: byKey("inventory"),
+    config: { state: MODULE_STATES.ACTIVE, source: "SETTINGS" },
+  });
+
+  assert.equal(serialized.state, MODULE_STATES.ACTIVE);
+  assert.equal(serialized.active, true);
+  assert.equal(serialized.explicitConfig, true);
+  assert.equal(serialized.defaultSource, "SETTINGS");
+});
+
+test("legacy businesses without profile-scoped workspace keep existing default compatibility", () => {
+  const business = { businessProfile: { onboardingStatus: "NOT_STARTED", recommendedModules: [] } };
+
+  assert.equal(_private.resolveDefaultModuleState({ business, moduleMeta: byKey("inventory") }), MODULE_STATES.ACTIVE);
+});
+
+test("sidebar and dashboard fail closed instead of flashing every module", () => {
+  const sidebar = fs.readFileSync(path.join(__dirname, "../../frontend/src/components/layout/Sidebar.jsx"), "utf8");
+  const dashboard = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/dashboard/pages/DashboardHomePage.jsx"), "utf8");
+
+  assert.doesNotMatch(sidebar, /!moduleKey\s*\|\|\s*!moduleData\)\s*return true/);
+  assert.match(sidebar, /moduleStatus !== "success" && moduleKey\) return false/);
+  assert.match(sidebar, /NAV_GROUPS/);
+  assert.match(dashboard, /getBusinessModulesRequest/);
+  assert.match(dashboard, /workflowStats[\s\S]*\.filter\(\(item\) => showModule\(item\.moduleKey\)\)/);
+  assert.doesNotMatch(dashboard, /Record payment[\s\S]*Coming soon/);
+});
+
+test("self-hosted attribution is present without exposing secrets", () => {
+  const authLayout = fs.readFileSync(path.join(__dirname, "../../frontend/src/components/layout/AuthLayout.jsx"), "utf8");
+  const envTemplate = fs.readFileSync(path.join(__dirname, "../../frontend/.env.production.example"), "utf8");
+
+  assert.match(authLayout, /VITE_BILLSTACK_DEPLOYMENT_MODE/);
+  assert.match(authLayout, /VITE_POWERED_BY_TEXT/);
+  assert.match(envTemplate, /VITE_POWERED_BY_TEXT=Powered by Nemnidhi Digital Solutions/);
+  assert.doesNotMatch(envTemplate, /SECRET|PASSWORD|TOKEN/);
+});
+
+test("invoice schema and validator allow manual service lines without productId", async () => {
+  const validation = invoiceCreateValidator({
+    customerId: "customer-id",
+    lineItems: [{ productName: "Consulting service", quantity: 2, rate: 500, taxRate: 18 }],
+  });
+
+  assert.equal(validation.valid, true);
+  assert.equal(validation.errors["lineItems.0.productId"], undefined);
+
+  const invoice = new Invoice({
+    businessId: "64f000000000000000000001",
+    customerId: "64f000000000000000000002",
+    invoiceNumber: "INV-MANUAL-1",
+    invoiceDate: new Date(),
+    dueDate: new Date(),
+    lineItems: [{ productId: null, productName: "Consulting service", quantity: 2, rate: 500, taxRate: 18, itemTotal: 1180, isManual: true }],
+    subtotal: 1000,
+    grandTotal: 1180,
+    createdBy: "64f000000000000000000003",
+  });
+
+  await assert.doesNotReject(() => invoice.validate());
+});
+
+test("manual invoice lines keep GST snapshot data without requiring product master data", () => {
+  const snapshot = buildGstSnapshot({
+    business: { gstConfiguration: { enabled: true, gstin: "27ABCDE1234F1Z5", stateCode: "27" } },
+    counterparty: { stateCode: "29" },
+    products: [],
+    lineItems: [{ productId: null, productName: "One-off service", taxableAmount: 1000, lineTotal: 1180, taxRate: 18, hsnSac: "9983", gstClassification: "TAXABLE" }],
+  });
+
+  assert.equal(snapshot.igst, 180);
+  assert.equal(snapshot.lines[0].hsnSac, "9983");
+  assert.equal(snapshot.lines[0].gstClassification, "TAXABLE");
+  assert.equal(snapshot.hsnSacSummary["9983"], 1000);
+});
+
+test("fast invoice UI exposes inline customer, manual lines, save-for-future, issue-send, and payment workflow", () => {
+  const invoicePage = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/dashboard/pages/InvoicesPage.jsx"), "utf8");
+  const invoiceController = fs.readFileSync(path.join(__dirname, "../src/controllers/invoice.controller.js"), "utf8");
+
+  assert.match(invoicePage, /createCustomerRequest/);
+  assert.match(invoicePage, /Add new customer/);
+  assert.match(invoicePage, /Manual \/ one-off/);
+  assert.match(invoicePage, /saveForFuture/);
+  assert.match(invoicePage, /createProductRequest/);
+  assert.match(invoicePage, /Issue & Send/);
+  assert.match(invoicePage, /createPaymentRequest/);
+  assert.match(invoicePage, /allocatePaymentRequest/);
+  assert.doesNotMatch(invoicePage, /name="amountPaid"|Amount paid/);
+  assert.doesNotMatch(invoicePage, /window\.prompt/);
+  assert.match(invoiceController, /if \(!item\.productId\) return/);
+  assert.match(invoiceController, /productId: product\?\._id \|\| null/);
+});

@@ -16,3 +16,5 @@ coverage/
 !**/.env.*.example
 backend/logs/
 backend/uploads/
+
+logs/

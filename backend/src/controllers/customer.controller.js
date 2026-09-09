@@ -90,6 +90,8 @@ const createCustomer = asyncHandler(async (req, res) => {
     billingAddress: req.body.billingAddress?.trim() || "",
     shippingAddress: req.body.shippingAddress?.trim() || "",
     gstNumber: req.body.gstNumber?.trim().toUpperCase() || "",
+    stateCode: req.body.stateCode?.trim() || "",
+    placeOfSupplyCode: req.body.placeOfSupplyCode?.trim() || req.body.stateCode?.trim() || "",
     notes: req.body.notes?.trim() || "",
     invoiceHistory: Array.isArray(req.body.invoiceHistory) ? req.body.invoiceHistory : [],
   });
@@ -116,6 +118,8 @@ const updateCustomer = asyncHandler(async (req, res) => {
   customer.billingAddress = req.body.billingAddress?.trim() || "";
   customer.shippingAddress = req.body.shippingAddress?.trim() || "";
   customer.gstNumber = req.body.gstNumber?.trim().toUpperCase() || "";
+  customer.stateCode = req.body.stateCode?.trim() || "";
+  customer.placeOfSupplyCode = req.body.placeOfSupplyCode?.trim() || req.body.stateCode?.trim() || "";
   customer.notes = req.body.notes?.trim() || "";
 
   if (Array.isArray(req.body.invoiceHistory)) {

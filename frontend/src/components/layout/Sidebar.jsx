@@ -27,35 +27,36 @@ import { useEffect } from "react";
 import { authStore } from "../../store/authStore";
 import { uiStore } from "../../store/uiStore";
 import { getBusinessModulesRequest } from "../../features/auth/api";
+import { NAV_GROUPS, ROUTE_MODULES, isActiveModule, isSelfHostedWorkspace, productLabelForWorkspace } from "../../features/workspace/workspaceVisibility";
 
 const navItems = [
-  { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard, matches: ["/dashboard"], end: true },
-  { label: "Invoices", to: "/dashboard/invoices", icon: ReceiptIndianRupee, matches: ["/dashboard/invoices", "/dashboard/invoices/:invoiceId"] },
-  { label: "Quotations", to: "/dashboard/quotes", icon: FileText, matches: ["/dashboard/quotes"] },
-  { label: "Orders", to: "/dashboard/orders", icon: ClipboardList, matches: ["/dashboard/orders"] },
-  { label: "Credit Notes", to: "/dashboard/credit-notes", icon: WalletCards, matches: ["/dashboard/credit-notes"] },
-  { label: "Sales Returns", to: "/dashboard/sales-returns", icon: RotateCcw, matches: ["/dashboard/sales-returns"] },
-  { label: "Customers", to: "/dashboard/customers", icon: UserRound, matches: ["/dashboard/customers"] },
-  { label: "Products / Inventory", to: "/dashboard/products", icon: Boxes, matches: ["/dashboard/products"] },
-  { label: "Suppliers", to: "/dashboard/suppliers", icon: Building2, matches: ["/dashboard/suppliers"] },
-  { label: "Purchases", to: "/dashboard/purchases", icon: ShoppingBag, matches: ["/dashboard/purchases"] },
-  { label: "Expenses", to: "/dashboard/expenses", icon: ReceiptIndianRupee, matches: ["/dashboard/expenses"] },
-  { label: "Reports / GST", to: "/dashboard/reports", icon: BarChart3, matches: ["/dashboard/reports"] },
-  { label: "Communications / WhatsApp", to: "/dashboard/communications", icon: BellRing, matches: ["/dashboard/communications"] },
-  { label: "Projects", to: "/dashboard/projects", icon: FileText, matches: ["/dashboard/projects"] },
-  { label: "Tasks", to: "/dashboard/tasks", icon: ListChecks, matches: ["/dashboard/tasks"] },
-  { label: "Recurring Billing", to: "/dashboard/recurring-billing", icon: RefreshCw, matches: ["/dashboard/recurring-billing"] },
-  { label: "Appointments", to: "/dashboard/appointments", icon: CalendarCheck2, matches: ["/dashboard/appointments"] },
-  { label: "Production / Job Work", to: "/dashboard/production-jobs", icon: PackageCheck, matches: ["/dashboard/production-jobs"] },
-  { label: "Batch & Expiry", to: "/dashboard/batches", icon: Boxes, matches: ["/dashboard/batches"] },
-  { label: "Dispatch / Fulfilment", to: "/dashboard/dispatches", icon: ClipboardList, matches: ["/dashboard/dispatches"] },
-  { label: "Documents & Approvals", to: "/dashboard/approvals", icon: FileText, matches: ["/dashboard/approvals"] },
-  { label: "Team", to: "/dashboard/team", icon: Users, matches: ["/dashboard/team"], roles: ["owner", "admin"] },
-  { label: "HR", to: "/dashboard/hr/employees", icon: Users, matches: ["/dashboard/hr/employees"], requiresHR: true },
-  { label: "Attendance", to: "/dashboard/hr/attendance", icon: CalendarCheck2, matches: ["/dashboard/hr/attendance"], requiresHR: true },
-  { label: "Salary Setup", to: "/dashboard/hr/salary-setup", icon: WalletCards, matches: ["/dashboard/hr/salary-setup"], requiresHR: true },
-  { label: "Subscription", to: "/dashboard/subscription", icon: WalletCards, matches: ["/dashboard/subscription"] },
-  { label: "Settings", to: "/dashboard/settings", icon: Settings, matches: ["/dashboard/settings"] },
+  { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard, matches: ["/dashboard"], end: true, group: "core" },
+  { label: "Customers", to: "/dashboard/customers", icon: UserRound, matches: ["/dashboard/customers"], group: "core" },
+  { label: "Invoices", to: "/dashboard/invoices", icon: ReceiptIndianRupee, matches: ["/dashboard/invoices", "/dashboard/invoices/:invoiceId"], group: "core" },
+  { label: "Quotations", to: "/dashboard/quotes", icon: FileText, matches: ["/dashboard/quotes"], group: "sales" },
+  { label: "Credit Notes", to: "/dashboard/credit-notes", icon: WalletCards, matches: ["/dashboard/credit-notes"], group: "sales" },
+  { label: "Sales Returns", to: "/dashboard/sales-returns", icon: RotateCcw, matches: ["/dashboard/sales-returns"], group: "sales" },
+  { label: "Products / Inventory", to: "/dashboard/products", icon: Boxes, matches: ["/dashboard/products"], group: "inventory", adaptiveLabel: "products" },
+  { label: "Suppliers", to: "/dashboard/suppliers", icon: Building2, matches: ["/dashboard/suppliers"], group: "inventory" },
+  { label: "Purchases", to: "/dashboard/purchases", icon: ShoppingBag, matches: ["/dashboard/purchases"], group: "inventory" },
+  { label: "Batch & Expiry", to: "/dashboard/batches", icon: Boxes, matches: ["/dashboard/batches"], group: "inventory" },
+  { label: "Production / Job Work", to: "/dashboard/production-jobs", icon: PackageCheck, matches: ["/dashboard/production-jobs"], group: "inventory" },
+  { label: "Dispatch / Fulfilment", to: "/dashboard/dispatches", icon: ClipboardList, matches: ["/dashboard/dispatches"], group: "inventory" },
+  { label: "Orders", to: "/dashboard/orders", icon: ClipboardList, matches: ["/dashboard/orders"], group: "operations" },
+  { label: "Projects", to: "/dashboard/projects", icon: FileText, matches: ["/dashboard/projects"], group: "operations" },
+  { label: "Tasks", to: "/dashboard/tasks", icon: ListChecks, matches: ["/dashboard/tasks"], group: "operations" },
+  { label: "Recurring Billing", to: "/dashboard/recurring-billing", icon: RefreshCw, matches: ["/dashboard/recurring-billing"], group: "operations" },
+  { label: "Appointments", to: "/dashboard/appointments", icon: CalendarCheck2, matches: ["/dashboard/appointments"], group: "operations" },
+  { label: "Documents & Approvals", to: "/dashboard/approvals", icon: FileText, matches: ["/dashboard/approvals"], group: "operations" },
+  { label: "Expenses", to: "/dashboard/expenses", icon: ReceiptIndianRupee, matches: ["/dashboard/expenses"], group: "finance" },
+  { label: "Reports / GST", to: "/dashboard/reports", icon: BarChart3, matches: ["/dashboard/reports"], group: "finance" },
+  { label: "Communications / WhatsApp", to: "/dashboard/communications", icon: BellRing, matches: ["/dashboard/communications"], group: "communications" },
+  { label: "Team", to: "/dashboard/team", icon: Users, matches: ["/dashboard/team"], roles: ["owner", "admin"], group: "people" },
+  { label: "HR", to: "/dashboard/hr/employees", icon: Users, matches: ["/dashboard/hr/employees"], requiresHR: true, group: "people" },
+  { label: "Attendance", to: "/dashboard/hr/attendance", icon: CalendarCheck2, matches: ["/dashboard/hr/attendance"], requiresHR: true, group: "people" },
+  { label: "Salary Setup", to: "/dashboard/hr/salary-setup", icon: WalletCards, matches: ["/dashboard/hr/salary-setup"], requiresHR: true, group: "people" },
+  { label: "Subscription", to: "/dashboard/subscription", icon: WalletCards, matches: ["/dashboard/subscription"], group: "admin", saasOnly: true },
+  { label: "Settings", to: "/dashboard/settings", icon: Settings, matches: ["/dashboard/settings"], group: "admin" },
 ];
 
 const isRouteActive = (item, pathname) =>
@@ -87,48 +88,35 @@ const Sidebar = () => {
   const location = useLocation();
   const [isHoverPreview, setIsHoverPreview] = useState(false);
   const [moduleData, setModuleData] = useState(null);
+  const [moduleStatus, setModuleStatus] = useState("loading");
   const isCollapsed = !isSidebarPinned;
   const isExpanded = !isCollapsed || isHoverPreview;
   useEffect(() => {
+    setModuleStatus("loading");
     getBusinessModulesRequest()
-      .then(setModuleData)
-      .catch(() => setModuleData(null));
+      .then((data) => {
+        setModuleData(data);
+        setModuleStatus("success");
+      })
+      .catch(() => {
+        setModuleData(null);
+        setModuleStatus("error");
+      });
   }, []);
 
-  const moduleState = new Map((moduleData?.catalog || []).map((item) => [item.key, item.state]));
-  const routeModules = {
-    "/dashboard/invoices": "invoices",
-    "/dashboard/quotes": "quotations",
-    "/dashboard/orders": "order_management",
-    "/dashboard/credit-notes": "credit_notes",
-    "/dashboard/sales-returns": "sales_returns",
-    "/dashboard/customers": "customers",
-    "/dashboard/products": "products_services",
-    "/dashboard/suppliers": "suppliers",
-    "/dashboard/purchases": "purchases",
-    "/dashboard/expenses": "expenses",
-    "/dashboard/reports": "reports",
-    "/dashboard/communications": "communications",
-    "/dashboard/projects": "projects_tasks",
-    "/dashboard/tasks": "projects_tasks",
-    "/dashboard/recurring-billing": "recurring_billing",
-    "/dashboard/appointments": "appointments_scheduling",
-    "/dashboard/production-jobs": "production_job_work",
-    "/dashboard/batches": "batch_expiry",
-    "/dashboard/dispatches": "dispatch_fulfilment",
-    "/dashboard/approvals": "documents_approvals",
-    "/dashboard/team": "team",
-    "/dashboard/hr/employees": "hr",
-    "/dashboard/hr/attendance": "hr",
-    "/dashboard/hr/salary-setup": "hr",
-  };
   const visibleItems = navItems.filter((item) => {
     if (!canShowItem(item, user)) return false;
-    if (item.to === "/dashboard/subscription" && moduleData?.deploymentMode === "SELF_HOSTED") return false;
-    const moduleKey = routeModules[item.to];
-    if (!moduleKey || !moduleData) return true;
-    return (moduleState.get(moduleKey) || "ACTIVE") === "ACTIVE";
+    if (item.saasOnly && isSelfHostedWorkspace(moduleData, business)) return false;
+    const moduleKey = item.moduleKey || ROUTE_MODULES[item.to];
+    if (moduleStatus !== "success" && moduleKey) return false;
+    return isActiveModule(moduleData, moduleKey);
   });
+  const groupedItems = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: visibleItems.filter((item) => item.group === group.key),
+  })).filter((group) => group.items.length);
+
+  const labelFor = (item) => item.adaptiveLabel === "products" ? productLabelForWorkspace(moduleData) : item.label;
 
   return (
     <>
@@ -177,32 +165,47 @@ const Sidebar = () => {
               </button>
             </div>
 
-            <nav className="flex-1 space-y-1 overflow-y-auto px-4 pb-6">
-              <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--text-muted)" }}>
-                Workspace
-              </p>
-              {visibleItems.map((item) => {
-                const Icon = item.icon;
-                const active = isRouteActive(item, location.pathname);
+            <nav className="flex-1 space-y-4 overflow-y-auto px-4 pb-6">
+              {moduleStatus === "loading" ? (
+                <div className="space-y-2 px-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--text-muted)" }}>Loading workspace</p>
+                  {[1, 2, 3, 4].map((item) => <div key={item} className="h-9 rounded-xl bg-slate-500/10" />)}
+                </div>
+              ) : null}
+              {moduleStatus === "error" ? (
+                <div className="rounded-xl border p-3 text-xs" style={{ borderColor: "var(--panel-border)", color: "var(--text-muted)" }}>
+                  Workspace modules could not be loaded. Refresh to retry.
+                </div>
+              ) : null}
+              {groupedItems.map((group) => (
+                <div key={group.key} className="space-y-1">
+                  <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--text-muted)" }}>
+                    {group.label}
+                  </p>
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    const active = isRouteActive(item, location.pathname);
 
-                return (
-                  <NavLink
-                    key={item.label}
-                    to={item.to}
-                    end={item.end}
-                    onClick={closeSidebar}
-                    className="group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition hover:bg-slate-500/[.08] hover:text-[color:var(--text-primary)]"
-                    style={active ? activeStyle : inactiveStyle}
-                    aria-current={active ? "page" : undefined}
-                  >
-                    <span className="flex min-w-0 items-center gap-3">
-                      <Icon size={17} strokeWidth={1.8} className="shrink-0" />
-                      <span className="truncate">{item.label}</span>
-                    </span>
-                    <ChevronRight size={15} className={active ? "opacity-75" : "opacity-35 transition group-hover:opacity-60"} />
-                  </NavLink>
-                );
-              })}
+                    return (
+                      <NavLink
+                        key={item.label}
+                        to={item.to}
+                        end={item.end}
+                        onClick={closeSidebar}
+                        className="group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition hover:bg-slate-500/[.08] hover:text-[color:var(--text-primary)]"
+                        style={active ? activeStyle : inactiveStyle}
+                        aria-current={active ? "page" : undefined}
+                      >
+                        <span className="flex min-w-0 items-center gap-3">
+                          <Icon size={17} strokeWidth={1.8} className="shrink-0" />
+                          <span className="truncate">{labelFor(item)}</span>
+                        </span>
+                        <ChevronRight size={15} className={active ? "opacity-75" : "opacity-35 transition group-hover:opacity-60"} />
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              ))}
             </nav>
 
             <div className="mx-4 rounded-xl border border-white/10 bg-white/5 p-4">
@@ -217,6 +220,7 @@ const Sidebar = () => {
                   ? "Module access is managed by your license and workspace settings."
                   : "Manage your plan in Subscription."}
               </p>
+              {business?.deploymentMode === "SELF_HOSTED" ? <p className="mt-3 text-[11px] text-slate-500">Powered by Nemnidhi Digital Solutions</p> : null}
             </div>
           </motion.aside>
         ) : null}

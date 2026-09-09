@@ -5,12 +5,27 @@ const invoiceLineItemSchema = new mongoose.Schema(
     productId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Product",
-      required: true,
+      default: null,
     },
     productName: {
       type: String,
       required: true,
       trim: true,
+    },
+    hsnSac: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    gstClassification: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "TAXABLE",
+    },
+    isManual: {
+      type: Boolean,
+      default: false,
     },
     quantity: {
       type: Number,

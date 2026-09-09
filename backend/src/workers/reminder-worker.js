@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("../config/load-env")();
 
 const connectDB = require("../config/db");
 const { validateEnvironment } = require("../config/env");

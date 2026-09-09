@@ -99,9 +99,35 @@ const resolveWorkspacePreset = (profile = {}) => {
   };
 };
 
-const serializeModuleConfig = ({ moduleMeta, config, deploymentMode }) => {
+const hasProfileScopedWorkspace = (business) => {
+  const profile = business?.businessProfile || {};
+  return profile.onboardingStatus === "COMPLETED" || (Array.isArray(profile.recommendedModules) && profile.recommendedModules.length > 0);
+};
+
+const getProfileModuleDefaults = (business) => {
+  const profile = business?.businessProfile || {};
+  return new Set(Array.isArray(profile.recommendedModules) ? profile.recommendedModules.map(normalizeModuleKey) : []);
+};
+
+const resolveDefaultModuleState = ({ business, moduleMeta }) => {
+  if (coreModuleKeys.includes(moduleMeta.key) || moduleMeta.protected) {
+    return MODULE_STATES.ACTIVE;
+  }
+
+  if (hasProfileScopedWorkspace(business)) {
+    return getProfileModuleDefaults(business).has(moduleMeta.key)
+      ? MODULE_STATES.ACTIVE
+      : moduleMeta.isAddOn
+        ? MODULE_STATES.REQUEST_REQUIRED
+        : MODULE_STATES.AVAILABLE;
+  }
+
+  return moduleMeta.defaultEnabled ? MODULE_STATES.ACTIVE : MODULE_STATES.REQUEST_REQUIRED;
+};
+
+const serializeModuleConfig = ({ moduleMeta, config, deploymentMode, business }) => {
   const deploymentAllowed = isModuleAllowedForDeployment(moduleMeta, deploymentMode);
-  const defaultState = moduleMeta.defaultEnabled ? MODULE_STATES.ACTIVE : MODULE_STATES.REQUEST_REQUIRED;
+  const defaultState = resolveDefaultModuleState({ business, moduleMeta });
   const state = deploymentAllowed ? config?.state || defaultState : MODULE_STATES.DISABLED;
 
   return {
@@ -110,6 +136,8 @@ const serializeModuleConfig = ({ moduleMeta, config, deploymentMode }) => {
     state,
     active: state === MODULE_STATES.ACTIVE,
     protected: Boolean(moduleMeta.protected || coreModuleKeys.includes(moduleMeta.key)),
+    defaultSource: config?.source || (hasProfileScopedWorkspace(business) ? "PRESET" : "LEGACY_DEFAULT"),
+    explicitConfig: Boolean(config),
   };
 };
 
@@ -121,7 +149,7 @@ const getBusinessModuleState = async ({ businessId, moduleKey }) => {
     throw new AppError("Unknown module", 400);
   }
 
-  const business = await Business.findById(businessId).select("deploymentMode");
+  const business = await Business.findById(businessId).select("deploymentMode businessProfile");
   if (!business) {
     throw new AppError("Business not found", 404);
   }
@@ -132,7 +160,7 @@ const getBusinessModuleState = async ({ businessId, moduleKey }) => {
   }
 
   const config = await BusinessModuleConfig.findOne({ businessId, moduleKey: key });
-  return config?.state || (moduleMeta.defaultEnabled ? MODULE_STATES.ACTIVE : MODULE_STATES.REQUEST_REQUIRED);
+  return config?.state || resolveDefaultModuleState({ business, moduleMeta });
 };
 
 const assertModuleActive = async ({ businessId, moduleKey }) => {
@@ -172,6 +200,7 @@ const getBusinessModules = async ({ businessId }) => {
         moduleMeta,
         config: configMap.get(moduleMeta.key),
         deploymentMode,
+        business,
       });
       let commercialState = config.state;
       if (offer?.status === "OFFERED") commercialState = "OFFER_RECEIVED";
@@ -209,6 +238,24 @@ const getBusinessModules = async ({ businessId }) => {
     industries: industryCatalog,
     capabilities: capabilityCatalog,
     businessProfile: business.businessProfile || {},
+    activeModules: moduleCatalog
+      .map((moduleMeta) =>
+        serializeModuleConfig({
+          moduleMeta,
+          config: configMap.get(moduleMeta.key),
+          deploymentMode,
+          business,
+        })
+      )
+      .filter((item) => item.active)
+      .map((item) => item.key),
+    visibilityContract: [
+      "deployment availability",
+      "business module activation/preset",
+      "plan/add-on entitlement",
+      "role permission",
+      "visible workspace",
+    ],
   };
 };
 
@@ -345,4 +392,10 @@ module.exports = {
   moduleCatalog,
   setBusinessModuleState,
   updateBusinessProfile,
+  _private: {
+    getProfileModuleDefaults,
+    hasProfileScopedWorkspace,
+    resolveDefaultModuleState,
+    serializeModuleConfig,
+  },
 };

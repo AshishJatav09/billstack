@@ -16,6 +16,7 @@ const LoginPage = () => {
   const [serverError, setServerError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { googleAuth, login } = useAuth();
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -26,6 +27,7 @@ const LoginPage = () => {
   };
 
   const handleGoogle = async (payload) => {
+    if (isSubmitting) return;
     setServerError("");
     setErrors({});
     setIsSubmitting(true);
@@ -40,6 +42,7 @@ const LoginPage = () => {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (isSubmitting) return;
     setErrors({});
     setServerError("");
     setIsSubmitting(true);
@@ -56,11 +59,15 @@ const LoginPage = () => {
 
   return (
     <AuthCard
-      title="Welcome back"
-      subtitle="Sign in to continue to your workspace."
+      title="Sign in"
+      subtitle="Access your BillStack workspace."
     >
-      <GoogleAuthButton mode="login" onSuccess={handleGoogle} onError={setServerError} />
-      <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-wide text-slate-400"><span className="h-px flex-1 bg-slate-200" />or continue with email<span className="h-px flex-1 bg-slate-200" /></div>
+      {googleClientId ? (
+        <>
+          <GoogleAuthButton mode="login" onSuccess={handleGoogle} onError={setServerError} />
+          <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-wide text-slate-400"><span className="h-px flex-1 bg-slate-200" />or continue with email<span className="h-px flex-1 bg-slate-200" /></div>
+        </>
+      ) : null}
       <form className="space-y-4" onSubmit={handleSubmit}>
         <FormField label="Email" name="email" type="email" placeholder="founder@billstack.app" value={form.email} onChange={handleChange} error={errors.email} />
         <FormField label="Password" name="password" type="password" placeholder="Enter your password" value={form.password} onChange={handleChange} error={errors.password} />

@@ -9,6 +9,7 @@ import {
   communicationDeliveriesRequest,
   communicationScheduledRequest,
   communicationSummaryRequest,
+  communicationTemplatesRequest,
   downloadInvoicePdfRequest,
   emailInvoiceRequest,
   getEInvoiceDetailsRequest,
@@ -23,6 +24,7 @@ const money = (value) => new Intl.NumberFormat("en-IN", { style: "currency", cur
 const date = (value) => value ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const timestamp = (value) => value ? new Date(value).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
 const status = (invoice) => invoice.status === "cancelled" ? ["Cancelled", "bg-slate-500/10 text-slate-700 dark:text-slate-200"] : invoice.paymentStatus === "paid" ? ["Paid", "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"] : invoice.paymentStatus === "partial" ? ["Partially paid", "bg-amber-500/10 text-amber-700 dark:text-amber-300"] : Number(invoice.balanceDue || 0) > 0 && new Date(invoice.dueDate) < new Date() ? ["Overdue", "bg-rose-500/10 text-rose-700 dark:text-rose-300"] : ["Pending", "bg-brand-500/10 text-brand-700 dark:text-brand-200"];
+const templateCategoryLabel = (value) => ({ INVOICE_CREATED: "Invoice Created", DUE_TODAY: "Payment Due Today", PAYMENT_OVERDUE: "Payment Overdue", PAYMENT_REMINDER: "Payment Reminder", PAYMENT_RECEIVED: "Payment Received", CREDIT_NOTE: "Credit Note", SALES_RETURN: "Sales Return", QUOTATION: "Quotation", CUSTOM: "Custom" }[value] || String(value || "Custom").replaceAll("_", " "));
 
 const InvoiceDetailPage = () => {
   const { invoiceId } = useParams();
@@ -38,6 +40,8 @@ const InvoiceDetailPage = () => {
   const [reminders, setReminders] = useState([]);
   const [allocations, setAllocations] = useState([]);
   const [providerStatus, setProviderStatus] = useState(null);
+  const [templates, setTemplates] = useState([]);
+  const [communicationForm, setCommunicationForm] = useState({ channel: "EMAIL", category: "INVOICE_CREATED", templateId: "" });
 
   const load = async () => {
     setLoading(true);
@@ -51,21 +55,24 @@ const InvoiceDetailPage = () => {
         setEInvoice(data.eInvoice || null);
       }
       try {
-        const [deliveryRows, reminderRows, allocationRows, communicationData] = await Promise.all([
+        const [deliveryRows, reminderRows, allocationRows, communicationData, templateRows] = await Promise.all([
           communicationDeliveriesRequest({ invoiceId }),
           communicationScheduledRequest({ invoiceId }),
           listInvoiceAllocationsRequest(invoiceId),
           communicationSummaryRequest(),
+          communicationTemplatesRequest(),
         ]);
         setDeliveries(deliveryRows || []);
         setReminders(reminderRows || []);
         setAllocations(allocationRows || []);
         setProviderStatus(communicationData?.providerStatus || null);
+        setTemplates(templateRows || []);
       } catch {
         setDeliveries([]);
         setReminders([]);
         setAllocations([]);
         setProviderStatus(null);
+        setTemplates([]);
       }
     } catch (err) {
       setError(err.response?.status === 404 ? "Invoice not found." : err.response?.data?.message || "Unable to load invoice.");
@@ -138,10 +145,11 @@ const InvoiceDetailPage = () => {
     }
   };
 
-  const sendViaChannel = async (channel) => {
+  const sendViaChannel = async () => {
+    const channel = communicationForm.channel;
     try {
       setActive(`send-${channel}`);
-      const row = await sendInvoiceCommunicationRequest(invoice._id, { channel });
+      const row = await sendInvoiceCommunicationRequest(invoice._id, { channel, category: communicationForm.category, templateId: communicationForm.templateId || undefined });
       uiStore.getState().pushToast({ tone: row.status === "SENT" ? "success" : "info", message: row.status === "SENT" ? `${channel} message sent.` : `${channel} message recorded as ${row.status}.` });
       await load();
     } catch (err) {
@@ -221,7 +229,7 @@ const InvoiceDetailPage = () => {
       </main>
       <aside className="space-y-6">
         <GstEInvoicePanel invoice={invoice} eInvoice={eInvoice || invoice.eInvoice} result={eInvoiceResult} active={active} onCheck={checkReadiness} onPrepare={preparePayload} />
-        <CommunicationPanel deliveries={deliveries} reminders={reminders} providerStatus={providerStatus} active={active} onSend={sendViaChannel} onSchedule={scheduleReminder} />
+        <CommunicationPanel deliveries={deliveries} reminders={reminders} templates={templates} form={communicationForm} setForm={setCommunicationForm} providerStatus={providerStatus} active={active} onSend={sendViaChannel} onSchedule={scheduleReminder} />
         <PaymentSummary invoice={invoice} paymentLabel={paymentLabel} paymentClass={paymentClass} />
         <PaymentAllocations invoice={invoice} rows={allocations} />
         <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><h3 className="text-lg font-semibold">Document details</h3><dl className="mt-4 space-y-3 text-sm"><AmountRow label="Created" value={timestamp(invoice.createdAt)} /><AmountRow label="Last updated" value={timestamp(invoice.updatedAt)} /></dl></section>
@@ -258,10 +266,12 @@ const GstEInvoicePanel = ({ invoice, eInvoice, result, active, onCheck, onPrepar
   return <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-brand-600">GST & e-invoice</p><h3 className="mt-1 text-lg font-semibold">Compliance snapshot</h3></div><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusLabel === "READY" || statusLabel === "GENERATED" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : statusLabel === "FAILED" ? "bg-rose-500/10 text-rose-700 dark:text-rose-300" : "bg-slate-500/10 text-slate-600 dark:text-slate-300"}`}>{statusLabel}</span></div>{invoice.gstSnapshot ? <div className="mt-4 space-y-2 text-sm"><AmountRow label="Taxable value" value={money(breakup.taxableValue || snapshot.taxableValue)} /><AmountRow label="CGST" value={money(breakup.cgst || snapshot.cgst)} /><AmountRow label="SGST" value={money(breakup.sgst || snapshot.sgst)} /><AmountRow label="IGST" value={money(breakup.igst || snapshot.igst)} /><AmountRow label="HSN/SAC" value={firstLine.hsnSac || Object.keys(breakup.hsnSacSummary || {})[0] || "Not captured"} /><AmountRow label="GST rate" value={firstLine.rate !== undefined ? `${firstLine.rate}%` : "Mixed"} /><AmountRow label="Supply" value={snapshot.supplierStateCode && snapshot.placeOfSupplyCode && snapshot.supplierStateCode === snapshot.placeOfSupplyCode ? "Intra-state" : "Inter-state"} /><AmountRow label="Place of supply" value={snapshot.placeOfSupplyCode || "Not captured"} /></div> : <p className="mt-4 rounded-xl bg-slate-500/10 p-3 text-sm" style={{ color: "var(--text-muted)" }}>This is a legacy or non-GST invoice. No GST snapshot is available.</p>}{eInvoice?.irn ? <div className="mt-4 rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-200"><p className="flex items-center gap-2 font-medium"><ShieldCheck size={16} /> IRN available</p><p className="mt-1 break-all">{eInvoice.irn}</p>{eInvoice.acknowledgementNumber ? <p className="mt-1">Ack: {eInvoice.acknowledgementNumber}</p> : null}</div> : <p className="mt-4 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">Government IRP submission is not configured. BillStack can validate readiness and prepare the payload only.</p>}{errors.length ? <div className="mt-4 space-y-2">{errors.map((error) => <p key={error.code + error.message} className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-200">{error.code}: {error.message}</p>)}</div> : result?.readiness?.readiness === "READY" ? <p className="mt-4 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300"><CheckCircle2 size={15} /> Readiness validation passed.</p> : null}<div className="mt-5 grid gap-2"><button type="button" onClick={onCheck} disabled={active === "echeck"} className="inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium" style={{ borderColor: "var(--panel-border)" }}><FileCheck2 size={16} /> {active === "echeck" ? "Checking..." : "Check readiness"}</button><button type="button" onClick={onPrepare} disabled={active === "epayload" || !invoice.gstSnapshot} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><QrCode size={16} /> {active === "epayload" ? "Preparing..." : "Prepare e-invoice"}</button></div></section>;
 };
 
-const CommunicationPanel = ({ deliveries, reminders, providerStatus, active, onSend, onSchedule }) => {
+const CommunicationPanel = ({ deliveries, reminders, templates, form, setForm, providerStatus, active, onSend, onSchedule }) => {
   const whatsappReady = Boolean(providerStatus?.whatsapp?.configured);
   const emailReady = providerStatus?.email?.configured !== false;
-  return <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><p className="text-sm font-medium text-brand-600">Communications</p><h3 className="mt-1 text-lg font-semibold">Send and remind</h3><p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>WhatsApp and SMS stay disabled until their providers are configured. Email remains available when SMTP is ready.</p><div className="mt-4 grid gap-2"><button onClick={() => onSend("EMAIL")} disabled={active === "send-EMAIL" || !emailReady} className="inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium disabled:opacity-50" style={{ borderColor: "var(--panel-border)" }}><Mail size={16} /> {active === "send-EMAIL" ? "Sending..." : emailReady ? "Send via email" : "Email not configured"}</button><button onClick={() => onSend("WHATSAPP")} disabled={active === "send-WHATSAPP" || !whatsappReady} className="inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium disabled:opacity-50" style={{ borderColor: "var(--panel-border)" }}><MessageCircle size={16} /> {whatsappReady ? active === "send-WHATSAPP" ? "Sending..." : "Send via WhatsApp" : "WhatsApp not configured"}</button><button onClick={onSchedule} disabled={active === "schedule-reminder" || !emailReady} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><BellRing size={16} /> {active === "schedule-reminder" ? "Scheduling..." : "Schedule email reminder"}</button></div><div className="mt-5 space-y-3"><HistoryBlock title="Upcoming reminders" rows={reminders} empty="No reminders scheduled." mapper={(row) => `${row.channel} / ${row.status} / ${row.scheduledFor ? new Date(row.scheduledFor).toLocaleString("en-IN") : "-"}`} /><HistoryBlock title="Delivery status" rows={deliveries} empty="No message history yet." mapper={(row) => `${row.channel} / ${row.status}${row.failureReason ? ` / ${row.failureReason}` : ""}`} /></div></section>;
+  const matchingTemplates = (templates || []).filter((template) => template.isActive !== false && template.channel === form.channel && template.category === form.category);
+  const canSend = form.channel === "EMAIL" ? emailReady : form.channel === "WHATSAPP" ? whatsappReady : false;
+  return <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><p className="text-sm font-medium text-brand-600">Communications</p><h3 className="mt-1 text-lg font-semibold">Send and remind</h3><p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>Choose a matching active template or use the default. WhatsApp and SMS stay disabled until their providers are configured.</p><div className="mt-4 grid gap-2"><label className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>Channel<select value={form.channel} onChange={(event) => setForm((value) => ({ ...value, channel: event.target.value, templateId: "" }))} className="field mt-2"><option value="EMAIL" disabled={!emailReady}>Email{emailReady ? "" : " (not configured)"}</option><option value="WHATSAPP" disabled={!whatsappReady}>WhatsApp{whatsappReady ? "" : " (not configured)"}</option></select></label><label className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>Category<select value={form.category} onChange={(event) => setForm((value) => ({ ...value, category: event.target.value, templateId: "" }))} className="field mt-2"><option value="INVOICE_CREATED">Invoice Created</option><option value="DUE_TODAY">Payment Due Today</option><option value="PAYMENT_OVERDUE">Payment Overdue</option><option value="PAYMENT_REMINDER">Payment Reminder</option></select></label><label className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>Template<select value={form.templateId || ""} onChange={(event) => setForm((value) => ({ ...value, templateId: event.target.value }))} className="field mt-2"><option value="">Use default template</option>{matchingTemplates.map((template) => <option key={template._id} value={template._id}>{template.name}{template.isDefault ? " (default)" : ""}</option>)}</select></label><button onClick={onSend} disabled={active === `send-${form.channel}` || !canSend} className="inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium disabled:opacity-50" style={{ borderColor: "var(--panel-border)" }}>{form.channel === "WHATSAPP" ? <MessageCircle size={16} /> : <Mail size={16} />} {active === `send-${form.channel}` ? "Sending..." : canSend ? `Send ${templateCategoryLabel(form.category)}` : `${form.channel} not configured`}</button><button onClick={onSchedule} disabled={active === "schedule-reminder" || !emailReady} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><BellRing size={16} /> {active === "schedule-reminder" ? "Scheduling..." : "Schedule email reminder"}</button></div><div className="mt-5 space-y-3"><HistoryBlock title="Upcoming reminders" rows={reminders} empty="No reminders scheduled." mapper={(row) => `${row.channel} / ${row.status} / ${row.scheduledFor ? new Date(row.scheduledFor).toLocaleString("en-IN") : "-"}`} /><HistoryBlock title="Delivery status" rows={deliveries} empty="No message history yet." mapper={(row) => `${row.channel} / ${row.status}${row.failureReason ? ` / ${row.failureReason}` : ""}`} /></div></section>;
 };
 
 const HistoryBlock = ({ title, rows, mapper, empty }) => <div><p className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>{title}</p>{rows.slice(0, 3).map((row) => <p key={row._id} className="mt-2 rounded-lg bg-slate-500/10 px-3 py-2 text-xs">{mapper(row)}</p>)}{!rows.length ? <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>{empty}</p> : null}</div>;

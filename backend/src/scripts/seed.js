@@ -1,6 +1,4 @@
-const dotenv = require("dotenv");
-
-dotenv.config();
+require("../config/load-env")();
 
 const connectDB = require("../config/db");
 const Business = require("../models/Business");

@@ -35,7 +35,8 @@ test("quote conversion has source quote idempotency and invoice side-effect cont
   assert.equal(Quote.schema.path("customerId").options.immutable, undefined);
 
   const quoteService = src("services", "quote.service.js");
-  assert.match(quoteService, /CustomerLedger\.updateOne/);
+  assert.match(quoteService, /createCustomerLedgerEntryOnce/);
+  assert.doesNotMatch(quoteService, /CustomerLedger\.updateOne/);
   assert.match(quoteService, /applyInvoiceStockDelta/);
   assert.match(quoteService, /buildGstSnapshot/);
   assert.match(quoteService, /business\.invoiceNumbering\.nextSequence = sequence \+ 1/);
