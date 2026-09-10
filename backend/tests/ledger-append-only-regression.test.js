@@ -120,6 +120,16 @@ test("financial callers no longer update append-only ledgers directly", () => {
   assert.match(files, /createCustomerLedgerEntryOnce/);
 });
 
+test("payment allocation ledger events do not reuse paymentId unique key", () => {
+  const paymentService = src("services", "payment.service.js");
+  const allocationEntryPattern = /createCustomerLedgerEntryOnce\(\{ businessId, customerId: invoice\.customerId, eventType: "PAYMENT"[\s\S]*?sourceKey: `PAYMENT_ALLOCATION:\$\{allocation\._id\}`[\s\S]*?\}/;
+  const allocationEntry = paymentService.match(allocationEntryPattern)?.[0] || "";
+
+  assert.match(allocationEntry, /allocationId: allocation\._id/);
+  assert.match(allocationEntry, /sourceKey: `PAYMENT_ALLOCATION:\$\{allocation\._id\}`/);
+  assert.doesNotMatch(allocationEntry, /paymentId: payment\._id/);
+});
+
 test("sales lifecycle UI guards duplicate mutations and de-duplicates identical toasts", () => {
   const page = fs.readFileSync(path.join(__dirname, "..", "..", "frontend", "src", "features", "dashboard", "pages", "SalesLifecyclePage.jsx"), "utf8");
   const store = fs.readFileSync(path.join(__dirname, "..", "..", "frontend", "src", "store", "uiStore.js"), "utf8");

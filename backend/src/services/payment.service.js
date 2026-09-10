@@ -82,7 +82,7 @@ const allocatePayment = async ({ businessId, userId, paymentId, payload }) => {
         const outstanding = toMinorUnits(invoice.grandTotal, "Invoice total amount", { allowZero: true }) - allocated;
         if (toMinorUnits(amount) > outstanding) throw new AppError("Allocation exceeds invoice outstanding amount", 400);
         [allocation] = await PaymentAllocation.create([{ paymentId: payment._id, businessId, invoiceId: invoice._id, allocatedAmount: amount, createdBy: userId }], { session });
-        await createCustomerLedgerEntryOnce({ businessId, customerId: invoice.customerId, eventType: "PAYMENT", amount, direction: "CREDIT", invoiceId: invoice._id, paymentId: payment._id, allocationId: allocation._id, referenceNumber: payment.referenceNumber, notes: "Payment allocation", createdBy: userId }, { session });
+        await createCustomerLedgerEntryOnce({ businessId, customerId: invoice.customerId, eventType: "PAYMENT", amount, direction: "CREDIT", invoiceId: invoice._id, allocationId: allocation._id, sourceKey: `PAYMENT_ALLOCATION:${allocation._id}`, referenceNumber: payment.referenceNumber, notes: "Payment allocation", createdBy: userId }, { session });
       } else {
         if (payment.direction !== "PAID") throw new AppError("Only paid payments can be allocated to purchases", 400);
         const purchase = await Purchase.findOne({ _id: purchaseId, businessId }).session(session);
@@ -93,7 +93,7 @@ const allocatePayment = async ({ businessId, userId, paymentId, payload }) => {
         const outstanding = toMinorUnits(purchase.totalAmount, "Purchase total amount", { allowZero: true }) - allocated;
         if (toMinorUnits(amount) > outstanding) throw new AppError("Allocation exceeds purchase outstanding amount", 400);
         [allocation] = await PaymentAllocation.create([{ paymentId: payment._id, businessId, purchaseId: purchase._id, allocatedAmount: amount, createdBy: userId }], { session });
-        await createSupplierLedgerEntryOnce({ businessId, supplierId: purchase.supplierId, eventType: "PAYMENT", amount, direction: "CREDIT", purchaseId: purchase._id, paymentId: payment._id, allocationId: allocation._id, referenceNumber: payment.referenceNumber, notes: "Payment allocation", createdBy: userId }, { session });
+        await createSupplierLedgerEntryOnce({ businessId, supplierId: purchase.supplierId, eventType: "PAYMENT", amount, direction: "CREDIT", purchaseId: purchase._id, allocationId: allocation._id, sourceKey: `PAYMENT_ALLOCATION:${allocation._id}`, referenceNumber: payment.referenceNumber, notes: "Payment allocation", createdBy: userId }, { session });
       }
     });
     if (allocation?.invoiceId) {
@@ -141,10 +141,10 @@ const reverseAllocation = async ({ businessId, userId, allocationId, amount, rea
     [reversal] = await PaymentAllocationReversal.create([{ businessId, allocationId, amount: requested, reason, createdBy: userId }], { session });
     if (allocation.invoiceId) {
       const invoice = await Invoice.findOne({ _id: allocation.invoiceId, businessId }).select("customerId").session(session);
-      if (invoice) await createCustomerLedgerEntryOnce({ businessId, customerId: invoice.customerId, eventType: "REVERSAL", amount: requested, direction: "DEBIT", invoiceId: invoice._id, paymentId: allocation.paymentId, reversalId: reversal._id, notes: reason, createdBy: userId }, { session });
+      if (invoice) await createCustomerLedgerEntryOnce({ businessId, customerId: invoice.customerId, eventType: "REVERSAL", amount: requested, direction: "DEBIT", invoiceId: invoice._id, reversalId: reversal._id, sourceKey: `PAYMENT_ALLOCATION_REVERSAL:${reversal._id}`, notes: reason, createdBy: userId }, { session });
     } else if (allocation.purchaseId) {
       const purchase = await Purchase.findOne({ _id: allocation.purchaseId, businessId }).select("supplierId").session(session);
-      if (purchase) await createSupplierLedgerEntryOnce({ businessId, supplierId: purchase.supplierId, eventType: "REVERSAL", amount: requested, direction: "DEBIT", purchaseId: purchase._id, paymentId: allocation.paymentId, reversalId: reversal._id, notes: reason, createdBy: userId }, { session });
+      if (purchase) await createSupplierLedgerEntryOnce({ businessId, supplierId: purchase.supplierId, eventType: "REVERSAL", amount: requested, direction: "DEBIT", purchaseId: purchase._id, reversalId: reversal._id, sourceKey: `PAYMENT_ALLOCATION_REVERSAL:${reversal._id}`, notes: reason, createdBy: userId }, { session });
     }
   }); return reversal; } finally { session.endSession(); }
 };
