@@ -13,6 +13,9 @@ export const useAuth = () => {
   const navigate = useNavigate();
   const { accessToken, user, business, setSession, clearAuth } = authStore();
 
+  const resolvePostAuthRoute = (businessPayload) =>
+    businessPayload?.deploymentMode === "SELF_HOSTED" || businessPayload?.onboardingCompleted ? "/dashboard" : "/onboarding";
+
   const syncSession = async () => {
     const data = await currentSessionRequest();
     setSession({
@@ -30,7 +33,7 @@ export const useAuth = () => {
       title: "Account created",
       message: "Your business owner account is ready.",
     });
-    navigate(data.business.onboardingCompleted ? "/dashboard" : "/onboarding");
+    navigate(resolvePostAuthRoute(data.business));
   };
 
   const login = async (payload) => {
@@ -41,7 +44,7 @@ export const useAuth = () => {
       title: "Welcome back",
       message: "You are signed in to BillStack.",
     });
-    navigate(data.business.onboardingCompleted ? "/dashboard" : "/onboarding");
+    navigate(resolvePostAuthRoute(data.business));
   };
 
   const googleAuth = async (payload) => {
@@ -52,7 +55,7 @@ export const useAuth = () => {
       title: payload.mode === "signup" ? "Account created" : "Welcome back",
       message: "Google sign-in completed securely.",
     });
-    navigate(data.business.onboardingCompleted ? "/dashboard" : "/onboarding");
+    navigate(resolvePostAuthRoute(data.business));
   };
 
   const logout = async () => {

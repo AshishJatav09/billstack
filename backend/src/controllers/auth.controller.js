@@ -21,6 +21,7 @@ const { writeAuditLog } = require("../services/audit.service");
 const { serializeBusinessWithPlan } = require("../utils/businessPlan");
 const { startTrialForNewBusiness } = require("../services/commercial-plan.service");
 const { getDeploymentMode } = require("../constants/modules");
+const { ensureSelfHostedBusinessProfile } = require("../services/self-hosted-profile.service");
 
 const refreshCookieName = process.env.REFRESH_COOKIE_NAME || "billstack_refresh_token";
 
@@ -62,7 +63,7 @@ const register = asyncHandler(async (req, res) => {
   const { name, email, password, businessName } = req.body;
   const slug = await buildUniqueBusinessSlug(businessName);
 
-  const business = await Business.create({
+  let business = await Business.create({
     name: businessName.trim(),
     slug,
     deploymentMode: getDeploymentMode(),
@@ -88,6 +89,7 @@ const register = asyncHandler(async (req, res) => {
 
   business.ownerUserId = user._id;
   await business.save();
+  business = await ensureSelfHostedBusinessProfile(business);
   await startTrialForNewBusiness({ businessId: business._id, trialSource: "email_signup" });
   const trialBusiness = await Business.findById(business._id);
 
@@ -120,7 +122,7 @@ const login = asyncHandler(async (req, res) => {
   }
 
   const user = users[0];
-  const business = await Business.findById(user.businessId);
+  let business = await Business.findById(user.businessId);
 
   if (!business) {
     throw new AppError("Invalid credentials", 401);
@@ -154,6 +156,7 @@ const login = asyncHandler(async (req, res) => {
   user.failedLoginAttempts = 0;
   user.lockedUntil = null;
   await user.save();
+  business = await ensureSelfHostedBusinessProfile(business);
 
   const accessToken = signAccessToken(user);
   const refreshToken = await issueRefreshToken(user, {
@@ -195,6 +198,7 @@ const googleAuth = asyncHandler(async (req, res) => {
     business = await Business.create({
       name: businessName,
       slug: await buildUniqueBusinessSlug(businessName),
+      deploymentMode: getDeploymentMode(),
     });
     user = await User.create({
       businessId: business._id,
@@ -209,6 +213,7 @@ const googleAuth = asyncHandler(async (req, res) => {
     });
     business.ownerUserId = user._id;
     await business.save();
+    business = await ensureSelfHostedBusinessProfile(business);
     await startTrialForNewBusiness({ businessId: business._id, trialSource: "google_signup" });
     business = await Business.findById(business._id);
   } else {
@@ -314,7 +319,7 @@ const refresh = asyncHandler(async (req, res) => {
 
   const validTokenRecord = await findValidRefreshToken(refreshToken);
   const user = await User.findById(validTokenRecord.userId);
-  const business = await Business.findById(tokenRecord.businessId);
+  let business = await Business.findById(tokenRecord.businessId);
 
   if (!user || !business || user.businessId.toString() !== business._id.toString()) {
     throw new AppError("Refresh session is no longer valid", 401);
@@ -323,6 +328,7 @@ const refresh = asyncHandler(async (req, res) => {
   if (!user.isActive) {
     throw new AppError("This user account has been deactivated", 403);
   }
+  business = await ensureSelfHostedBusinessProfile(business);
 
   const nextRefreshToken = await issueRefreshToken(user, {
     familyId: tokenRecord.familyId,
@@ -344,11 +350,12 @@ const refresh = asyncHandler(async (req, res) => {
 });
 
 const getMe = asyncHandler(async (req, res) => {
-  const business = await Business.findById(req.user.businessId);
+  let business = await Business.findById(req.user.businessId);
 
   if (!business || business._id.toString() !== req.tenant.businessId) {
     throw new AppError("Business context is invalid", 403);
   }
+  business = await ensureSelfHostedBusinessProfile(business);
 
   res.status(200).json({
     message: "Current session",

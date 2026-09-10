@@ -5,6 +5,7 @@ const path = require("node:path");
 
 const { MODULE_STATES, moduleCatalog } = require("../src/constants/modules");
 const { _private } = require("../src/services/module.service");
+const selfHostedProfile = require("../src/services/self-hosted-profile.service");
 const Invoice = require("../src/models/Invoice");
 const { invoiceCreateValidator } = require("../src/validators/resource.validation");
 const { buildGstSnapshot } = require("../src/utils/gst");
@@ -79,6 +80,43 @@ test("SELF_HOSTED registration uses deployment-mode source of truth instead of c
 
   assert.match(authController, /getDeploymentMode/);
   assert.match(authController, /deploymentMode:\s*getDeploymentMode\(\)/);
+  assert.match(authController, /ensureSelfHostedBusinessProfile\(business\)/);
+  assert.match(authController, /startTrialForNewBusiness/);
+});
+
+test("SELF_HOSTED registration auto-configures Real Estate profile defaults", () => {
+  const profile = selfHostedProfile.getSelfHostedDefaultProfilePayload();
+  const resolved = _private.resolveWorkspacePreset
+    ? _private.resolveWorkspacePreset(profile)
+    : require("../src/services/module.service").resolveWorkspacePreset(profile);
+
+  assert.equal(profile.industryCode, "REAL_ESTATE");
+  assert.equal(profile.playerTypeCode, "BROKER");
+  assert.equal(profile.businessModel, "SERVICE");
+  assert.ok(profile.selectedNeeds.includes("RECURRING_BILLING"));
+  assert.ok(profile.selectedNeeds.includes("APPOINTMENTS"));
+  assert.ok(resolved.recommendedModules.includes("recurring_billing"));
+  assert.ok(resolved.recommendedModules.includes("appointments_scheduling"));
+  assert.ok(resolved.recommendedModules.includes("quotations"));
+  assert.ok(resolved.recommendedModules.includes("invoices"));
+});
+
+test("SELF_HOSTED login/current-session backfills profile only when server profile is incomplete", () => {
+  const authController = fs.readFileSync(path.join(__dirname, "../src/controllers/auth.controller.js"), "utf8");
+  const incomplete = {
+    deploymentMode: "SELF_HOSTED",
+    onboardingCompleted: false,
+    businessProfile: { onboardingStatus: "NOT_STARTED", recommendedModules: [] },
+  };
+  const complete = {
+    deploymentMode: "SELF_HOSTED",
+    onboardingCompleted: true,
+    businessProfile: { onboardingStatus: "COMPLETED", industryCode: "REAL_ESTATE", recommendedModules: ["invoices"] },
+  };
+
+  assert.equal(selfHostedProfile._private.needsSelfHostedProfile(incomplete), true);
+  assert.equal(selfHostedProfile._private.needsSelfHostedProfile(complete), false);
+  assert.match(authController, /business = await ensureSelfHostedBusinessProfile\(business\)/);
 });
 
 test("Real Estate SELF_HOSTED workspace hides irrelevant operational modules from primary navigation", () => {
@@ -97,6 +135,49 @@ test("Real Estate SELF_HOSTED workspace hides irrelevant operational modules fro
   assert.match(dashboard, /shouldShowDashboardSurface/);
   assert.match(dashboard, /New site visit/);
   assert.match(dashboard, /Monthly billing due/);
+});
+
+test("SELF_HOSTED configured businesses bypass generic SaaS onboarding from auth routing", () => {
+  const protectedRoute = fs.readFileSync(path.join(__dirname, "../../frontend/src/components/ui/ProtectedRoute.jsx"), "utf8");
+  const guestRoute = fs.readFileSync(path.join(__dirname, "../../frontend/src/components/ui/GuestRoute.jsx"), "utf8");
+  const useAuth = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/auth/useAuth.js"), "utf8");
+
+  assert.match(protectedRoute, /currentSessionRequest/);
+  assert.match(protectedRoute, /location\.pathname === "\/onboarding"/);
+  assert.match(protectedRoute, /Navigate to="\/dashboard"/);
+  assert.match(guestRoute, /currentSessionRequest/);
+  assert.match(guestRoute, /business\?\.deploymentMode === "SELF_HOSTED"/);
+  assert.match(useAuth, /resolvePostAuthRoute/);
+  assert.match(useAuth, /businessPayload\?\.deploymentMode === "SELF_HOSTED"/);
+});
+
+test("stale persisted frontend business cannot decide onboarding before fresh session check", () => {
+  const protectedRoute = fs.readFileSync(path.join(__dirname, "../../frontend/src/components/ui/ProtectedRoute.jsx"), "utf8");
+  const guestRoute = fs.readFileSync(path.join(__dirname, "../../frontend/src/components/ui/GuestRoute.jsx"), "utf8");
+
+  assert.match(protectedRoute, /sessionStatus === "checking"/);
+  assert.match(protectedRoute, /setSession\(\{\s*accessToken,\s*user: data\.user,\s*business: data\.business/s);
+  assert.match(guestRoute, /sessionStatus === "checking"/);
+  assert.match(guestRoute, /setSession\(\{\s*accessToken,\s*user: data\.user,\s*business: data\.business/s);
+});
+
+test("SaaS onboarding remains available for incomplete SaaS businesses", () => {
+  const protectedRoute = fs.readFileSync(path.join(__dirname, "../../frontend/src/components/ui/ProtectedRoute.jsx"), "utf8");
+
+  assert.match(protectedRoute, /!isSelfHosted && !business\?\.onboardingCompleted && requireOnboardingComplete/);
+  assert.match(protectedRoute, /Navigate to="\/onboarding"/);
+});
+
+test("hidden Real Estate navigation does not remove backend module activation or route guards", () => {
+  const visibility = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/workspace/workspaceVisibility.js"), "utf8");
+  const moduleService = fs.readFileSync(path.join(__dirname, "../src/services/module.service.js"), "utf8");
+  const routeModules = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/workspace/workspaceVisibility.js"), "utf8");
+
+  assert.match(visibility, /shouldShowWorkspaceNavigation/);
+  assert.match(moduleService, /resolveDefaultModuleState/);
+  assert.match(moduleService, /BusinessModuleConfig\.findOne/);
+  assert.match(routeModules, /"\/dashboard\/products": "products_services"/);
+  assert.match(routeModules, /"\/dashboard\/sales-returns": "sales_returns"/);
 });
 
 test("invoice schema and validator allow manual service lines without productId", async () => {
