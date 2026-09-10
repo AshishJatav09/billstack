@@ -78,6 +78,7 @@ test("expense partial payment has server-validated paid and balance meaning", as
   });
   const unpaid = await normalizeExpensePayload({ businessId: new mongoose.Types.ObjectId(), payload: { amountBeforeTax: 1000, paymentStatus: "UNPAID" } });
   const paid = await normalizeExpensePayload({ businessId: new mongoose.Types.ObjectId(), payload: { amountBeforeTax: 1000, paymentStatus: "PAID" } });
+  const paidBlankInput = await normalizeExpensePayload({ businessId: new mongoose.Types.ObjectId(), payload: { amountBeforeTax: 1000, paidAmount: "", paymentStatus: "PAID" } });
 
   assert.equal(partial.paidAmount, 400);
   assert.equal(partial.balanceAmount, 600);
@@ -86,6 +87,8 @@ test("expense partial payment has server-validated paid and balance meaning", as
   assert.equal(unpaid.paidAmount, 0);
   assert.equal(unpaid.balanceAmount, 1000);
   assert.equal(paid.paidAmount, 1000);
+  assert.equal(paidBlankInput.paidAmount, 1000);
+  assert.equal(paidBlankInput.paymentStatus, "PAID");
   assert.equal(paid.balanceAmount, 0);
 });
 

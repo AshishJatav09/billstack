@@ -33,6 +33,12 @@ const paymentMethods = ["", "CASH", "BANK_TRANSFER", "CHEQUE", "UPI", "CARD", "O
 const money = (value) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(value || 0));
 const date = (value) => (value ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
+const estimateExpenseTotal = (form) => {
+  const base = Number(form.amountBeforeTax || 0);
+  const gst = form.gstEnabled ? (base * Number(form.gstRate || 0)) / 100 : 0;
+  return Math.round((base + gst + Number.EPSILON) * 100) / 100;
+};
+
 const ExpensesPage = () => {
   const [filters, setFilters] = useState({ page: 1, limit: 25, search: "", category: "", paymentStatus: "", from: "", to: "" });
   const [result, setResult] = useState({ items: [], pagination: { page: 1, totalPages: 1 } });
@@ -45,9 +51,7 @@ const ExpensesPage = () => {
   const [saving, setSaving] = useState(false);
 
   const estimatedTotal = useMemo(() => {
-    const base = Number(form.amountBeforeTax || 0);
-    const gst = form.gstEnabled ? (base * Number(form.gstRate || 0)) / 100 : 0;
-    return money(base + gst);
+    return money(estimateExpenseTotal(form));
   }, [form.amountBeforeTax, form.gstEnabled, form.gstRate]);
 
   const loadExpenses = async () => {
@@ -90,10 +94,17 @@ const ExpensesPage = () => {
     setSaving(true);
     setError("");
     try {
+      const estimatedRawTotal = estimateExpenseTotal(form);
+      const paidAmount =
+        form.paymentStatus === "PAID" && form.paidAmount === ""
+          ? estimatedRawTotal
+          : form.paymentStatus === "UNPAID" && form.paidAmount === ""
+            ? 0
+            : Number(form.paidAmount || 0);
       const payload = {
         ...form,
         amountBeforeTax: Number(form.amountBeforeTax || 0),
-        paidAmount: Number(form.paidAmount || 0),
+        paidAmount,
         gstRate: Number(form.gstRate || 0),
       };
       if (editor === "new") await createExpenseRequest(payload);

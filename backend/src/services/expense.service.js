@@ -15,7 +15,9 @@ const normalizeExpensePayload = async ({ businessId, payload }) => {
   if (!Number.isFinite(amountBeforeTax) || amountBeforeTax < 0) throw new AppError("Invalid expense amount", 400);
   const paymentStatus = String(payload.paymentStatus || "UNPAID").toUpperCase();
   const paymentMethod = String(payload.paymentMethod || "").toUpperCase();
-  const paidAmountInput = payload.paidAmount;
+  const paidAmountInput = payload.paidAmount === "" || payload.paidAmount === null || payload.paidAmount === undefined
+    ? undefined
+    : payload.paidAmount;
 
   let supplierId = payload.supplierId || null;
   if (supplierId) {

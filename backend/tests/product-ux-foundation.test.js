@@ -94,9 +94,8 @@ test("SELF_HOSTED registration auto-configures Real Estate profile defaults", ()
   assert.equal(profile.playerTypeCode, "BROKER");
   assert.equal(profile.businessModel, "SERVICE");
   assert.ok(profile.selectedNeeds.includes("RECURRING_BILLING"));
-  assert.ok(profile.selectedNeeds.includes("APPOINTMENTS"));
+  assert.equal(profile.selectedNeeds.includes("APPOINTMENTS"), false);
   assert.ok(resolved.recommendedModules.includes("recurring_billing"));
-  assert.ok(resolved.recommendedModules.includes("appointments_scheduling"));
   assert.ok(resolved.recommendedModules.includes("quotations"));
   assert.ok(resolved.recommendedModules.includes("invoices"));
 });
@@ -130,6 +129,7 @@ test("Real Estate SELF_HOSTED workspace hides irrelevant operational modules fro
   assert.match(visibility, /"inventory"/);
   assert.match(visibility, /"suppliers"/);
   assert.match(visibility, /"purchases"/);
+  assert.match(visibility, /"appointments_scheduling"/);
   assert.match(visibility, /"production_job_work"/);
   assert.match(sidebar, /shouldShowWorkspaceNavigation/);
   assert.match(dashboard, /shouldShowDashboardSurface/);
@@ -228,6 +228,8 @@ test("fast invoice UI exposes inline customer, manual lines, save-for-future, is
   assert.match(invoicePage, /saveForFuture/);
   assert.match(invoicePage, /createProductRequest/);
   assert.match(invoicePage, /Issue & Send/);
+  assert.match(invoicePage, /Issue & Record Payment/);
+  assert.match(invoicePage, /recordPaymentAfterIssue/);
   assert.match(invoicePage, /createPaymentRequest/);
   assert.match(invoicePage, /allocatePaymentRequest/);
   assert.doesNotMatch(invoicePage, /name="amountPaid"|Amount paid/);
@@ -265,6 +267,7 @@ test("Real Estate handover UI hides inactive sales/workflow tabs and dead search
   assert.match(workflow, /Monthly Billing/);
   assert.match(workflow, /Site Visits/);
   assert.match(workflow, /allowedTabs/);
+  assert.match(workflow, /shouldShowWorkspaceNavigation/);
   assert.doesNotMatch(navbar, /Search coming soon/);
   assert.match(styles, /\.no-scrollbar/);
 });
