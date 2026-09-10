@@ -74,6 +74,31 @@ test("self-hosted attribution is present without exposing secrets", () => {
   assert.doesNotMatch(envTemplate, /SECRET|PASSWORD|TOKEN/);
 });
 
+test("SELF_HOSTED registration uses deployment-mode source of truth instead of creating SaaS workspace", () => {
+  const authController = fs.readFileSync(path.join(__dirname, "../src/controllers/auth.controller.js"), "utf8");
+
+  assert.match(authController, /getDeploymentMode/);
+  assert.match(authController, /deploymentMode:\s*getDeploymentMode\(\)/);
+});
+
+test("Real Estate SELF_HOSTED workspace hides irrelevant operational modules from primary navigation", () => {
+  const visibility = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/workspace/workspaceVisibility.js"), "utf8");
+  const sidebar = fs.readFileSync(path.join(__dirname, "../../frontend/src/components/layout/Sidebar.jsx"), "utf8");
+  const dashboard = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/dashboard/pages/DashboardHomePage.jsx"), "utf8");
+
+  assert.match(visibility, /isRealEstateSelfHostedWorkspace/);
+  assert.match(visibility, /REAL_ESTATE_CLIENT_HIDDEN_NAV_MODULES/);
+  assert.match(visibility, /"products_services"/);
+  assert.match(visibility, /"inventory"/);
+  assert.match(visibility, /"suppliers"/);
+  assert.match(visibility, /"purchases"/);
+  assert.match(visibility, /"production_job_work"/);
+  assert.match(sidebar, /shouldShowWorkspaceNavigation/);
+  assert.match(dashboard, /shouldShowDashboardSurface/);
+  assert.match(dashboard, /New site visit/);
+  assert.match(dashboard, /Monthly billing due/);
+});
+
 test("invoice schema and validator allow manual service lines without productId", async () => {
   const validation = invoiceCreateValidator({
     customerId: "customer-id",

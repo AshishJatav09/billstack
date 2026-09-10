@@ -21,7 +21,7 @@ import {
 import { ErrorState, LoadingState } from "../../../components/ui/PageState";
 import { dashboardSummaryRequest, getBusinessModulesRequest } from "../../auth/api";
 import { useAuth } from "../../auth/useAuth";
-import { isActiveModule, isSelfHostedWorkspace, productLabelForWorkspace, visibleModuleKeys } from "../../workspace/workspaceVisibility";
+import { isActiveModule, isSelfHostedWorkspace, productLabelForWorkspace, shouldShowDashboardSurface, visibleModuleKeys } from "../../workspace/workspaceVisibility";
 
 const formatMoney = (value) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -107,14 +107,14 @@ const DashboardHomePage = () => {
 
   const metrics = data.metrics;
   const activeModules = visibleModuleKeys(moduleData);
-  const showModule = (moduleKey) => !moduleKey || activeModules.has(moduleKey);
+  const showModule = (moduleKey) => (!moduleKey || activeModules.has(moduleKey)) && shouldShowDashboardSurface(moduleKey, moduleData, business);
   const quickActions = [
     { label: "Create invoice", detail: "Start a sale", icon: FilePlus2, to: "/dashboard/invoices", moduleKey: "invoices", primary: true },
     { label: "Create quotation", detail: "Draft an estimate", icon: BadgeIndianRupee, to: "/dashboard/quotes", moduleKey: "quotations" },
     { label: "Add customer", detail: "New contact", icon: UsersRound, to: "/dashboard/customers", moduleKey: "customers" },
     { label: `Add ${productLabelForWorkspace(moduleData).replace("Products / ", "").replace("Products & ", "").toLowerCase()}`, detail: productLabelForWorkspace(moduleData), icon: PackagePlus, to: "/dashboard/products", moduleKey: "products_services" },
     { label: "Record expense", detail: "Track operating spend", icon: ReceiptText, to: "/dashboard/expenses", moduleKey: "expenses", roles: ["owner", "admin", "accountant"] },
-    { label: "New appointment", detail: "Schedule customer time", icon: CalendarClock, to: "/dashboard/appointments", moduleKey: "appointments_scheduling" },
+    { label: "New site visit", detail: "Schedule client visit", icon: CalendarClock, to: "/dashboard/appointments", moduleKey: "appointments_scheduling" },
     { label: "New production job", detail: "Plan stock output", icon: ClipboardList, to: "/dashboard/production-jobs", moduleKey: "production_job_work" },
   ].filter((action) => showModule(action.moduleKey) && canRoleUse(user, action.roles));
   const checklist = data.onboardingChecklist || [];
@@ -144,8 +144,8 @@ const DashboardHomePage = () => {
   const workflowStats = [
     { label: "Active orders", value: workflowMetrics.activeOrders || 0, detail: `${workflowMetrics.processingOrders || 0} in processing`, icon: ClipboardList, to: "/dashboard/orders", moduleKey: "order_management" },
     { label: "Overdue tasks", value: workflowMetrics.overdueTasks || 0, detail: "Past due and not completed", icon: ListChecks, to: "/dashboard/tasks", moduleKey: "projects_tasks" },
-    { label: "Appointments", value: workflowMetrics.upcomingAppointments || 0, detail: "Next 7 days", icon: CalendarClock, to: "/dashboard/appointments", moduleKey: "appointments_scheduling" },
-    { label: "Recurring due", value: workflowMetrics.recurringDueSoon || 0, detail: "Due within 7 days", icon: RefreshCw, to: "/dashboard/recurring-billing", moduleKey: "recurring_billing" },
+    { label: "Site visits", value: workflowMetrics.upcomingAppointments || 0, detail: "Next 7 days", icon: CalendarClock, to: "/dashboard/appointments", moduleKey: "appointments_scheduling" },
+    { label: "Monthly billing due", value: workflowMetrics.recurringDueSoon || 0, detail: "Due within 7 days", icon: RefreshCw, to: "/dashboard/recurring-billing", moduleKey: "recurring_billing" },
     { label: "Production jobs", value: workflowMetrics.openProductionJobs || 0, detail: "Open job-work items", icon: ClipboardList, to: "/dashboard/production-jobs", moduleKey: "production_job_work" },
     { label: "Expiring batches", value: workflowMetrics.expiringBatches || 0, detail: "Within 30 days", icon: Box, to: "/dashboard/batches", moduleKey: "batch_expiry" },
     { label: "Pending dispatches", value: workflowMetrics.pendingDispatches || 0, detail: "Not delivered yet", icon: PackagePlus, to: "/dashboard/dispatches", moduleKey: "dispatch_fulfilment" },

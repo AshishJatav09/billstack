@@ -27,7 +27,7 @@ import { useEffect } from "react";
 import { authStore } from "../../store/authStore";
 import { uiStore } from "../../store/uiStore";
 import { getBusinessModulesRequest } from "../../features/auth/api";
-import { NAV_GROUPS, ROUTE_MODULES, isActiveModule, isSelfHostedWorkspace, productLabelForWorkspace } from "../../features/workspace/workspaceVisibility";
+import { NAV_GROUPS, ROUTE_MODULES, isActiveModule, isSelfHostedWorkspace, productLabelForWorkspace, shouldShowWorkspaceNavigation } from "../../features/workspace/workspaceVisibility";
 
 const navItems = [
   { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard, matches: ["/dashboard"], end: true, group: "core" },
@@ -109,7 +109,7 @@ const Sidebar = () => {
     if (item.saasOnly && isSelfHostedWorkspace(moduleData, business)) return false;
     const moduleKey = item.moduleKey || ROUTE_MODULES[item.to];
     if (moduleStatus !== "success" && moduleKey) return false;
-    return isActiveModule(moduleData, moduleKey);
+    return isActiveModule(moduleData, moduleKey) && shouldShowWorkspaceNavigation(moduleKey, moduleData, business);
   });
   const groupedItems = NAV_GROUPS.map((group) => ({
     ...group,

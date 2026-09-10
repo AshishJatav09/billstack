@@ -43,6 +43,48 @@ export const NAV_GROUPS = [
   { key: "admin", label: "Admin" },
 ];
 
+const REAL_ESTATE_CLIENT_HIDDEN_NAV_MODULES = new Set([
+  "products_services",
+  "inventory",
+  "suppliers",
+  "purchases",
+  "sales_returns",
+  "credit_notes",
+  "order_management",
+  "production_job_work",
+  "batch_expiry",
+  "dispatch_fulfilment",
+  "documents_approvals",
+  "hr",
+  "team",
+]);
+
+const REAL_ESTATE_CLIENT_HIDDEN_DASHBOARD_MODULES = new Set([
+  "products_services",
+  "inventory",
+  "suppliers",
+  "purchases",
+  "sales_returns",
+  "credit_notes",
+  "order_management",
+  "production_job_work",
+  "batch_expiry",
+  "dispatch_fulfilment",
+  "documents_approvals",
+  "hr",
+  "team",
+]);
+
+export const workspaceIndustryCode = (moduleData, business) =>
+  String(moduleData?.businessProfile?.industryCode || business?.businessProfile?.industryCode || business?.industry || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+
+export const isRealEstateSelfHostedWorkspace = (moduleData, business) =>
+  isSelfHostedWorkspace(moduleData, business) && workspaceIndustryCode(moduleData, business) === "REAL_ESTATE";
+
 export const isActiveModule = (moduleData, moduleKey) => {
   if (!moduleKey) return true;
   if (!moduleData) return false;
@@ -53,7 +95,25 @@ export const isActiveModule = (moduleData, moduleKey) => {
 export const visibleModuleKeys = (moduleData) =>
   new Set((moduleData?.catalog || []).filter((item) => item.state === MODULE_STATES.ACTIVE || item.active === true).map((item) => item.key));
 
+export const shouldShowWorkspaceNavigation = (moduleKey, moduleData, business) => {
+  if (!moduleKey) return true;
+  if (isRealEstateSelfHostedWorkspace(moduleData, business)) {
+    return !REAL_ESTATE_CLIENT_HIDDEN_NAV_MODULES.has(moduleKey);
+  }
+  return true;
+};
+
+export const shouldShowDashboardSurface = (moduleKey, moduleData, business) => {
+  if (!moduleKey) return true;
+  if (isRealEstateSelfHostedWorkspace(moduleData, business)) {
+    return !REAL_ESTATE_CLIENT_HIDDEN_DASHBOARD_MODULES.has(moduleKey);
+  }
+  return true;
+};
+
 export const productLabelForWorkspace = (moduleData) => {
+  const industryCode = workspaceIndustryCode(moduleData);
+  if (industryCode === "REAL_ESTATE") return "Services & Charges";
   const model = String(moduleData?.businessProfile?.businessModel || "").toUpperCase();
   const family = String(moduleData?.businessProfile?.operationalFamily || "").toUpperCase();
   if (model === "MANUFACTURING") return "Products / Materials";

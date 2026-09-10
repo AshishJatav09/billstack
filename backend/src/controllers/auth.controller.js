@@ -20,6 +20,7 @@ const { verifyGoogleIdentityToken } = require("../services/google-auth.service")
 const { writeAuditLog } = require("../services/audit.service");
 const { serializeBusinessWithPlan } = require("../utils/businessPlan");
 const { startTrialForNewBusiness } = require("../services/commercial-plan.service");
+const { getDeploymentMode } = require("../constants/modules");
 
 const refreshCookieName = process.env.REFRESH_COOKIE_NAME || "billstack_refresh_token";
 
@@ -64,6 +65,7 @@ const register = asyncHandler(async (req, res) => {
   const business = await Business.create({
     name: businessName.trim(),
     slug,
+    deploymentMode: getDeploymentMode(),
   });
 
   const existingUser = await User.findOne({
