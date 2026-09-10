@@ -24,5 +24,6 @@ router.post("/process-due", permit("owner", "admin"), controller.processDue);
 router.post("/webhooks/whatsapp/status/internal", controller.webhookStatus);
 router.post("/invoices/:invoiceId/send", validateObjectIdParam("invoiceId"), permit("owner", "admin", "staff", "accountant"), controller.sendInvoice);
 router.post("/invoices/:invoiceId/reminders", validateObjectIdParam("invoiceId"), permit("owner", "admin", "staff", "accountant"), controller.scheduleInvoiceReminder);
+router.post("/quotes/:quoteId/send", validateObjectIdParam("quoteId"), permit("owner", "admin", "staff", "accountant"), controller.sendQuote);
 
 module.exports = router;

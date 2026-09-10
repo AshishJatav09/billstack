@@ -92,12 +92,12 @@ const statusTone = {
 const money = (value) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(value || 0));
 
-const formatDate = (value) => (value ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—");
-const formatDateTime = (value) => (value ? new Date(value).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
+const formatDate = (value) => (value ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "â€”");
+const formatDateTime = (value) => (value ? new Date(value).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "â€”");
 
 const Badge = ({ children }) => (
   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone[children] || "bg-slate-100 text-slate-700"}`}>
-    {String(children || "—").replaceAll("_", " ")}
+    {String(children || "â€”").replaceAll("_", " ")}
   </span>
 );
 
@@ -205,6 +205,7 @@ const WorkflowPage = () => {
   const firstProduct = products[0]?._id || products[0]?.id || "";
   const firstProject = projects[0]?._id || projects[0]?.id || "";
   const firstUser = team[0]?._id || team[0]?.id || "";
+  const selectedProduct = products.find((product) => String(product._id || product.id) === String(form.productId || ""));
 
   const submit = async (event) => {
     event.preventDefault();
@@ -332,7 +333,7 @@ const WorkflowPage = () => {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.orderNumber}</p>
-              <p className="text-sm text-slate-500">{item.customerId?.name || item.customerSnapshot?.name || "Customer"} · {formatDate(item.orderDate)}</p>
+              <p className="text-sm text-slate-500">{item.customerId?.name || item.customerSnapshot?.name || "Customer"} Â· {formatDate(item.orderDate)}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge>{item.status}</Badge>
@@ -359,7 +360,7 @@ const WorkflowPage = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.name}</p>
-              <p className="text-sm text-slate-500">{item.projectNumber} · {item.customerId?.name || "Internal"} · Due {formatDate(item.dueDate)}</p>
+              <p className="text-sm text-slate-500">{item.projectNumber} Â· {item.customerId?.name || "Internal"} Â· Due {formatDate(item.dueDate)}</p>
             </div>
             <Badge>{item.status}</Badge>
           </div>
@@ -380,7 +381,7 @@ const WorkflowPage = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.title}</p>
-              <p className="text-sm text-slate-500">{item.projectId?.name || "Standalone"} · {item.assignedTo?.name || "Unassigned"} · Due {formatDate(item.dueDate)}</p>
+              <p className="text-sm text-slate-500">{item.projectId?.name || "Standalone"} Â· {item.assignedTo?.name || "Unassigned"} Â· Due {formatDate(item.dueDate)}</p>
             </div>
             <Badge>{item.status}</Badge>
           </div>
@@ -401,7 +402,7 @@ const WorkflowPage = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.name}</p>
-              <p className="text-sm text-slate-500">{item.customerId?.name || "Customer"} · {item.frequency} · Next {formatDate(item.nextBillingDate)}</p>
+              <p className="text-sm text-slate-500">{item.customerId?.name || "Customer"} Â· {item.frequency} Â· Next {formatDate(item.nextBillingDate)}</p>
             </div>
             <Badge>{item.status}</Badge>
           </div>
@@ -425,7 +426,7 @@ const WorkflowPage = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.title}</p>
-              <p className="text-sm text-slate-500">{item.jobNumber} Â· Output {item.outputProductId?.name || "Product"} Â· Due {formatDate(item.dueDate)}</p>
+              <p className="text-sm text-slate-500">{item.jobNumber} Ã‚Â· Output {item.outputProductId?.name || "Product"} Ã‚Â· Due {formatDate(item.dueDate)}</p>
             </div>
             <Badge>{item.status}</Badge>
           </div>
@@ -444,7 +445,7 @@ const WorkflowPage = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.batchNumber}</p>
-              <p className="text-sm text-slate-500">{item.productId?.name || "Product"} Â· Qty {item.quantityOnHand || 0} Â· Expiry {formatDate(item.expiryDate)}</p>
+              <p className="text-sm text-slate-500">{item.productId?.name || "Product"} Ã‚Â· Qty {item.quantityOnHand || 0} Ã‚Â· Expiry {formatDate(item.expiryDate)}</p>
             </div>
             <Badge>{item.status}</Badge>
           </div>
@@ -464,7 +465,7 @@ const WorkflowPage = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.dispatchNumber}</p>
-              <p className="text-sm text-slate-500">{item.customerId?.name || "Customer"} Â· {item.carrier || "Carrier pending"} Â· {item.trackingNumber || "No tracking"}</p>
+              <p className="text-sm text-slate-500">{item.customerId?.name || "Customer"} Ã‚Â· {item.carrier || "Carrier pending"} Ã‚Â· {item.trackingNumber || "No tracking"}</p>
             </div>
             <Badge>{item.status}</Badge>
           </div>
@@ -484,7 +485,7 @@ const WorkflowPage = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.title}</p>
-              <p className="text-sm text-slate-500">{item.documentType || "GENERAL"} Â· {item.sourceType || "GENERAL"} Â· {item.approvers?.length || 0} approver(s)</p>
+              <p className="text-sm text-slate-500">{item.documentType || "GENERAL"} Ã‚Â· {item.sourceType || "GENERAL"} Ã‚Â· {item.approvers?.length || 0} approver(s)</p>
             </div>
             <Badge>{item.status}</Badge>
           </div>
@@ -503,7 +504,7 @@ const WorkflowPage = () => {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-lg font-bold text-slate-950">{item.title}</p>
-            <p className="text-sm text-slate-500">{item.customerId?.name || "No customer"} · {formatDateTime(item.startAt)} – {formatDateTime(item.endAt)}</p>
+            <p className="text-sm text-slate-500">{item.customerId?.name || "No customer"} Â· {formatDateTime(item.startAt)} â€“ {formatDateTime(item.endAt)}</p>
           </div>
           <Badge>{item.status}</Badge>
         </div>
@@ -573,13 +574,13 @@ const WorkflowPage = () => {
             ) : null}
             {needsLineItem || ["production", "batches", "dispatches"].includes(activeTab) ? (
               <>
-                <select className="input" value={form.productId || ""} onChange={(e) => setForm({ ...form, productId: e.target.value })}>
+                <select className="input" value={form.productId || ""} onChange={(e) => { const product = products.find((item) => String(item._id || item.id) === String(e.target.value)); setForm({ ...form, productId: e.target.value, rate: product?.sellingPrice ?? form.rate, taxRate: product?.taxRate ?? form.taxRate }); }}>
                   <option value="">{activeTab === "production" ? "Select output product" : "Select product/service"}</option>
                   {products.map((product) => <option key={product._id || product.id} value={product._id || product.id}>{product.name}</option>)}
                 </select>
                 <div className="grid grid-cols-2 gap-3">
                   <input className="input" type="number" min="1" placeholder="Qty" value={form.quantity || ""} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
-                  <input className="input" type="number" min="0" placeholder="Rate" value={form.rate || ""} onChange={(e) => setForm({ ...form, rate: e.target.value })} />
+                  <input className="input" type="number" min="0" placeholder={selectedProduct ? `Rate: ${money(selectedProduct.sellingPrice)}` : "Rate"} value={form.rate || ""} onChange={(e) => setForm({ ...form, rate: e.target.value })} />
                 </div>
               </>
             ) : null}
@@ -641,7 +642,7 @@ const WorkflowPage = () => {
           </div>
           <div className="grid gap-4">{renderRows()}</div>
           {activeTab === "orders" ? <p className="text-xs text-slate-500">Order invoices are created through the existing BillStack invoice engine. Stock remains governed by invoice/inventory behavior.</p> : null}
-          {activeTab === "recurring" ? <p className="text-xs text-slate-500">Recurring billing generates normal BillStack invoices. It does not charge customer payment methods automatically.</p> : null}
+          {activeTab === "recurring" ? <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs leading-6 text-blue-800"><p className="font-semibold">How Monthly Billing works</p><p>Active profiles generate normal BillStack invoices on the next billing date. Generate now creates the current invoice once; payments are still recorded from the invoice or customer payment flow.</p></div> : null}
           {activeTab === "appointments" ? <p className="text-xs text-slate-500">Staff overlap conflicts are blocked by the server in this foundation version.</p> : null}
           <Link to="/dashboard" className="inline-flex text-sm font-semibold text-brand-600 hover:text-brand-700">Back to dashboard</Link>
         </div>
@@ -649,5 +650,4 @@ const WorkflowPage = () => {
     </div>
   );
 };
-
 export default WorkflowPage;

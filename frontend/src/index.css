@@ -43,6 +43,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   background: var(--app-bg);
   color: var(--text-primary);
@@ -51,6 +52,7 @@ body {
 
 #root {
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 * {

@@ -271,3 +271,35 @@ test("Real Estate handover UI hides inactive sales/workflow tabs and dead search
   assert.doesNotMatch(navbar, /Search coming soon/);
   assert.match(styles, /\.no-scrollbar/);
 });
+
+test("quotation UI exposes real communication actions without pretending WhatsApp is configured", () => {
+  const salesLifecycle = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/dashboard/pages/SalesLifecyclePage.jsx"), "utf8");
+  const api = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/auth/api.js"), "utf8");
+
+  assert.match(api, /sendQuoteCommunicationRequest/);
+  assert.match(api, /\/communications\/quotes\/\$\{quoteId\}\/send/);
+  assert.match(salesLifecycle, /Send email/);
+  assert.match(salesLifecycle, /WhatsApp off/);
+  assert.match(salesLifecycle, /Mark sent/);
+});
+
+test("monthly billing UI auto-fills selected service rate and explains generation behavior", () => {
+  const workflow = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/dashboard/pages/WorkflowPage.jsx"), "utf8");
+
+  assert.match(workflow, /selectedProduct/);
+  assert.match(workflow, /product\?\.sellingPrice/);
+  assert.match(workflow, /How Monthly Billing works/);
+  assert.match(workflow, /Generate now creates the current invoice once/);
+});
+
+test("reports page surfaces GST and allocation-derived payment state in standard layout", () => {
+  const reportsPage = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/dashboard/pages/ReportsPage.jsx"), "utf8");
+  const reportController = fs.readFileSync(path.join(__dirname, "../src/controllers/report.controller.js"), "utf8");
+
+  assert.match(reportsPage, /Reports \/ GST/);
+  assert.match(reportsPage, /Allocation-backed reports/);
+  assert.match(reportsPage, /Total GST/);
+  assert.match(reportsPage, /No pending invoice payments/);
+  assert.match(reportController, /getDerivedInvoiceRows/);
+  assert.match(reportController, /pendingPayment = derivedInvoices/);
+});

@@ -436,6 +436,11 @@ export const convertQuoteRequest = async (quoteId) => {
   return response.data.data;
 };
 
+export const sendQuoteCommunicationRequest = async (quoteId, payload) => {
+  const response = await api.post(`/communications/quotes/${quoteId}/send`, payload);
+  return response.data.data;
+};
+
 export const listCreditNotesRequest = async () => {
   const response = await api.get("/sales/credit-notes");
   return response.data.data;

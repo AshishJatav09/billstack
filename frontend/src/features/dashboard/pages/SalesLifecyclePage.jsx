@@ -18,6 +18,7 @@ import {
   listProductsRequest,
   listQuotesRequest,
   listSalesReturnsRequest,
+  sendQuoteCommunicationRequest,
   updateQuoteRequest,
   updateQuoteStatusRequest,
 } from "../../auth/api";
@@ -167,6 +168,23 @@ const SalesLifecyclePage = () => {
     }
   };
 
+  const sendQuote = async (quote, channel) => {
+    const key = `${quote._id}-send-${channel}`;
+    if (!beginAction(key)) return;
+    try {
+      const row = await sendQuoteCommunicationRequest(quote._id, { channel, category: "QUOTATION" });
+      uiStore.getState().pushToast({
+        tone: row.status === "SENT" ? "success" : row.status === "FAILED" ? "error" : "info",
+        message: row.status === "SENT" ? `Quotation sent by ${channel.toLowerCase()}.` : row.status === "FAILED" ? row.failureReason || `Quotation ${channel.toLowerCase()} could not be sent.` : `Quotation ${channel.toLowerCase()} queued as ${row.status.toLowerCase()}.`,
+      });
+      await load();
+    } catch (sendError) {
+      setError(sendError.response?.data?.message || `Unable to send quotation by ${channel.toLowerCase()}.`);
+    } finally {
+      endAction();
+    }
+  };
+
   const editQuote = async (quote) => {
     try {
       const detail = await getQuoteRequest(quote._id);
@@ -229,7 +247,7 @@ const SalesLifecyclePage = () => {
     {error ? <div className="flex items-start justify-between gap-3 rounded-xl border border-rose-500/25 bg-rose-500/5 p-4 text-sm text-rose-700 dark:text-rose-200"><span className="flex gap-2"><CircleAlert size={18} />{error}</span><button onClick={() => setError("")}><X size={16} /></button></div> : null}
     <nav className="flex overflow-x-auto rounded-xl border p-1 no-scrollbar" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>{visibleTabs.map(({ key, label }) => <button key={key} onClick={() => openTab(key)} className="whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium" style={tab === key ? { background: "var(--accent)", color: "white" } : { color: "var(--text-muted)" }}>{label}</button>)}</nav>
 
-    {tab === "quotes" ? <section className="space-y-6"><QuoteEditor form={quoteForm} setForm={setQuoteForm} editing={editingQuote} setEditing={setEditingQuote} products={products} customers={customers} saving={saving === "quote"} onSubmit={saveQuote} /><QuoteList rows={quotes} saving={saving} onView={setSelectedQuote} onEdit={editQuote} onTransition={transitionQuote} onConvert={convertQuote} /></section> : null}
+    {tab === "quotes" ? <section className="space-y-6"><QuoteEditor form={quoteForm} setForm={setQuoteForm} editing={editingQuote} setEditing={setEditingQuote} products={products} customers={customers} saving={saving === "quote"} onSubmit={saveQuote} /><QuoteList rows={quotes} saving={saving} onView={setSelectedQuote} onEdit={editQuote} onTransition={transitionQuote} onConvert={convertQuote} onSend={sendQuote} /></section> : null}
     {tab === "creditNotes" ? <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_440px]"><CreditNoteList rows={creditNotes} /><CreditNoteForm form={creditForm} setForm={setCreditForm} invoice={selectedCreditInvoice} invoices={invoices} usage={creditUsage} saving={saving === "credit"} onSubmit={submitCreditNote} /></section> : null}
     {tab === "returns" ? <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_440px]"><SalesReturnList rows={returns} /><SalesReturnForm form={returnForm} setForm={setReturnForm} invoice={selectedReturnInvoice} invoices={invoices} usage={returnUsage} saving={saving === "return"} onSubmit={submitReturn} /></section> : null}
     {selectedQuote && tab === "quotes" ? <QuoteDetail quote={selectedQuote} onClose={() => setSelectedQuote(null)} /> : null}
@@ -243,7 +261,39 @@ const lineValue = (line, quantity) => Number(line.quantity || 0) > 0 ? Number(li
 const Field = ({ label, children }) => <label className="block"><span className="mb-2 block text-sm font-medium">{label}</span>{children}</label>;
 const TableShell = ({ title, description, children }) => <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><div><h3 className="text-lg font-semibold">{title}</h3>{description ? <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{description}</p> : null}</div><div className="mt-4 overflow-x-auto rounded-xl border no-scrollbar" style={{ borderColor: "var(--panel-border)" }}>{children}</div></section>;
 
-const QuoteList = ({ rows, saving, onView, onEdit, onTransition, onConvert }) => <TableShell title="Quotation list" description="Draft quotes can be edited. Accepted quotes can be converted exactly once."><table className="min-w-[760px] w-full text-left text-sm"><thead className="bg-slate-500/5 text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}><tr><th className="p-3">Quote #</th><th className="p-3">Customer</th><th className="p-3">Created</th><th className="p-3 text-right">Amount</th><th className="p-3">Status</th><th className="p-3 text-right">Actions</th></tr></thead><tbody>{rows.map((row) => <tr key={row._id} className="border-t" style={{ borderColor: "var(--panel-border)" }}><td className="p-3 font-semibold">{row.quoteNumber}</td><td className="p-3">{row.customerSnapshot?.name || row.customerId?.name || "Customer"}</td><td className="p-3">{date(row.createdAt)}</td><td className="p-3 text-right">{money(row.grandTotal)}</td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusClass(row.status)}`}>{row.status}</span></td><td className="p-3"><div className="flex flex-wrap justify-end gap-2"><button onClick={() => onView(row)} className="rounded-lg border px-2.5 py-1.5 text-xs" style={{ borderColor: "var(--panel-border)" }}>View</button>{row.status === "DRAFT" ? <><button onClick={() => onEdit(row)} className="rounded-lg border px-2.5 py-1.5 text-xs" style={{ borderColor: "var(--panel-border)" }}>Edit</button><button disabled={saving === `${row._id}-SENT`} onClick={() => onTransition(row, "SENT")} className="rounded-lg bg-brand-600 px-2.5 py-1.5 text-xs font-medium text-white">Send</button></> : null}{row.status === "SENT" ? <><button onClick={() => onTransition(row, "ACCEPTED")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-medium text-white">Accept</button><button onClick={() => onTransition(row, "REJECTED")} className="rounded-lg border border-rose-500/40 px-2.5 py-1.5 text-xs text-rose-600">Reject</button><button onClick={() => onTransition(row, "EXPIRED")} className="rounded-lg border px-2.5 py-1.5 text-xs" style={{ borderColor: "var(--panel-border)" }}>Expire</button></> : null}{row.status === "ACCEPTED" ? <button onClick={() => onConvert(row)} className="rounded-lg bg-brand-600 px-2.5 py-1.5 text-xs font-medium text-white">Convert</button> : null}{row.status === "CONVERTED" ? <span className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-700">Converted</span> : null}</div></td></tr>)}{!rows.length ? <tr><td colSpan="6" className="p-8"><EmptyState title="No quotes yet" description="Create a quote to begin the sales lifecycle." /></td></tr> : null}</tbody></table></TableShell>;
+const QuoteList = ({ rows, saving, onView, onEdit, onTransition, onConvert, onSend }) => (
+  <TableShell title="Quotation list" description="Create, send by email, track status, and convert accepted quotations exactly once.">
+    <table className="w-full min-w-[720px] text-left text-sm">
+      <thead className="bg-slate-500/5 text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+        <tr><th className="p-3">Quote #</th><th className="p-3">Customer</th><th className="p-3">Created</th><th className="p-3 text-right">Amount</th><th className="p-3">Status</th><th className="p-3 text-right">Actions</th></tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row._id} className="border-t" style={{ borderColor: "var(--panel-border)" }}>
+            <td className="p-3 font-semibold">{row.quoteNumber}</td>
+            <td className="p-3">{row.customerSnapshot?.name || row.customerId?.name || "Customer"}</td>
+            <td className="p-3">{date(row.createdAt)}</td>
+            <td className="p-3 text-right">{money(row.grandTotal)}</td>
+            <td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusClass(row.status)}`}>{row.status}</span></td>
+            <td className="p-3">
+              <div className="flex flex-wrap justify-end gap-2">
+                <button type="button" onClick={() => onView(row)} className="rounded-lg border px-2.5 py-1.5 text-xs" style={{ borderColor: "var(--panel-border)" }}>View</button>
+                {row.status === "DRAFT" ? <button type="button" onClick={() => onEdit(row)} className="rounded-lg border px-2.5 py-1.5 text-xs" style={{ borderColor: "var(--panel-border)" }}>Edit</button> : null}
+                {["DRAFT", "SENT", "ACCEPTED"].includes(row.status) ? <button type="button" disabled={saving === `${row._id}-send-EMAIL`} onClick={() => onSend(row, "EMAIL")} className="rounded-lg border border-brand-500/30 px-2.5 py-1.5 text-xs font-medium text-brand-700 disabled:opacity-50">Send email</button> : null}
+                {["DRAFT", "SENT", "ACCEPTED"].includes(row.status) ? <button type="button" disabled className="rounded-lg border px-2.5 py-1.5 text-xs text-slate-400" title="WhatsApp sending is disabled for this preview">WhatsApp off</button> : null}
+                {row.status === "DRAFT" ? <button type="button" disabled={saving === `${row._id}-SENT`} onClick={() => onTransition(row, "SENT")} className="rounded-lg bg-brand-600 px-2.5 py-1.5 text-xs font-medium text-white disabled:opacity-50">Mark sent</button> : null}
+                {row.status === "SENT" ? <><button type="button" onClick={() => onTransition(row, "ACCEPTED")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-medium text-white">Accept</button><button type="button" onClick={() => onTransition(row, "REJECTED")} className="rounded-lg border border-rose-500/40 px-2.5 py-1.5 text-xs text-rose-600">Reject</button><button type="button" onClick={() => onTransition(row, "EXPIRED")} className="rounded-lg border px-2.5 py-1.5 text-xs" style={{ borderColor: "var(--panel-border)" }}>Expire</button></> : null}
+                {row.status === "ACCEPTED" ? <button type="button" onClick={() => onConvert(row)} className="rounded-lg bg-brand-600 px-2.5 py-1.5 text-xs font-medium text-white">Convert</button> : null}
+                {row.status === "CONVERTED" ? <span className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-700">Converted</span> : null}
+              </div>
+            </td>
+          </tr>
+        ))}
+        {!rows.length ? <tr><td colSpan="6" className="p-8"><EmptyState title="No quotes yet" description="Create a quote to begin the sales lifecycle." /></td></tr> : null}
+      </tbody>
+    </table>
+  </TableShell>
+);
 
 const QuoteEditor = ({ form, setForm, editing, setEditing, products, customers, saving, onSubmit }) => {
   const updateLine = (index, patch) => setForm((value) => ({ ...value, lineItems: value.lineItems.map((line, i) => i === index ? { ...line, ...patch } : line) }));

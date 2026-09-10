@@ -28,6 +28,7 @@ const {
   normalizeReminderRuleInput,
   renderTemplate,
   scheduledDateForRule,
+  sendQuoteMessage,
   validateTemplateVariables,
 } = require("../src/services/communication.service");
 const { getWhatsAppProviderStatus, sendWhatsAppMessage } = require("../src/services/whatsapp-provider.service");
@@ -98,6 +99,29 @@ test("communication variable context resolves supported invoice and business pla
     assert.notEqual(vars[key], undefined);
   }
   assert.equal(renderTemplate("Hi {{customer_name}}\n{{business_phone}}\n{{business_email}}", vars), "Hi Riya\n+91 90000 00000\nbilling@acme.test");
+});
+
+test("quotation communication support uses real templates, tenant route and source idempotency", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const routeSource = fs.readFileSync(path.join(__dirname, "../src/routes/communication.routes.js"), "utf8");
+  const serviceSource = fs.readFileSync(path.join(__dirname, "../src/services/communication.service.js"), "utf8");
+  assert.equal(typeof sendQuoteMessage, "function");
+  assert.match(routeSource, /\/quotes\/:quoteId\/send/);
+  assert.match(serviceSource, /Quote\.findOne\(\{ _id: quoteId, businessId \}/);
+  assert.match(serviceSource, /category: "QUOTATION"/);
+  assert.match(serviceSource, /SEND:QUOTE:/);
+});
+
+test("quotation template variables render customer, business and quote values", () => {
+  const vars = buildVariables({
+    business: { name: "The Office On Rent", phone: "8349523485", email: "info@nemnidhi.com" },
+    quote: { quoteNumber: "QUO-1", grandTotal: 14160, validUntil: "2026-09-30" },
+    customer: { name: "Abhishek" },
+  });
+  assert.equal(vars.quotation_number, "QUO-1");
+  assert.equal(vars.quotation_amount, "14160.00");
+  assert.equal(renderTemplate("Quote {{quotation_number}} for {{customer_name}}", vars), "Quote QUO-1 for Abhishek");
 });
 
 test("payment template context exposes recorded payment values without fabrication", () => {

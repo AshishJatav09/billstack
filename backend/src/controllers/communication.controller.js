@@ -16,6 +16,7 @@ const {
   processDueReminders,
   scheduleReminder,
   sendInvoiceMessage,
+  sendQuoteMessage,
   updateDeliveryStatus,
   updateProviderDeliveryStatus,
   validateTemplateVariables,
@@ -123,6 +124,20 @@ const sendInvoice = asyncHandler(async (req, res) => {
   }
 });
 
+const sendQuote = asyncHandler(async (req, res) => {
+  const session = await mongoose.startSession();
+  try {
+    let row;
+    await session.withTransaction(async () => {
+      row = await sendQuoteMessage({ businessId: req.tenant.businessId, quoteId: req.params.quoteId, channel: req.body.channel || "EMAIL", templateId: req.body.templateId, createdBy: req.user._id, session });
+    });
+    await writeAuditLog({ req, action: "QUOTE_COMMUNICATION_SENT", entityType: "MESSAGE_DELIVERY", entityId: row._id, metadata: { quoteId: req.params.quoteId, channel: row.channel, status: row.status } });
+    res.status(row.status === "SENT" ? 200 : 202).json({ data: row });
+  } finally {
+    session.endSession();
+  }
+});
+
 const processDue = asyncHandler(async (req, res) => {
   res.json({ data: await processDueReminders({ businessId: req.tenant.businessId, limit: Number(req.body.limit || 25) }) });
 });
@@ -147,4 +162,4 @@ const settings = asyncHandler(async (req, res) => {
   res.json({ data: { whatsapp: getWhatsAppProviderStatus(), email: { configured: Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) }, sms: { configured: false }, timezone: process.env.BILLSTACK_DEFAULT_TIMEZONE || "Asia/Kolkata" } });
 });
 
-module.exports = { createRule, deliveries, processDue, rules, scheduleInvoiceReminder, scheduled, sendInvoice, settings, summary, templates, upsertTemplate, webhookStatus, whatsappProviderWebhook };
+module.exports = { createRule, deliveries, processDue, rules, scheduleInvoiceReminder, scheduled, sendInvoice, sendQuote, settings, summary, templates, upsertTemplate, webhookStatus, whatsappProviderWebhook };

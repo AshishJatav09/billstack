@@ -9,6 +9,7 @@ const MessageTemplate = require("../models/MessageTemplate");
 const Payment = require("../models/Payment");
 const PaymentAllocation = require("../models/PaymentAllocation");
 const PaymentAllocationReversal = require("../models/PaymentAllocationReversal");
+const Quote = require("../models/Quote");
 const ReminderRule = require("../models/ReminderRule");
 const ScheduledReminder = require("../models/ScheduledReminder");
 const AppError = require("../utils/appError");
@@ -339,6 +340,15 @@ const getInvoiceContext = async ({ businessId, invoiceId, session }) => {
   return { invoice: derived, customer, business };
 };
 
+const getQuoteContext = async ({ businessId, quoteId, session }) => {
+  const [quote, business] = await Promise.all([
+    Quote.findOne({ _id: quoteId, businessId }).populate("customerId", "name email phone").session(session),
+    Business.findOne({ _id: businessId }).select("name email billingEmail phone").session(session),
+  ]);
+  if (!quote) throw new AppError("Quote not found", 404);
+  return { quote, customer: quote.customerId, business };
+};
+
 const formatAmount = (value) => Number(value || 0).toFixed(2);
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString("en-IN") : "");
 
@@ -497,6 +507,37 @@ const sendInvoiceMessage = async ({ businessId, invoiceId, channel, category = "
   const sourceKey = `SEND:${invoice._id}:${normalizedChannel}:${normalizedCategory}:${template?._id || "DEFAULT"}`;
   const delivery = await createDelivery({ businessId, customerId: customer?._id || invoice.customerId, invoiceId: invoice._id, channel: normalizedChannel, template, content, recipient, sourceKey, createdBy, session });
   return dispatchDelivery({ delivery, session });
+};
+
+const sendQuoteMessage = async ({ businessId, quoteId, channel, templateId, createdBy, session }) => {
+  const normalizedChannel = normalizeChannel(channel);
+  const { quote, customer, business } = await getQuoteContext({ businessId, quoteId, session });
+  if (["REJECTED", "EXPIRED"].includes(quote.status)) throw new AppError("Only active quotes can be sent", 400);
+  const template = await findTemplate({ businessId, channel: normalizedChannel, category: "QUOTATION", templateId, session });
+  if (!template) throw new AppError("Quotation template is not configured", 404);
+  const recipient = normalizedChannel === "EMAIL" ? customer?.email || quote.customerSnapshot?.email || "" : customer?.phone || quote.customerSnapshot?.phone || "";
+  if (!recipient) throw new AppError(`Customer ${normalizedChannel === "EMAIL" ? "email" : "phone"} is required to send quotation`, 400);
+  const content = renderTemplate(template.body, buildVariables({ quote, customer, business }));
+  const sourceKey = `SEND:QUOTE:${quote._id}:${normalizedChannel}:${template?._id || "DEFAULT"}`;
+  const delivery = await createDelivery({
+    businessId,
+    customerId: customer?._id || quote.customerId,
+    invoiceId: null,
+    channel: normalizedChannel,
+    template,
+    content,
+    recipient,
+    sourceKey,
+    createdBy,
+    session,
+    metadata: { quoteId: quote._id, category: "QUOTATION" },
+  });
+  const sent = await dispatchDelivery({ delivery, session });
+  if (quote.status === "DRAFT" && ["SENT", "DELIVERED", "READ"].includes(sent.status)) {
+    quote.status = "SENT";
+    await quote.save({ session });
+  }
+  return sent;
 };
 
 const isChannelConfigured = (channel) => {
@@ -858,6 +899,7 @@ module.exports = {
   scheduledDateForRule,
   scheduleReminder,
   sendInvoiceMessage,
+  sendQuoteMessage,
   updateDeliveryStatus,
   updateProviderDeliveryStatus,
   validateTemplateVariables,
