@@ -13,6 +13,8 @@ import {
   Search,
   XCircle,
 } from "lucide-react";
+import { authStore } from "../../../store/authStore";
+import { isActiveModule, isRealEstateSelfHostedWorkspace, shouldShowWorkspaceNavigation } from "../../workspace/workspaceVisibility";
 import {
   createAppointmentRequest,
   createApprovalDocumentRequest,
@@ -24,6 +26,7 @@ import {
   createRecurringProfileRequest,
   createTaskRequest,
   generateRecurringInvoiceRequest,
+  getBusinessModulesRequest,
   listAppointmentsRequest,
   listApprovalDocumentsRequest,
   listBatchesRequest,
@@ -50,15 +53,15 @@ import {
 } from "../../auth/api";
 
 const tabs = [
-  { key: "orders", label: "Orders", path: "/dashboard/orders", icon: ClipboardList },
-  { key: "projects", label: "Projects", path: "/dashboard/projects", icon: FileText },
-  { key: "tasks", label: "Tasks", path: "/dashboard/tasks", icon: CheckCircle2 },
-  { key: "recurring", label: "Recurring Billing", path: "/dashboard/recurring-billing", icon: RefreshCw },
-  { key: "appointments", label: "Appointments", path: "/dashboard/appointments", icon: CalendarClock },
-  { key: "production", label: "Production / Job Work", path: "/dashboard/production-jobs", icon: ClipboardList },
-  { key: "batches", label: "Batch & Expiry", path: "/dashboard/batches", icon: RefreshCw },
-  { key: "dispatches", label: "Dispatch / Fulfilment", path: "/dashboard/dispatches", icon: ClipboardList },
-  { key: "approvals", label: "Documents & Approvals", path: "/dashboard/approvals", icon: FileText },
+  { key: "orders", label: "Orders", realEstateLabel: "Orders", path: "/dashboard/orders", icon: ClipboardList, moduleKey: "order_management" },
+  { key: "projects", label: "Projects", realEstateLabel: "Projects", path: "/dashboard/projects", icon: FileText, moduleKey: "projects_tasks" },
+  { key: "tasks", label: "Tasks", realEstateLabel: "Tasks", path: "/dashboard/tasks", icon: CheckCircle2, moduleKey: "projects_tasks" },
+  { key: "recurring", label: "Recurring Billing", realEstateLabel: "Monthly Billing", path: "/dashboard/recurring-billing", icon: RefreshCw, moduleKey: "recurring_billing" },
+  { key: "appointments", label: "Appointments", realEstateLabel: "Site Visits", path: "/dashboard/appointments", icon: CalendarClock, moduleKey: "appointments_scheduling" },
+  { key: "production", label: "Production / Job Work", realEstateLabel: "Production / Job Work", path: "/dashboard/production-jobs", icon: ClipboardList, moduleKey: "production_job_work" },
+  { key: "batches", label: "Batch & Expiry", realEstateLabel: "Batch & Expiry", path: "/dashboard/batches", icon: RefreshCw, moduleKey: "batch_expiry" },
+  { key: "dispatches", label: "Dispatch / Fulfilment", realEstateLabel: "Dispatch / Fulfilment", path: "/dashboard/dispatches", icon: ClipboardList, moduleKey: "dispatch_fulfilment" },
+  { key: "approvals", label: "Documents & Approvals", realEstateLabel: "Documents & Approvals", path: "/dashboard/approvals", icon: FileText, moduleKey: "documents_approvals" },
 ];
 
 const statusTone = {
@@ -108,7 +111,12 @@ const EmptyState = ({ title, description }) => (
 const WorkflowPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const activeTab = tabs.find((tab) => tab.path === location.pathname)?.key || "orders";
+  const { business } = authStore();
+  const [moduleData, setModuleData] = useState(null);
+  const visibleTabs = useMemo(() => tabs
+    .filter((tab) => isActiveModule(moduleData, tab.moduleKey) && shouldShowWorkspaceNavigation(tab.moduleKey, moduleData, business))
+    .map((tab) => ({ ...tab, label: isRealEstateSelfHostedWorkspace(moduleData, business) ? tab.realEstateLabel : tab.label })), [moduleData, business]);
+  const activeTab = (visibleTabs.find((tab) => tab.path === location.pathname) || visibleTabs[0] || tabs.find((tab) => tab.path === location.pathname) || tabs[0]).key;
   const [data, setData] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
@@ -121,12 +129,23 @@ const WorkflowPage = () => {
   const [success, setSuccess] = useState("");
   const [form, setForm] = useState({});
 
-  const currentTab = tabs.find((tab) => tab.key === activeTab) || tabs[0];
+  const currentTab = visibleTabs.find((tab) => tab.key === activeTab) || tabs.find((tab) => tab.key === activeTab) || tabs[0];
 
   const loadData = async () => {
     setLoading(true);
     setError("");
     try {
+      let effectiveModuleData = moduleData;
+      if (!moduleData) {
+        effectiveModuleData = await getBusinessModulesRequest();
+        setModuleData(effectiveModuleData);
+      }
+      const allowedTabs = tabs.filter((tab) => isActiveModule(effectiveModuleData, tab.moduleKey) && shouldShowWorkspaceNavigation(tab.moduleKey, effectiveModuleData, business));
+      if (allowedTabs.length && !allowedTabs.some((tab) => tab.key === activeTab)) {
+        navigate(allowedTabs[0].path, { replace: true });
+        setData([]);
+        return;
+      }
       const request = {
         orders: listOrdersRequest,
         projects: listProjectsRequest,
@@ -151,6 +170,19 @@ const WorkflowPage = () => {
   useEffect(() => {
     loadData();
   }, [activeTab]);
+
+  useEffect(() => {
+    getBusinessModulesRequest()
+      .then(setModuleData)
+      .catch(() => setModuleData({ catalog: [] }));
+  }, []);
+
+  useEffect(() => {
+    if (!moduleData || !visibleTabs.length) return;
+    if (!visibleTabs.some((tab) => tab.path === location.pathname)) {
+      navigate(visibleTabs[0].path, { replace: true });
+    }
+  }, [location.pathname, moduleData, navigate, visibleTabs]);
 
   useEffect(() => {
     Promise.allSettled([listCustomersRequest(), listProductsRequest(), listProjectsRequest(), listTeamMembersRequest()])
@@ -500,8 +532,8 @@ const WorkflowPage = () => {
         <button type="button" onClick={loadData} className="btn-secondary"><RefreshCw size={16} /> Refresh</button>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-        {tabs.map((tab) => {
+      <div className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm no-scrollbar">
+        {visibleTabs.map((tab) => {
           const Icon = tab.icon;
           const active = tab.key === activeTab;
           return (

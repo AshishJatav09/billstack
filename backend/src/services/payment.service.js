@@ -15,6 +15,16 @@ const { dispatchPaymentRecordedAutomation } = require("./communication.service")
 const { createCustomerLedgerEntryOnce, createSupplierLedgerEntryOnce } = require("./ledger.service");
 
 const sumAmounts = (rows) => rows.reduce((sum, row) => sum + toMinorUnits(row.allocatedAmount), 0);
+const netDocumentAllocations = async ({ businessId, documentKey, documentId, session }) => {
+  const allocations = await PaymentAllocation.find({ businessId, [documentKey]: documentId }).session(session).select("_id allocatedAmount");
+  const reversals = await PaymentAllocationReversal.find({ businessId, allocationId: { $in: allocations.map((row) => row._id) } }).session(session).select("allocationId amount");
+  const reversedByAllocation = reversals.reduce((map, row) => {
+    const key = row.allocationId.toString();
+    map.set(key, (map.get(key) || 0) + toMinorUnits(row.amount, "Reversal amount", { allowZero: true }));
+    return map;
+  }, new Map());
+  return allocations.reduce((sum, row) => Math.max(toMinorUnits(row.allocatedAmount, "Allocated amount", { allowZero: true }) - (reversedByAllocation.get(row._id.toString()) || 0), 0) + sum, 0);
+};
 const validateAllocationCounterparty = ({ sourceType, document, payment }) => {
   const expected = sourceType === "INVOICE" ? document.customerId : document.supplierId;
   const actual = sourceType === "INVOICE" ? payment.customerId : payment.supplierId;
@@ -68,8 +78,9 @@ const allocatePayment = async ({ businessId, userId, paymentId, payload }) => {
         if (!invoice) throw new AppError("Invoice not found", 404);
         if (!payment.customerId || payment.customerId.toString() !== invoice.customerId.toString()) throw new AppError("Payment customer does not match invoice customer", 400);
         if (await PaymentAllocation.findOne({ paymentId: payment._id, invoiceId: invoice._id }).session(session)) throw new AppError("This payment is already allocated to the invoice", 409);
-        const allocations = await PaymentAllocation.find({ businessId, invoiceId: invoice._id }).session(session).select("allocatedAmount");
-        if (toMinorUnits(amount) > toMinorUnits(invoice.balanceDue, "Invoice outstanding amount", { allowZero: true }) - sumAmounts(allocations)) throw new AppError("Allocation exceeds invoice outstanding amount", 400);
+        const allocated = await netDocumentAllocations({ businessId, documentKey: "invoiceId", documentId: invoice._id, session });
+        const outstanding = toMinorUnits(invoice.grandTotal, "Invoice total amount", { allowZero: true }) - allocated;
+        if (toMinorUnits(amount) > outstanding) throw new AppError("Allocation exceeds invoice outstanding amount", 400);
         [allocation] = await PaymentAllocation.create([{ paymentId: payment._id, businessId, invoiceId: invoice._id, allocatedAmount: amount, createdBy: userId }], { session });
         await createCustomerLedgerEntryOnce({ businessId, customerId: invoice.customerId, eventType: "PAYMENT", amount, direction: "CREDIT", invoiceId: invoice._id, paymentId: payment._id, allocationId: allocation._id, referenceNumber: payment.referenceNumber, notes: "Payment allocation", createdBy: userId }, { session });
       } else {
@@ -78,8 +89,8 @@ const allocatePayment = async ({ businessId, userId, paymentId, payload }) => {
         if (!purchase) throw new AppError("Purchase not found", 404);
         if (!payment.supplierId || payment.supplierId.toString() !== purchase.supplierId.toString()) throw new AppError("Payment supplier does not match purchase supplier", 400);
         if (await PaymentAllocation.findOne({ paymentId: payment._id, purchaseId: purchase._id }).session(session)) throw new AppError("This payment is already allocated to the purchase", 409);
-        const allocations = await PaymentAllocation.find({ businessId, purchaseId: purchase._id }).session(session).select("allocatedAmount");
-        const outstanding = toMinorUnits(purchase.totalAmount, "Purchase total amount", { allowZero: true }) - toMinorUnits(purchase.paidAmount, "Purchase paid amount", { allowZero: true }) - sumAmounts(allocations);
+        const allocated = await netDocumentAllocations({ businessId, documentKey: "purchaseId", documentId: purchase._id, session });
+        const outstanding = toMinorUnits(purchase.totalAmount, "Purchase total amount", { allowZero: true }) - allocated;
         if (toMinorUnits(amount) > outstanding) throw new AppError("Allocation exceeds purchase outstanding amount", 400);
         [allocation] = await PaymentAllocation.create([{ paymentId: payment._id, businessId, purchaseId: purchase._id, allocatedAmount: amount, createdBy: userId }], { session });
         await createSupplierLedgerEntryOnce({ businessId, supplierId: purchase.supplierId, eventType: "PAYMENT", amount, direction: "CREDIT", purchaseId: purchase._id, paymentId: payment._id, allocationId: allocation._id, referenceNumber: payment.referenceNumber, notes: "Payment allocation", createdBy: userId }, { session });

@@ -235,3 +235,36 @@ test("fast invoice UI exposes inline customer, manual lines, save-for-future, is
   assert.match(invoiceController, /if \(!item\.productId\) return/);
   assert.match(invoiceController, /productId: product\?\._id \|\| null/);
 });
+
+test("client invoice payment menu is portal-based and payment submit recovers cleanly", () => {
+  const invoicePage = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/dashboard/pages/InvoicesPage.jsx"), "utf8");
+  const paymentService = fs.readFileSync(path.join(__dirname, "../src/services/payment.service.js"), "utf8");
+
+  assert.match(invoicePage, /createPortal/);
+  assert.match(invoicePage, /toggleActionMenu/);
+  assert.match(invoicePage, /openPaymentModal\(invoice\)/);
+  assert.match(invoicePage, /paymentTarget \|\| postIssue\?\.invoice/);
+  assert.match(invoicePage, /Payment recorded and allocated to the invoice/);
+  assert.match(invoicePage, /setPaymentSaving\(false\)/);
+  assert.doesNotMatch(invoicePage, /absolute right-3 top-11 z-10 w-48/);
+  assert.match(paymentService, /netDocumentAllocations/);
+  assert.match(paymentService, /toMinorUnits\(invoice\.grandTotal/);
+  assert.doesNotMatch(paymentService, /invoice\.balanceDue[\s\S]{0,120}sumAmounts\(allocations\)/);
+});
+
+test("Real Estate handover UI hides inactive sales/workflow tabs and dead search copy", () => {
+  const salesLifecycle = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/dashboard/pages/SalesLifecyclePage.jsx"), "utf8");
+  const workflow = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/dashboard/pages/WorkflowPage.jsx"), "utf8");
+  const navbar = fs.readFileSync(path.join(__dirname, "../../frontend/src/components/layout/Navbar.jsx"), "utf8");
+  const styles = fs.readFileSync(path.join(__dirname, "../../frontend/src/index.css"), "utf8");
+
+  assert.match(salesLifecycle, /visibleTabs/);
+  assert.match(salesLifecycle, /shouldShowWorkspaceNavigation/);
+  assert.match(salesLifecycle, /listCreditNotesRequest\(\) : Promise\.resolve\(\[\]\)/);
+  assert.match(workflow, /visibleTabs/);
+  assert.match(workflow, /Monthly Billing/);
+  assert.match(workflow, /Site Visits/);
+  assert.match(workflow, /allowedTabs/);
+  assert.doesNotMatch(navbar, /Search coming soon/);
+  assert.match(styles, /\.no-scrollbar/);
+});

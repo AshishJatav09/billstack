@@ -3,11 +3,14 @@ import { CheckCircle2, CircleAlert, FileText, RefreshCw, RotateCcw, Send, X } fr
 import { useLocation, useNavigate } from "react-router-dom";
 import { EmptyState, LoadingState } from "../../../components/ui/PageState";
 import { uiStore } from "../../../store/uiStore";
+import { authStore } from "../../../store/authStore";
+import { isActiveModule, shouldShowWorkspaceNavigation } from "../../workspace/workspaceVisibility";
 import {
   convertQuoteRequest,
   createCreditNoteRequest,
   createQuoteRequest,
   createSalesReturnRequest,
+  getBusinessModulesRequest,
   getQuoteRequest,
   listCreditNotesRequest,
   listCustomersRequest,
@@ -28,12 +31,19 @@ const blankQuoteLine = () => ({ productId: "", quantity: 1, rate: "", taxRate: "
 const blankQuoteForm = () => ({ customerId: "", lineItems: [blankQuoteLine()], shippingCharges: 0, roundOff: 0 });
 const blankCreditForm = () => ({ invoiceId: "", lineItems: [] });
 const blankReturnForm = () => ({ invoiceId: "", lineItems: [] });
+const salesTabs = [
+  { key: "quotes", label: "Quotations", path: "/dashboard/quotes", moduleKey: "quotations" },
+  { key: "creditNotes", label: "Credit Notes", path: "/dashboard/credit-notes", moduleKey: "credit_notes" },
+  { key: "returns", label: "Sales Returns", path: "/dashboard/sales-returns", moduleKey: "sales_returns" },
+];
 
 const SalesLifecyclePage = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { business } = authStore();
   const initialTab = location.pathname.includes("credit-notes") ? "creditNotes" : location.pathname.includes("sales-returns") ? "returns" : "quotes";
   const [tab, setTab] = useState(initialTab);
+  const [moduleData, setModuleData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [customers, setCustomers] = useState([]);
@@ -66,13 +76,16 @@ const SalesLifecyclePage = () => {
     setLoading(true);
     setError("");
     try {
+      const modules = await getBusinessModulesRequest();
+      setModuleData(modules);
+      const visibleKeys = new Set(salesTabs.filter((item) => isActiveModule(modules, item.moduleKey) && shouldShowWorkspaceNavigation(item.moduleKey, modules, business)).map((item) => item.key));
       const [customerData, productData, invoiceData, quoteData, creditData, returnData] = await Promise.all([
         listCustomersRequest({ page: 1, limit: 250 }),
         listProductsRequest({ page: 1, limit: 250 }),
         listInvoicesRequest({ page: 1, limit: 250, sortBy: "invoiceDate", sortOrder: "desc" }),
         listQuotesRequest(),
-        listCreditNotesRequest(),
-        listSalesReturnsRequest(),
+        visibleKeys.has("creditNotes") ? listCreditNotesRequest() : Promise.resolve([]),
+        visibleKeys.has("returns") ? listSalesReturnsRequest() : Promise.resolve([]),
       ]);
       setCustomers(customerData.items || []);
       setProducts(productData.items || []);
@@ -88,11 +101,19 @@ const SalesLifecyclePage = () => {
   };
 
   useEffect(() => { load(); }, []);
-  useEffect(() => { setTab(initialTab); }, [initialTab]);
+  const visibleTabs = useMemo(() => salesTabs.filter((item) => isActiveModule(moduleData, item.moduleKey) && shouldShowWorkspaceNavigation(item.moduleKey, moduleData, business)), [moduleData, business]);
+  useEffect(() => {
+    if (!moduleData) return;
+    const allowed = visibleTabs.some((item) => item.key === initialTab);
+    const next = allowed ? initialTab : visibleTabs[0]?.key || "quotes";
+    setTab(next);
+    if (!allowed && location.pathname !== "/dashboard/quotes") navigate("/dashboard/quotes", { replace: true });
+  }, [initialTab, location.pathname, moduleData, navigate, visibleTabs]);
 
   const openTab = (next) => {
     setTab(next);
-    navigate(next === "creditNotes" ? "/dashboard/credit-notes" : next === "returns" ? "/dashboard/sales-returns" : "/dashboard/quotes", { replace: true });
+    const target = visibleTabs.find((item) => item.key === next);
+    navigate(target?.path || "/dashboard/quotes", { replace: true });
   };
 
   const productMap = useMemo(() => new Map(products.map((product) => [String(product._id), product])), [products]);
@@ -206,7 +227,7 @@ const SalesLifecyclePage = () => {
       <button type="button" onClick={load} disabled={loading || Boolean(saving)} className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold disabled:opacity-60" style={{ borderColor: "var(--panel-border)" }}><RefreshCw size={16} /> Refresh</button>
     </section>
     {error ? <div className="flex items-start justify-between gap-3 rounded-xl border border-rose-500/25 bg-rose-500/5 p-4 text-sm text-rose-700 dark:text-rose-200"><span className="flex gap-2"><CircleAlert size={18} />{error}</span><button onClick={() => setError("")}><X size={16} /></button></div> : null}
-    <nav className="flex overflow-x-auto rounded-xl border p-1" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>{[["quotes", "Quotations"], ["creditNotes", "Credit Notes"], ["returns", "Sales Returns"]].map(([key, label]) => <button key={key} onClick={() => openTab(key)} className="whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium" style={tab === key ? { background: "var(--accent)", color: "white" } : { color: "var(--text-muted)" }}>{label}</button>)}</nav>
+    <nav className="flex overflow-x-auto rounded-xl border p-1 no-scrollbar" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>{visibleTabs.map(({ key, label }) => <button key={key} onClick={() => openTab(key)} className="whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium" style={tab === key ? { background: "var(--accent)", color: "white" } : { color: "var(--text-muted)" }}>{label}</button>)}</nav>
 
     {tab === "quotes" ? <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]"><QuoteList rows={quotes} saving={saving} onView={setSelectedQuote} onEdit={editQuote} onTransition={transitionQuote} onConvert={convertQuote} /><QuoteEditor form={quoteForm} setForm={setQuoteForm} editing={editingQuote} setEditing={setEditingQuote} products={products} customers={customers} saving={saving === "quote"} onSubmit={saveQuote} /></section> : null}
     {tab === "creditNotes" ? <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_440px]"><CreditNoteList rows={creditNotes} /><CreditNoteForm form={creditForm} setForm={setCreditForm} invoice={selectedCreditInvoice} invoices={invoices} usage={creditUsage} saving={saving === "credit"} onSubmit={submitCreditNote} /></section> : null}
