@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, CircleAlert, FileText, RefreshCw, RotateCcw, Send, X } from "lucide-react";
+import { CheckCircle2, CircleAlert, Download, FileText, RefreshCw, RotateCcw, Send, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { EmptyState, LoadingState } from "../../../components/ui/PageState";
 import { uiStore } from "../../../store/uiStore";
@@ -10,6 +10,7 @@ import {
   createCreditNoteRequest,
   createQuoteRequest,
   createSalesReturnRequest,
+  downloadQuotePdfRequest,
   getBusinessModulesRequest,
   getQuoteRequest,
   listCreditNotesRequest,
@@ -185,6 +186,26 @@ const SalesLifecyclePage = () => {
     }
   };
 
+  const downloadQuote = async (quote) => {
+    const key = `${quote._id}-download`;
+    if (!beginAction(key)) return;
+    try {
+      const blob = await downloadQuotePdfRequest(quote._id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${quote.quoteNumber || "quotation"}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      setError(downloadError.response?.data?.message || "Unable to download quotation PDF.");
+    } finally {
+      endAction();
+    }
+  };
+
   const editQuote = async (quote) => {
     try {
       const detail = await getQuoteRequest(quote._id);
@@ -247,7 +268,7 @@ const SalesLifecyclePage = () => {
     {error ? <div className="flex items-start justify-between gap-3 rounded-xl border border-rose-500/25 bg-rose-500/5 p-4 text-sm text-rose-700 dark:text-rose-200"><span className="flex gap-2"><CircleAlert size={18} />{error}</span><button onClick={() => setError("")}><X size={16} /></button></div> : null}
     <nav className="flex overflow-x-auto rounded-xl border p-1 no-scrollbar" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>{visibleTabs.map(({ key, label }) => <button key={key} onClick={() => openTab(key)} className="whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium" style={tab === key ? { background: "var(--accent)", color: "white" } : { color: "var(--text-muted)" }}>{label}</button>)}</nav>
 
-    {tab === "quotes" ? <section className="space-y-6"><QuoteEditor form={quoteForm} setForm={setQuoteForm} editing={editingQuote} setEditing={setEditingQuote} products={products} customers={customers} saving={saving === "quote"} onSubmit={saveQuote} /><QuoteList rows={quotes} saving={saving} onView={setSelectedQuote} onEdit={editQuote} onTransition={transitionQuote} onConvert={convertQuote} onSend={sendQuote} /></section> : null}
+    {tab === "quotes" ? <section className="space-y-6"><QuoteEditor form={quoteForm} setForm={setQuoteForm} editing={editingQuote} setEditing={setEditingQuote} products={products} customers={customers} saving={saving === "quote"} onSubmit={saveQuote} /><QuoteList rows={quotes} saving={saving} onView={setSelectedQuote} onEdit={editQuote} onTransition={transitionQuote} onConvert={convertQuote} onSend={sendQuote} onDownload={downloadQuote} /></section> : null}
     {tab === "creditNotes" ? <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_440px]"><CreditNoteList rows={creditNotes} /><CreditNoteForm form={creditForm} setForm={setCreditForm} invoice={selectedCreditInvoice} invoices={invoices} usage={creditUsage} saving={saving === "credit"} onSubmit={submitCreditNote} /></section> : null}
     {tab === "returns" ? <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_440px]"><SalesReturnList rows={returns} /><SalesReturnForm form={returnForm} setForm={setReturnForm} invoice={selectedReturnInvoice} invoices={invoices} usage={returnUsage} saving={saving === "return"} onSubmit={submitReturn} /></section> : null}
     {selectedQuote && tab === "quotes" ? <QuoteDetail quote={selectedQuote} onClose={() => setSelectedQuote(null)} /> : null}
@@ -261,7 +282,7 @@ const lineValue = (line, quantity) => Number(line.quantity || 0) > 0 ? Number(li
 const Field = ({ label, children }) => <label className="block"><span className="mb-2 block text-sm font-medium">{label}</span>{children}</label>;
 const TableShell = ({ title, description, children }) => <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><div><h3 className="text-lg font-semibold">{title}</h3>{description ? <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{description}</p> : null}</div><div className="mt-4 overflow-x-auto rounded-xl border no-scrollbar" style={{ borderColor: "var(--panel-border)" }}>{children}</div></section>;
 
-const QuoteList = ({ rows, saving, onView, onEdit, onTransition, onConvert, onSend }) => (
+const QuoteList = ({ rows, saving, onView, onEdit, onTransition, onConvert, onSend, onDownload }) => (
   <TableShell title="Quotation list" description="Create, send by email, track status, and convert accepted quotations exactly once.">
     <table className="w-full min-w-[720px] text-left text-sm">
       <thead className="bg-slate-500/5 text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
@@ -278,6 +299,7 @@ const QuoteList = ({ rows, saving, onView, onEdit, onTransition, onConvert, onSe
             <td className="p-3">
               <div className="flex flex-wrap justify-end gap-2">
                 <button type="button" onClick={() => onView(row)} className="rounded-lg border px-2.5 py-1.5 text-xs" style={{ borderColor: "var(--panel-border)" }}>View</button>
+                <button type="button" disabled={saving === `${row._id}-download`} onClick={() => onDownload(row)} className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs disabled:opacity-50" style={{ borderColor: "var(--panel-border)" }}><Download size={13} /> PDF</button>
                 {row.status === "DRAFT" ? <button type="button" onClick={() => onEdit(row)} className="rounded-lg border px-2.5 py-1.5 text-xs" style={{ borderColor: "var(--panel-border)" }}>Edit</button> : null}
                 {["DRAFT", "SENT", "ACCEPTED"].includes(row.status) ? <button type="button" disabled={saving === `${row._id}-send-EMAIL`} onClick={() => onSend(row, "EMAIL")} className="rounded-lg border border-brand-500/30 px-2.5 py-1.5 text-xs font-medium text-brand-700 disabled:opacity-50">Send email</button> : null}
                 {["DRAFT", "SENT", "ACCEPTED"].includes(row.status) ? <button type="button" disabled className="rounded-lg border px-2.5 py-1.5 text-xs text-slate-400" title="WhatsApp sending is disabled for this preview">WhatsApp off</button> : null}

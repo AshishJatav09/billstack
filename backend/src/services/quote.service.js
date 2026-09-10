@@ -10,6 +10,7 @@ const AppError = require("../utils/appError");
 const { buildGstSnapshot, validateGstin, validateStateCode } = require("../utils/gst");
 const { buildInvoiceNumber, buildInvoiceTotals } = require("../utils/invoice");
 const { log } = require("../utils/logger");
+const { generateQuotePdfBuffer } = require("../utils/pdfQuote");
 const { dispatchInvoiceIssuedAutomation } = require("./communication.service");
 const { buildInventoryFlags } = require("./inventory.service");
 const { createCustomerLedgerEntryOnce } = require("./ledger.service");
@@ -17,9 +18,11 @@ const { createCustomerLedgerEntryOnce } = require("./ledger.service");
 const normalizeLineItems = async ({ businessId, rawItems, session }) => {
   const items = Array.isArray(rawItems) ? rawItems : [];
   if (!items.length) throw new AppError("At least one quote line item is required", 400);
+  const productIds = items.map((item) => item.productId).filter(Boolean);
+  if (productIds.length !== items.length) throw new AppError("One or more quote products are invalid", 400);
 
   const products = await Product.find({
-    _id: { $in: items.map((item) => item.productId) },
+    _id: { $in: productIds },
     businessId,
   }).session(session);
   const productMap = new Map(products.map((product) => [product._id.toString(), product]));
@@ -69,7 +72,8 @@ const syncCustomerInvoiceHistory = async ({ customer, businessId, session }) => 
 };
 
 const applyInvoiceStockDelta = async ({ business, businessId, invoiceId, nextItems, createdBy, session }) => {
-  const productIds = [...new Set(nextItems.map((item) => item.productId.toString()))];
+  const productIds = [...new Set(nextItems.map((item) => item.productId).filter(Boolean).map((productId) => productId.toString()))];
+  if (productIds.length !== nextItems.length) throw new AppError("One or more quote products are invalid", 400);
   const products = await Product.find({ _id: { $in: productIds }, businessId }).session(session);
   const productMap = new Map(products.map((product) => [product._id.toString(), product]));
 
@@ -294,4 +298,13 @@ const convertQuote = async ({ businessId, userId, id }) => {
   }
 };
 
-module.exports = { createQuote, listQuotes, getQuote, setQuoteStatus, convertQuote, updateQuote };
+const generateQuotePdf = async ({ businessId, id }) => {
+  const [quote, business] = await Promise.all([
+    Quote.findOne({ _id: id, businessId }).populate("customerId", "name email phone"),
+    Business.findOne({ _id: businessId }),
+  ]);
+  if (!quote) throw new AppError("Quote not found", 404);
+  return generateQuotePdfBuffer({ quote, business });
+};
+
+module.exports = { createQuote, listQuotes, getQuote, setQuoteStatus, convertQuote, updateQuote, generateQuotePdf };

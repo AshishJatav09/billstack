@@ -68,6 +68,15 @@ body {
   display: none;
 }
 
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
 .field {
   width: 100%;
   border: 1px solid var(--panel-border);

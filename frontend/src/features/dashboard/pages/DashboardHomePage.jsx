@@ -127,7 +127,7 @@ const DashboardHomePage = () => {
       detail: `${metrics.totalInvoices} issued invoice${metrics.totalInvoices === 1 ? "" : "s"}`,
       tone: "text-brand-600 dark:text-brand-300",
     },
-    { label: "Amount collected", value: formatMoney(metrics.paidAmount), detail: "Recorded on issued invoices", tone: "text-emerald-600 dark:text-emerald-300" },
+    { label: "Payment collected", value: formatMoney(metrics.paidAmount), detail: "Recorded received payments", tone: "text-emerald-600 dark:text-emerald-300" },
     { label: "Receivables", value: formatMoney(metrics.unpaidAmount), detail: "Awaiting collection", tone: "text-amber-600 dark:text-amber-300" },
     {
       label: "Overdue amount",
@@ -299,48 +299,22 @@ const DashboardHomePage = () => {
               View sales <ArrowRight size={15} />
             </button>
           </div>
-          <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="border-b text-xs uppercase tracking-wide" style={{ borderColor: "var(--panel-border)", color: "var(--text-muted)" }}>
-                <tr>
-                  <th className="pb-3 font-medium">Invoice</th>
-                  <th className="pb-3 font-medium">Customer</th>
-                  <th className="pb-3 font-medium">Amount</th>
-                  <th className="pb-3 font-medium">Status</th>
-                  <th className="pb-3 font-medium">Due date</th>
-                  <th className="pb-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {data.recentInvoices.map((invoice) => (
-                  <tr key={invoice._id} className="border-b last:border-0" style={{ borderColor: "var(--panel-border)" }}>
-                    <td className="py-4 font-medium">{invoice.invoiceNumber}</td>
-                    <td className="py-4" style={{ color: "var(--text-muted)" }}>
-                      {invoice.customerId?.name || invoice.customerDetails?.name || "Customer"}
-                    </td>
-                    <td className="py-4 font-medium">{formatMoney(invoice.grandTotal)}</td>
-                    <td className="py-4">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium capitalize ${badgeTone(invoice.paymentStatus)}`}>{invoice.paymentStatus}</span>
-                    </td>
-                    <td className="py-4" style={{ color: "var(--text-muted)" }}>
-                      {formatDate(invoice.dueDate)}
-                    </td>
-                    <td className="py-4 text-right">
-                      <button onClick={() => navigate("/dashboard/invoices")} className="text-xs font-semibold text-brand-600">
-                        Open
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {!data.recentInvoices.length ? (
-                  <tr>
-                    <td colSpan="6" className="py-10 text-center" style={{ color: "var(--text-muted)" }}>
-                      No invoices yet. Create your first invoice to begin.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+          <div className="mt-5 grid gap-3">
+            {data.recentInvoices.map((invoice) => (
+              <div key={invoice._id} className="grid gap-3 rounded-xl border p-4 text-sm sm:grid-cols-[1fr_1fr_auto] sm:items-center" style={{ borderColor: "var(--panel-border)", background: "var(--theme-surface-soft)" }}>
+                <div className="min-w-0">
+                  <p className="truncate font-semibold">{invoice.invoiceNumber}</p>
+                  <p className="mt-1 truncate" style={{ color: "var(--text-muted)" }}>{invoice.customerId?.name || invoice.customerDetails?.name || "Customer"}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <div><p className="text-xs" style={{ color: "var(--text-muted)" }}>Amount</p><p className="font-semibold">{formatMoney(invoice.grandTotal)}</p></div>
+                  <div><p className="text-xs" style={{ color: "var(--text-muted)" }}>Due</p><p>{formatDate(invoice.dueDate)}</p></div>
+                  <div><p className="text-xs" style={{ color: "var(--text-muted)" }}>Status</p><span className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${badgeTone(invoice.paymentStatus)}`}>{invoice.paymentStatus}</span></div>
+                </div>
+                <button onClick={() => navigate("/dashboard/invoices")} className="justify-self-start text-xs font-semibold text-brand-600 sm:justify-self-end">Open</button>
+              </div>
+            ))}
+            {!data.recentInvoices.length ? <p className="rounded-xl border border-dashed p-8 text-center text-sm" style={{ borderColor: "var(--panel-border)", color: "var(--text-muted)" }}>No invoices yet. Create your first invoice to begin.</p> : null}
           </div>
         </div>
 

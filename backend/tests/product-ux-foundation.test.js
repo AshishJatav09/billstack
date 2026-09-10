@@ -278,6 +278,9 @@ test("quotation UI exposes real communication actions without pretending WhatsAp
 
   assert.match(api, /sendQuoteCommunicationRequest/);
   assert.match(api, /\/communications\/quotes\/\$\{quoteId\}\/send/);
+  assert.match(api, /downloadQuotePdfRequest/);
+  assert.match(salesLifecycle, /downloadQuotePdfRequest/);
+  assert.match(salesLifecycle, /PDF/);
   assert.match(salesLifecycle, /Send email/);
   assert.match(salesLifecycle, /WhatsApp off/);
   assert.match(salesLifecycle, /Mark sent/);
@@ -302,4 +305,22 @@ test("reports page surfaces GST and allocation-derived payment state in standard
   assert.match(reportsPage, /No pending invoice payments/);
   assert.match(reportController, /getDerivedInvoiceRows/);
   assert.match(reportController, /pendingPayment = derivedInvoices/);
+});
+
+test("dashboard recent transactions use derived payment state and avoid forced table overflow", () => {
+  const dashboardPage = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/dashboard/pages/DashboardHomePage.jsx"), "utf8");
+  const dashboardController = fs.readFileSync(path.join(__dirname, "../src/controllers/dashboard.controller.js"), "utf8");
+  const layout = fs.readFileSync(path.join(__dirname, "../../frontend/src/components/layout/DashboardLayout.jsx"), "utf8");
+  const sidebar = fs.readFileSync(path.join(__dirname, "../../frontend/src/components/layout/Sidebar.jsx"), "utf8");
+  const styles = fs.readFileSync(path.join(__dirname, "../../frontend/src/index.css"), "utf8");
+
+  assert.match(dashboardController, /recentDerivedInvoices/);
+  assert.match(dashboardController, /recentInvoices: recentDerivedInvoices/);
+  assert.match(dashboardPage, /Payment collected|Amount collected|Collection snapshot/);
+  assert.doesNotMatch(dashboardPage, /min-w-\[640px\]/);
+  assert.match(layout, /h-screen overflow-hidden/);
+  assert.match(layout, /overflow-y-auto overflow-x-hidden/);
+  assert.match(sidebar, /lg:h-screen/);
+  assert.match(sidebar, /no-scrollbar flex-1/);
+  assert.match(styles, /\*\::-webkit-scrollbar/);
 });

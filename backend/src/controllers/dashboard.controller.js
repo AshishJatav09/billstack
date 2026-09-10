@@ -194,6 +194,10 @@ const getDashboardSummary = asyncHandler(async (req, res) => {
 
   const derivedInvoices = await getDerivedInvoiceRows({ businessId, filter: {} });
   const activeInvoices = derivedInvoices.filter((invoice) => invoice.status !== "cancelled");
+  const recentDerivedInvoices = derivedInvoices
+    .slice()
+    .sort((a, b) => new Date(b.invoiceDate || b.createdAt || 0) - new Date(a.invoiceDate || a.createdAt || 0))
+    .slice(0, 5);
   const invoiceTotals = [{
     totalSales: activeInvoices.reduce((sum, invoice) => sum + Number(invoice.grandTotal || 0), 0),
     paidAmount: activeInvoices.reduce((sum, invoice) => sum + Number(invoice.amountPaid || 0), 0),
@@ -256,7 +260,7 @@ const getDashboardSummary = asyncHandler(async (req, res) => {
         pendingApprovals: pendingApprovalCount,
       },
       topSellingProducts: topSellingProductsRaw,
-      recentInvoices,
+      recentInvoices: recentDerivedInvoices,
       recentStockMovements,
       lowStockProducts,
       outOfStockProducts,

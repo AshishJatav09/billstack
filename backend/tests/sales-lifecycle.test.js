@@ -24,8 +24,15 @@ test("sales lifecycle routes enforce module and plan entitlement gates", () => {
 
 test("quote routes enforce module and plan entitlement gates", () => {
   const routeSource = fs.readFileSync(path.join(__dirname, "../src/routes/quote.routes.js"), "utf8");
+  const controllerSource = fs.readFileSync(path.join(__dirname, "../src/controllers/quote.controller.js"), "utf8");
+  const serviceSource = fs.readFileSync(path.join(__dirname, "../src/services/quote.service.js"), "utf8");
   assert.match(routeSource, /requireModule\("quotations"\)/);
   assert.match(routeSource, /requireFeature\("quotations"\)/);
+  assert.match(routeSource, /\/:quoteId\/pdf/);
+  assert.match(controllerSource, /downloadPdf/);
+  assert.match(serviceSource, /generateQuotePdf/);
+  assert.match(serviceSource, /One or more quote products are invalid/);
+  assert.doesNotMatch(serviceSource, /nextItems\.map\(\(item\) => item\.productId\.toString\(\)\)/);
 });
 
 test("credit notes and sales returns enforce immutable persistence and tenant indexes", () => {

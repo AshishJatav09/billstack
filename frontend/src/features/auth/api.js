@@ -416,6 +416,11 @@ export const getQuoteRequest = async (quoteId) => {
   return response.data.data;
 };
 
+export const downloadQuotePdfRequest = async (quoteId) => {
+  const response = await api.get(`/quotes/${quoteId}/pdf`, { responseType: "blob" });
+  return response.data;
+};
+
 export const createQuoteRequest = async (payload) => {
   const response = await api.post("/quotes", payload);
   return response.data.data;

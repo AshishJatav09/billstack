@@ -1,2 +1,17 @@
-const asyncHandler=require("../utils/asyncHandler");const service=require("../services/quote.service");
-const create=asyncHandler(async(req,res)=>res.status(201).json({data:await service.createQuote({businessId:req.tenant.businessId,userId:req.user._id,payload:req.body})}));const list=asyncHandler(async(req,res)=>res.json({data:await service.listQuotes({businessId:req.tenant.businessId})}));const detail=asyncHandler(async(req,res)=>res.json({data:await service.getQuote({businessId:req.tenant.businessId,id:req.params.quoteId})}));const status=asyncHandler(async(req,res)=>res.json({data:await service.setQuoteStatus({businessId:req.tenant.businessId,id:req.params.quoteId,status:req.body.status})}));const convert=asyncHandler(async(req,res)=>res.status(201).json({data:await service.convertQuote({businessId:req.tenant.businessId,userId:req.user._id,id:req.params.quoteId})}));const update=asyncHandler(async(req,res)=>res.json({data:await service.updateQuote({businessId:req.tenant.businessId,id:req.params.quoteId,payload:req.body})}));module.exports={create,list,detail,status,convert,update};
+const asyncHandler = require("../utils/asyncHandler");
+const service = require("../services/quote.service");
+
+const create = asyncHandler(async (req, res) => res.status(201).json({ data: await service.createQuote({ businessId: req.tenant.businessId, userId: req.user._id, payload: req.body }) }));
+const list = asyncHandler(async (req, res) => res.json({ data: await service.listQuotes({ businessId: req.tenant.businessId }) }));
+const detail = asyncHandler(async (req, res) => res.json({ data: await service.getQuote({ businessId: req.tenant.businessId, id: req.params.quoteId }) }));
+const status = asyncHandler(async (req, res) => res.json({ data: await service.setQuoteStatus({ businessId: req.tenant.businessId, id: req.params.quoteId, status: req.body.status }) }));
+const convert = asyncHandler(async (req, res) => res.status(201).json({ data: await service.convertQuote({ businessId: req.tenant.businessId, userId: req.user._id, id: req.params.quoteId }) }));
+const update = asyncHandler(async (req, res) => res.json({ data: await service.updateQuote({ businessId: req.tenant.businessId, id: req.params.quoteId, payload: req.body }) }));
+const downloadPdf = asyncHandler(async (req, res) => {
+  const buffer = await service.generateQuotePdf({ businessId: req.tenant.businessId, id: req.params.quoteId });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="quote-${req.params.quoteId}.pdf"`);
+  res.send(buffer);
+});
+
+module.exports = { create, list, detail, status, convert, update, downloadPdf };

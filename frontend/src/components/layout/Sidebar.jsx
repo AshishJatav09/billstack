@@ -165,7 +165,7 @@ const Sidebar = () => {
               </button>
             </div>
 
-            <nav className="flex-1 space-y-4 overflow-y-auto px-4 pb-6">
+            <nav className="no-scrollbar flex-1 space-y-4 overflow-y-auto px-4 pb-6">
               {moduleStatus === "loading" ? (
                 <div className="space-y-2 px-3">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--text-muted)" }}>Loading workspace</p>

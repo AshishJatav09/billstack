@@ -1,1 +1,21 @@
-const express=require("express");const c=require("../controllers/quote.controller");const auth=require("../middlewares/auth.middleware");const tenant=require("../middlewares/tenant.middleware");const {requireActiveSubscription}=require("../middlewares/subscription.middleware");const {requireModule}=require("../middlewares/module-guard.middleware");const {requireFeature}=require("../middlewares/feature-guard.middleware");const {permit}=require("../middlewares/role.middleware");const {validateObjectIdParam}=require("../middlewares/object-id.middleware");const r=express.Router();r.use(auth,tenant,requireActiveSubscription(),requireModule("quotations"),requireFeature("quotations"));r.get("/",c.list);r.get("/:quoteId",validateObjectIdParam("quoteId"),c.detail);r.post("/",permit("owner","admin","staff","accountant"),c.create);r.put("/:quoteId",validateObjectIdParam("quoteId"),permit("owner","admin","staff","accountant"),c.update);r.post("/:quoteId/status",validateObjectIdParam("quoteId"),permit("owner","admin","staff","accountant"),c.status);r.post("/:quoteId/convert",validateObjectIdParam("quoteId"),permit("owner","admin","staff","accountant"),c.convert);module.exports=r;
+const express = require("express");
+const c = require("../controllers/quote.controller");
+const auth = require("../middlewares/auth.middleware");
+const tenant = require("../middlewares/tenant.middleware");
+const { requireActiveSubscription } = require("../middlewares/subscription.middleware");
+const { requireModule } = require("../middlewares/module-guard.middleware");
+const { requireFeature } = require("../middlewares/feature-guard.middleware");
+const { permit } = require("../middlewares/role.middleware");
+const { validateObjectIdParam } = require("../middlewares/object-id.middleware");
+
+const r = express.Router();
+r.use(auth, tenant, requireActiveSubscription(), requireModule("quotations"), requireFeature("quotations"));
+r.get("/", c.list);
+r.get("/:quoteId", validateObjectIdParam("quoteId"), c.detail);
+r.get("/:quoteId/pdf", validateObjectIdParam("quoteId"), c.downloadPdf);
+r.post("/", permit("owner", "admin", "staff", "accountant"), c.create);
+r.put("/:quoteId", validateObjectIdParam("quoteId"), permit("owner", "admin", "staff", "accountant"), c.update);
+r.post("/:quoteId/status", validateObjectIdParam("quoteId"), permit("owner", "admin", "staff", "accountant"), c.status);
+r.post("/:quoteId/convert", validateObjectIdParam("quoteId"), permit("owner", "admin", "staff", "accountant"), c.convert);
+
+module.exports = r;
