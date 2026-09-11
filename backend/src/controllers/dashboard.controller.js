@@ -1,5 +1,6 @@
 const Invoice = require("../models/Invoice");
 const Expense = require("../models/Expense");
+const mongoose = require("mongoose");
 const Product = require("../models/Product");
 const Customer = require("../models/Customer");
 const StockMovement = require("../models/StockMovement");
@@ -37,6 +38,7 @@ const lastTwelveMonths = () => {
 
 const getDashboardSummary = asyncHandler(async (req, res) => {
   const businessId = req.tenant.businessId;
+  const businessObjectId = new mongoose.Types.ObjectId(businessId);
   const monthStart = startOfMonth();
   const months = lastTwelveMonths();
 
@@ -177,7 +179,7 @@ const getDashboardSummary = asyncHandler(async (req, res) => {
       .sort("name")
       .limit(8),
     Expense.aggregate([
-      { $match: { businessId, status: { $ne: "CANCELLED" } } },
+      { $match: { businessId: businessObjectId, status: { $ne: "CANCELLED" } } },
       {
         $group: {
           _id: null,
