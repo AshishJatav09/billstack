@@ -7,6 +7,7 @@ const schema = new mongoose.Schema({
   paymentDate: { type: Date, required: true, default: Date.now, immutable: true },
   paymentMethod: { type: String, trim: true, uppercase: true, default: "OTHER", immutable: true },
   referenceNumber: { type: String, trim: true, default: "", immutable: true },
+  idempotencyKey: { type: String, trim: true, default: "", immutable: true },
   customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", default: null, index: true, immutable: true },
   supplierId: { type: mongoose.Schema.Types.ObjectId, ref: "Supplier", default: null, index: true, immutable: true },
   notes: { type: String, trim: true, default: "", immutable: true },
@@ -15,5 +16,6 @@ const schema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, immutable: true },
 }, { timestamps: true });
 schema.index({ businessId: 1, paymentDate: -1, createdAt: -1 });
+schema.index({ businessId: 1, idempotencyKey: 1 }, { unique: true, partialFilterExpression: { idempotencyKey: { $type: "string", $ne: "" } } });
 schema.pre(["findOneAndUpdate", "updateOne", "updateMany"], () => { throw new Error("Payments are immutable; create a reversal instead."); });
 module.exports = mongoose.model("Payment", schema);

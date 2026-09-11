@@ -27,7 +27,7 @@ import { useEffect } from "react";
 import { authStore } from "../../store/authStore";
 import { uiStore } from "../../store/uiStore";
 import { getBusinessModulesRequest } from "../../features/auth/api";
-import { NAV_GROUPS, ROUTE_MODULES, isActiveModule, isSelfHostedWorkspace, productLabelForWorkspace, shouldShowWorkspaceNavigation } from "../../features/workspace/workspaceVisibility";
+import { NAV_GROUPS, ROUTE_MODULES, isActiveModule, isRealEstateSelfHostedWorkspace, isSelfHostedWorkspace, productLabelForWorkspace, shouldShowWorkspaceNavigation } from "../../features/workspace/workspaceVisibility";
 
 const navItems = [
   { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard, matches: ["/dashboard"], end: true, group: "core" },
@@ -45,12 +45,12 @@ const navItems = [
   { label: "Orders", to: "/dashboard/orders", icon: ClipboardList, matches: ["/dashboard/orders"], group: "operations" },
   { label: "Projects", to: "/dashboard/projects", icon: FileText, matches: ["/dashboard/projects"], group: "operations" },
   { label: "Tasks", to: "/dashboard/tasks", icon: ListChecks, matches: ["/dashboard/tasks"], group: "operations" },
-  { label: "Recurring Billing", to: "/dashboard/recurring-billing", icon: RefreshCw, matches: ["/dashboard/recurring-billing"], group: "operations" },
-  { label: "Appointments", to: "/dashboard/appointments", icon: CalendarCheck2, matches: ["/dashboard/appointments"], group: "operations" },
+  { label: "Recurring Billing", to: "/dashboard/recurring-billing", icon: RefreshCw, matches: ["/dashboard/recurring-billing"], group: "operations", realEstateLabel: "Monthly Billing" },
+  { label: "Appointments", to: "/dashboard/appointments", icon: CalendarCheck2, matches: ["/dashboard/appointments"], group: "operations", realEstateLabel: "Site Visits" },
   { label: "Documents & Approvals", to: "/dashboard/approvals", icon: FileText, matches: ["/dashboard/approvals"], group: "operations" },
   { label: "Expenses", to: "/dashboard/expenses", icon: ReceiptIndianRupee, matches: ["/dashboard/expenses"], group: "finance" },
   { label: "Reports / GST", to: "/dashboard/reports", icon: BarChart3, matches: ["/dashboard/reports"], group: "finance" },
-  { label: "Communications / WhatsApp", to: "/dashboard/communications", icon: BellRing, matches: ["/dashboard/communications"], group: "communications" },
+  { label: "Communications", to: "/dashboard/communications", icon: BellRing, matches: ["/dashboard/communications"], group: "communications" },
   { label: "Team", to: "/dashboard/team", icon: Users, matches: ["/dashboard/team"], roles: ["owner", "admin"], group: "people" },
   { label: "HR", to: "/dashboard/hr/employees", icon: Users, matches: ["/dashboard/hr/employees"], requiresHR: true, group: "people" },
   { label: "Attendance", to: "/dashboard/hr/attendance", icon: CalendarCheck2, matches: ["/dashboard/hr/attendance"], requiresHR: true, group: "people" },
@@ -116,7 +116,12 @@ const Sidebar = () => {
     items: visibleItems.filter((item) => item.group === group.key),
   })).filter((group) => group.items.length);
 
-  const labelFor = (item) => item.adaptiveLabel === "products" ? productLabelForWorkspace(moduleData) : item.label;
+  const labelFor = (item) => {
+    if (item.adaptiveLabel === "products") return productLabelForWorkspace(moduleData);
+    if (isRealEstateSelfHostedWorkspace(moduleData, business) && item.realEstateLabel) return item.realEstateLabel;
+    if (isRealEstateSelfHostedWorkspace(moduleData, business) && item.to === "/dashboard/customers") return "Clients";
+    return item.label;
+  };
 
   return (
     <>

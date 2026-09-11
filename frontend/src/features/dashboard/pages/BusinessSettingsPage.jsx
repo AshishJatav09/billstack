@@ -16,6 +16,7 @@ import {
   verifyModuleRazorpayPaymentRequest,
 } from "../../auth/api";
 import { authStore } from "../../../store/authStore";
+import { isRealEstateSelfHostedWorkspace } from "../../workspace/workspaceVisibility";
 
 const getApiOrigin = () => {
   const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
@@ -77,6 +78,7 @@ const BusinessSettingsPage = () => {
   const [moduleError, setModuleError] = useState("");
   const [manualUpiOfferId, setManualUpiOfferId] = useState("");
   const [manualUpiReference, setManualUpiReference] = useState("");
+  const isRealEstateSelfHosted = isRealEstateSelfHostedWorkspace(moduleData, business);
 
   const logoPreviewUrl = useMemo(() => {
     if (logoFile) return URL.createObjectURL(logoFile);
@@ -459,7 +461,7 @@ const BusinessSettingsPage = () => {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+          {!isRealEstateSelfHosted ? <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-white">External Integration API</p>
@@ -500,7 +502,7 @@ const BusinessSettingsPage = () => {
                 <p key={event._id} className="mt-2 text-xs text-slate-400">{event.source} · {event.externalOrderId} · {event.status}</p>
               )) : <p className="mt-2 text-xs text-slate-500">No events yet.</p>}
             </div>
-          </div>
+          </div> : null}
 
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
             <p className="text-sm font-semibold text-white">Account security</p>
@@ -512,7 +514,7 @@ const BusinessSettingsPage = () => {
             </p>
           </div>
 
-          <ModulesPanel
+          {!isRealEstateSelfHosted ? <ModulesPanel
             moduleData={moduleData}
             moduleError={moduleError}
             moduleMessage={moduleMessage}
@@ -522,7 +524,7 @@ const BusinessSettingsPage = () => {
             onDecline={handleDeclineOffer}
             onRazorpay={handleRazorpayAddon}
             onManualUpi={openManualUpi}
-          />
+          /> : null}
         </div>
       </section>
       {pendingRevokeCredential ? (

@@ -92,12 +92,12 @@ const statusTone = {
 const money = (value) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(value || 0));
 
-const formatDate = (value) => (value ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "â€”");
-const formatDateTime = (value) => (value ? new Date(value).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "â€”");
+const formatDate = (value) => (value ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—");
+const formatDateTime = (value) => (value ? new Date(value).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
 
 const Badge = ({ children }) => (
   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone[children] || "bg-slate-100 text-slate-700"}`}>
-    {String(children || "â€”").replaceAll("_", " ")}
+    {String(children || "—").replaceAll("_", " ")}
   </span>
 );
 
@@ -130,6 +130,7 @@ const WorkflowPage = () => {
   const [form, setForm] = useState({});
 
   const currentTab = visibleTabs.find((tab) => tab.key === activeTab) || tabs.find((tab) => tab.key === activeTab) || tabs[0];
+  const isRealEstateClient = isRealEstateSelfHostedWorkspace(moduleData, business);
 
   const loadData = async () => {
     setLoading(true);
@@ -333,7 +334,7 @@ const WorkflowPage = () => {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.orderNumber}</p>
-              <p className="text-sm text-slate-500">{item.customerId?.name || item.customerSnapshot?.name || "Customer"} Â· {formatDate(item.orderDate)}</p>
+              <p className="text-sm text-slate-500">{item.customerId?.name || item.customerSnapshot?.name || "Customer"} · {formatDate(item.orderDate)}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge>{item.status}</Badge>
@@ -360,7 +361,7 @@ const WorkflowPage = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.name}</p>
-              <p className="text-sm text-slate-500">{item.projectNumber} Â· {item.customerId?.name || "Internal"} Â· Due {formatDate(item.dueDate)}</p>
+              <p className="text-sm text-slate-500">{item.projectNumber} · {item.customerId?.name || "Internal"} · Due {formatDate(item.dueDate)}</p>
             </div>
             <Badge>{item.status}</Badge>
           </div>
@@ -381,7 +382,7 @@ const WorkflowPage = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.title}</p>
-              <p className="text-sm text-slate-500">{item.projectId?.name || "Standalone"} Â· {item.assignedTo?.name || "Unassigned"} Â· Due {formatDate(item.dueDate)}</p>
+              <p className="text-sm text-slate-500">{item.projectId?.name || "Standalone"} · {item.assignedTo?.name || "Unassigned"} · Due {formatDate(item.dueDate)}</p>
             </div>
             <Badge>{item.status}</Badge>
           </div>
@@ -402,7 +403,7 @@ const WorkflowPage = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.name}</p>
-              <p className="text-sm text-slate-500">{item.customerId?.name || "Customer"} Â· {item.frequency} Â· Next {formatDate(item.nextBillingDate)}</p>
+              <p className="text-sm text-slate-500">{item.customerId?.name || "Customer"} · {item.frequency} · Next {formatDate(item.nextBillingDate)}</p>
             </div>
             <Badge>{item.status}</Badge>
           </div>
@@ -426,7 +427,7 @@ const WorkflowPage = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.title}</p>
-              <p className="text-sm text-slate-500">{item.jobNumber} Ã‚Â· Output {item.outputProductId?.name || "Product"} Ã‚Â· Due {formatDate(item.dueDate)}</p>
+              <p className="text-sm text-slate-500">{item.jobNumber} · Output {item.outputProductId?.name || "Product"} · Due {formatDate(item.dueDate)}</p>
             </div>
             <Badge>{item.status}</Badge>
           </div>
@@ -445,7 +446,7 @@ const WorkflowPage = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.batchNumber}</p>
-              <p className="text-sm text-slate-500">{item.productId?.name || "Product"} Ã‚Â· Qty {item.quantityOnHand || 0} Ã‚Â· Expiry {formatDate(item.expiryDate)}</p>
+              <p className="text-sm text-slate-500">{item.productId?.name || "Product"} · Qty {item.quantityOnHand || 0} · Expiry {formatDate(item.expiryDate)}</p>
             </div>
             <Badge>{item.status}</Badge>
           </div>
@@ -465,7 +466,7 @@ const WorkflowPage = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.dispatchNumber}</p>
-              <p className="text-sm text-slate-500">{item.customerId?.name || "Customer"} Ã‚Â· {item.carrier || "Carrier pending"} Ã‚Â· {item.trackingNumber || "No tracking"}</p>
+              <p className="text-sm text-slate-500">{item.customerId?.name || "Customer"} · {item.carrier || "Carrier pending"} · {item.trackingNumber || "No tracking"}</p>
             </div>
             <Badge>{item.status}</Badge>
           </div>
@@ -485,7 +486,7 @@ const WorkflowPage = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-slate-950">{item.title}</p>
-              <p className="text-sm text-slate-500">{item.documentType || "GENERAL"} Ã‚Â· {item.sourceType || "GENERAL"} Ã‚Â· {item.approvers?.length || 0} approver(s)</p>
+              <p className="text-sm text-slate-500">{item.documentType || "GENERAL"} · {item.sourceType || "GENERAL"} · {item.approvers?.length || 0} approver(s)</p>
             </div>
             <Badge>{item.status}</Badge>
           </div>
@@ -504,7 +505,7 @@ const WorkflowPage = () => {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-lg font-bold text-slate-950">{item.title}</p>
-            <p className="text-sm text-slate-500">{item.customerId?.name || "No customer"} Â· {formatDateTime(item.startAt)} â€“ {formatDateTime(item.endAt)}</p>
+            <p className="text-sm text-slate-500">{item.customerId?.name || "No customer"} · {formatDateTime(item.startAt)} – {formatDateTime(item.endAt)}</p>
           </div>
           <Badge>{item.status}</Badge>
         </div>
@@ -524,10 +525,10 @@ const WorkflowPage = () => {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-brand-600">Reusable workflow foundation</p>
+          <p className="text-sm font-semibold text-brand-600">Business workspace</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">{currentTab.label}</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-500">
-            Generic, tenant-scoped workflows layered on BillStack&apos;s existing invoices, GST, payments, modules, roles and entitlements.
+            Manage recurring client billing and site visit activity for this workspace.
           </p>
         </div>
         <button type="button" onClick={loadData} className="btn-secondary"><RefreshCw size={16} /> Refresh</button>
@@ -557,7 +558,7 @@ const WorkflowPage = () => {
         <form onSubmit={submit} className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-2">
             <Plus size={18} className="text-brand-600" />
-            <h2 className="text-lg font-bold text-slate-950">Create {currentTab.label.replace("Recurring Billing", "Recurring Profile")}</h2>
+            <h2 className="text-lg font-bold text-slate-950">Create {currentTab.key === "recurring" ? "Monthly Billing" : currentTab.label}</h2>
           </div>
           <div className="mt-5 space-y-3">
             {["orders", "recurring", "appointments", "dispatches"].includes(activeTab) ? (
@@ -567,10 +568,10 @@ const WorkflowPage = () => {
               </select>
             ) : null}
             {["projects", "recurring", "batches", "approvals"].includes(activeTab) ? (
-              <input className="input" placeholder={activeTab === "projects" ? "Project name" : activeTab === "recurring" ? "Recurring profile name" : activeTab === "batches" ? "Batch number" : "Document title"} value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              <input className="input" placeholder={activeTab === "projects" ? "Project name" : activeTab === "recurring" ? "Profile name / description" : activeTab === "batches" ? "Batch number" : "Document title"} value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             ) : null}
             {["tasks", "appointments", "production"].includes(activeTab) ? (
-              <input className="input" placeholder={activeTab === "tasks" ? "Task title" : activeTab === "appointments" ? "Appointment title" : "Production job title"} value={form.title || ""} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
+              <input className="input" placeholder={activeTab === "tasks" ? "Task title" : activeTab === "appointments" ? "Site visit title" : "Production job title"} value={form.title || ""} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
             ) : null}
             {needsLineItem || ["production", "batches", "dispatches"].includes(activeTab) ? (
               <>
@@ -579,8 +580,8 @@ const WorkflowPage = () => {
                   {products.map((product) => <option key={product._id || product.id} value={product._id || product.id}>{product.name}</option>)}
                 </select>
                 <div className="grid grid-cols-2 gap-3">
-                  <input className="input" type="number" min="1" placeholder="Qty" value={form.quantity || ""} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
-                  <input className="input" type="number" min="0" placeholder={selectedProduct ? `Rate: ${money(selectedProduct.sellingPrice)}` : "Rate"} value={form.rate || ""} onChange={(e) => setForm({ ...form, rate: e.target.value })} />
+                  <input className="input" type="number" min="1" placeholder="Qty" aria-label="Quantity" value={form.quantity || ""} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
+                  <input className="input" type="number" min="0" placeholder={selectedProduct ? `Rate: ${money(selectedProduct.sellingPrice)}` : "Rate"} aria-label="Rate" value={form.rate || ""} onChange={(e) => setForm({ ...form, rate: e.target.value })} />
                 </div>
               </>
             ) : null}
@@ -610,11 +611,7 @@ const WorkflowPage = () => {
             ) : null}
             {activeTab === "recurring" ? (
               <select className="input" value={form.frequency || "MONTHLY"} onChange={(e) => setForm({ ...form, frequency: e.target.value })}>
-                <option value="WEEKLY">Weekly</option>
-                <option value="MONTHLY">Monthly</option>
-                <option value="QUARTERLY">Quarterly</option>
-                <option value="HALF_YEARLY">Half-yearly</option>
-                <option value="YEARLY">Yearly</option>
+                <option value="MONTHLY">Monthly</option>{!isRealEstateClient ? <option value="WEEKLY">Weekly</option> : null}{!isRealEstateClient ? <option value="QUARTERLY">Quarterly</option> : null}{!isRealEstateClient ? <option value="HALF_YEARLY">Half-yearly</option> : null}{!isRealEstateClient ? <option value="YEARLY">Yearly</option> : null}
               </select>
             ) : null}
             {activeTab === "appointments" ? (
@@ -643,7 +640,7 @@ const WorkflowPage = () => {
           <div className="grid gap-4">{renderRows()}</div>
           {activeTab === "orders" ? <p className="text-xs text-slate-500">Order invoices are created through the existing BillStack invoice engine. Stock remains governed by invoice/inventory behavior.</p> : null}
           {activeTab === "recurring" ? <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs leading-6 text-blue-800"><p className="font-semibold">How Monthly Billing works</p><p>Active profiles generate normal BillStack invoices on the next billing date. Generate now creates the current invoice once; payments are still recorded from the invoice or customer payment flow.</p></div> : null}
-          {activeTab === "appointments" ? <p className="text-xs text-slate-500">Staff overlap conflicts are blocked by the server in this foundation version.</p> : null}
+          {activeTab === "appointments" ? <p className="text-xs text-slate-500">Site visit overlap checks are handled when assigning staff.</p> : null}
           <Link to="/dashboard" className="inline-flex text-sm font-semibold text-brand-600 hover:text-brand-700">Back to dashboard</Link>
         </div>
       </div>

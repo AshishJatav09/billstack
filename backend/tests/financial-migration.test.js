@@ -6,6 +6,7 @@ const SupplierLedger = require("../src/models/SupplierLedger");
 const InvoiceLedgerEvent = require("../src/models/InvoiceLedgerEvent");
 const PaymentAllocationReversal = require("../src/models/PaymentAllocationReversal");
 const { allocationQuery, deriveFinancialState, summarizeInvoiceFinancials, documentUpdateDecision, hasFinancialChanges, legacyPaymentWriteDecision } = require("../src/services/financial-read.service");
+const { isOverdueByBusinessDate } = require("../src/utils/business-date");
 
 test("zero-payment legacy documents migrate without a synthetic payment", () => {
   const result = classifyLegacyDocument({ sourceType: "INVOICE", document: { amountPaid: 0, grandTotal: 100, status: "issued" } });
@@ -89,4 +90,10 @@ test("legacy payment writes remain compatible only for non-migrated unallocated 
   assert.equal(legacyPaymentWriteDecision({ sourceType: "INVOICE", migrated: true, allocationsExist: true, body: { paymentStatus: "paid" } }).reason, "USE_PAYMENT_WORKFLOW");
   assert.equal(legacyPaymentWriteDecision({ sourceType: "PURCHASE", migrated: true, allocationsExist: false, body: { paidAmount: 10 } }).allowed, false);
   assert.equal(legacyPaymentWriteDecision({ sourceType: "INVOICE", migrated: true, allocationsExist: true, body: { notes: "safe" } }).allowed, true);
+});
+
+test("business-date overdue logic treats due today as not overdue in India timezone", () => {
+  assert.equal(isOverdueByBusinessDate("2026-09-10T00:00:00.000Z", new Date("2026-09-10T12:00:00.000Z"), "Asia/Kolkata"), false);
+  assert.equal(isOverdueByBusinessDate("2026-09-09T00:00:00.000Z", new Date("2026-09-10T12:00:00.000Z"), "Asia/Kolkata"), true);
+  assert.equal(isOverdueByBusinessDate("2026-09-11T00:00:00.000Z", new Date("2026-09-10T12:00:00.000Z"), "Asia/Kolkata"), false);
 });

@@ -29,6 +29,9 @@ const formatMoney = (value) =>
 const formatDate = (value) =>
   value ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
+const dateKey = (value) => (value ? new Date(value).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) : "");
+const isOverdue = (dueDate) => dateKey(new Date()) > dateKey(dueDate);
+
 const badgeTone = (status) =>
   status === "paid"
     ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
@@ -133,7 +136,7 @@ const DashboardHomePage = () => {
       label: "Overdue amount",
       value: formatMoney(
         data.recentInvoices
-          .filter((invoice) => invoice.status !== "cancelled" && invoice.balanceDue > 0 && new Date(invoice.dueDate) < new Date())
+          .filter((invoice) => invoice.status !== "cancelled" && invoice.balanceDue > 0 && isOverdue(invoice.dueDate))
           .reduce((sum, invoice) => sum + invoice.balanceDue, 0)
       ),
       detail: `${metrics.overdueInvoices} past due`,

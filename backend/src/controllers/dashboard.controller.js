@@ -13,6 +13,7 @@ const RecurringBillingProfile = require("../models/RecurringBillingProfile");
 const Task = require("../models/Task");
 const asyncHandler = require("../utils/asyncHandler");
 const { getDerivedInvoiceRows } = require("../services/financial-read.service");
+const { isOverdueByBusinessDate } = require("../utils/business-date");
 
 const startOfMonth = () => {
   const date = new Date();
@@ -203,7 +204,7 @@ const getDashboardSummary = asyncHandler(async (req, res) => {
     paidAmount: activeInvoices.reduce((sum, invoice) => sum + Number(invoice.amountPaid || 0), 0),
     unpaidAmount: activeInvoices.reduce((sum, invoice) => sum + Number(invoice.balanceDue || 0), 0),
     totalInvoices: activeInvoices.length,
-    overdueInvoices: activeInvoices.filter((invoice) => invoice.balanceDue > 0 && new Date(invoice.dueDate) < new Date()).length,
+    overdueInvoices: activeInvoices.filter((invoice) => invoice.balanceDue > 0 && isOverdueByBusinessDate(invoice.dueDate)).length,
   }];
   const statusMap = new Map();
   derivedInvoices.forEach((invoice) => { const current = statusMap.get(invoice.paymentStatus) || { count: 0, amount: 0 }; current.count += 1; current.amount += Number(invoice.grandTotal || 0); statusMap.set(invoice.paymentStatus, current); });

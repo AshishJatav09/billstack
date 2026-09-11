@@ -59,6 +59,21 @@ const getClientUrl = () => (process.env.CLIENT_URL || "http://localhost:5173").s
 
 const hashResetToken = (token) => crypto.createHash("sha256").update(token).digest("hex");
 
+const resolvePasswordLoginUser = async (normalizedEmail) => {
+  const users = await User.find({ email: normalizedEmail }).sort({ createdAt: -1 }).limit(10);
+  if (!users.length) throw new AppError("Invalid credentials", 401);
+  if (users.length === 1 || getDeploymentMode() !== "SELF_HOSTED") {
+    if (users.length > 1) throw new AppError("Multiple accounts found for this email. Please contact your admin.", 409);
+    return users[0];
+  }
+
+  const businesses = await Business.find({ _id: { $in: users.map((user) => user.businessId) }, deploymentMode: "SELF_HOSTED" }).select("_id deploymentMode onboardingCompleted businessProfile");
+  const businessIds = new Set(businesses.map((business) => business._id.toString()));
+  const candidates = users.filter((user) => user.isActive && businessIds.has(user.businessId.toString()));
+  if (!candidates.length) throw new AppError("Invalid credentials", 401);
+  return candidates[0];
+};
+
 const register = asyncHandler(async (req, res) => {
   const { name, email, password, businessName } = req.body;
   const slug = await buildUniqueBusinessSlug(businessName);
@@ -111,17 +126,7 @@ const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
   const normalizedEmail = email.trim().toLowerCase();
 
-  const users = await User.find({ email: normalizedEmail }).limit(2);
-
-  if (!users.length) {
-    throw new AppError("Invalid credentials", 401);
-  }
-
-  if (users.length > 1) {
-    throw new AppError("Multiple accounts found for this email. Please contact your admin.", 409);
-  }
-
-  const user = users[0];
+  const user = await resolvePasswordLoginUser(normalizedEmail);
   let business = await Business.findById(user.businessId);
 
   if (!business) {

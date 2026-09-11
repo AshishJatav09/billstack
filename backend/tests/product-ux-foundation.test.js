@@ -129,7 +129,7 @@ test("Real Estate SELF_HOSTED workspace hides irrelevant operational modules fro
   assert.match(visibility, /"inventory"/);
   assert.match(visibility, /"suppliers"/);
   assert.match(visibility, /"purchases"/);
-  assert.match(visibility, /"appointments_scheduling"/);
+  assert.doesNotMatch(visibility.match(/REAL_ESTATE_CLIENT_HIDDEN_NAV_MODULES[\s\S]*?\]\);/)?.[0] || "", /"appointments_scheduling"/);
   assert.match(visibility, /"production_job_work"/);
   assert.match(sidebar, /shouldShowWorkspaceNavigation/);
   assert.match(dashboard, /shouldShowDashboardSurface/);

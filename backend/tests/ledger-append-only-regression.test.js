@@ -130,6 +130,17 @@ test("payment allocation ledger events do not reuse paymentId unique key", () =>
   assert.doesNotMatch(allocationEntry, /paymentId: payment\._id/);
 });
 
+test("payment creation does not create customer ledger credits before allocation", () => {
+  const paymentService = src("services", "payment.service.js");
+  const createPaymentBlock = paymentService.match(/const createPayment = async[\s\S]*?const allocatePayment = async/)?.[0] || "";
+
+  assert.doesNotMatch(createPaymentBlock, /CustomerLedger\.create/);
+  assert.doesNotMatch(createPaymentBlock, /SupplierLedger\.create/);
+  assert.doesNotMatch(createPaymentBlock, /createCustomerLedgerEntryOnce/);
+  assert.doesNotMatch(createPaymentBlock, /createSupplierLedgerEntryOnce/);
+  assert.match(createPaymentBlock, /idempotencyKey/);
+});
+
 test("sales lifecycle UI guards duplicate mutations and de-duplicates identical toasts", () => {
   const page = fs.readFileSync(path.join(__dirname, "..", "..", "frontend", "src", "features", "dashboard", "pages", "SalesLifecyclePage.jsx"), "utf8");
   const store = fs.readFileSync(path.join(__dirname, "..", "..", "frontend", "src", "store", "uiStore.js"), "utf8");

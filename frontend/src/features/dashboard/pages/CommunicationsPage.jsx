@@ -74,10 +74,18 @@ const generatedRuleName = (form) => {
   if (form.trigger === "AFTER_DUE_DATE") return `${days} ${days === 1 ? "day" : "days"} after due date`;
   return `Every ${repeat} ${repeat === 1 ? "day" : "days"} after overdue`;
 };
+const defaultCategoryForTrigger = (trigger, currentCategory = "PAYMENT_REMINDER") => {
+  if (trigger === "INVOICE_ISSUED") return "INVOICE_CREATED";
+  if (trigger === "PAYMENT_RECORDED") return "PAYMENT_RECEIVED";
+  if (trigger === "ON_DUE_DATE") return "DUE_TODAY";
+  if (trigger === "AFTER_DUE_DATE" || trigger === "RECURRING_OVERDUE") return "PAYMENT_OVERDUE";
+  if (trigger === "BEFORE_DUE_DATE") return "PAYMENT_REMINDER";
+  return currentCategory;
+};
 const normalizeRuleFormForType = (current, trigger) => ({
   ...current,
   trigger,
-  category: trigger === "INVOICE_ISSUED" ? "INVOICE_CREATED" : trigger === "PAYMENT_RECORDED" ? "PAYMENT_RECEIVED" : current.category,
+  category: defaultCategoryForTrigger(trigger, current.category),
   isEnabled: trigger === "INVOICE_ISSUED" || trigger === "PAYMENT_RECORDED" ? false : current.isEnabled,
   offsetDays: trigger === "ON_DUE_DATE" || trigger === "RECURRING_OVERDUE" || trigger === "INVOICE_ISSUED" || trigger === "PAYMENT_RECORDED" ? 0 : current.offsetDays || 1,
   repeatEveryDays: trigger === "RECURRING_OVERDUE" ? current.repeatEveryDays || 1 : 0,
@@ -102,7 +110,7 @@ const ruleToForm = (rule = {}) => {
     offsetDays: rule.offsetDays ?? (trigger === "BEFORE_DUE_DATE" ? 3 : 0),
     repeatEveryDays: rule.repeatEveryDays ?? 0,
     channel: channel || "EMAIL",
-    category: rule.category || (trigger === "INVOICE_ISSUED" ? "INVOICE_CREATED" : trigger === "PAYMENT_RECORDED" ? "PAYMENT_RECEIVED" : "PAYMENT_OVERDUE"),
+    category: rule.category || defaultCategoryForTrigger(trigger),
     condition: rule.condition || "ANY_PAYMENT",
     templateId: typeof rule.templateId === "object" ? rule.templateId?._id || "" : rule.templateId || "",
     sendTime: rule.sendTime || (isEventTrigger(trigger) ? "" : "10:00"),

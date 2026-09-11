@@ -15,6 +15,7 @@ const paymentCreateValidator = (body) => {
   if (body.currency && !/^[A-Za-z]{3}$/.test(body.currency)) errors.currency = "Currency must be a three-letter ISO code";
   if (body.paymentDate && Number.isNaN(Date.parse(body.paymentDate))) errors.paymentDate = "Payment date is invalid";
   if (body.status && String(body.status).toUpperCase() !== "POSTED") errors.status = "New payments can only be POSTED";
+  if (body.idempotencyKey && String(body.idempotencyKey).length > 120) errors.idempotencyKey = "Idempotency key is too long";
   return { valid: Object.keys(errors).length === 0, errors };
 };
 const paymentAllocationValidator = (body) => {

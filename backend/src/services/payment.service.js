@@ -1,11 +1,11 @@
 const mongoose = require("mongoose");
 const Customer = require("../models/Customer");
-const CustomerLedger = require("../models/CustomerLedger");
 const Invoice = require("../models/Invoice");
 const Payment = require("../models/Payment");
 const PaymentAllocation = require("../models/PaymentAllocation");
 const Purchase = require("../models/Purchase");
 const Supplier = require("../models/Supplier");
+const CustomerLedger = require("../models/CustomerLedger");
 const SupplierLedger = require("../models/SupplierLedger");
 const PaymentAllocationReversal = require("../models/PaymentAllocationReversal");
 const AppError = require("../utils/appError");
@@ -14,9 +14,18 @@ const { log } = require("../utils/logger");
 const { dispatchPaymentRecordedAutomation } = require("./communication.service");
 const { createCustomerLedgerEntryOnce, createSupplierLedgerEntryOnce } = require("./ledger.service");
 
-const sumAmounts = (rows) => rows.reduce((sum, row) => sum + toMinorUnits(row.allocatedAmount), 0);
 const netDocumentAllocations = async ({ businessId, documentKey, documentId, session }) => {
   const allocations = await PaymentAllocation.find({ businessId, [documentKey]: documentId }).session(session).select("_id allocatedAmount");
+  const reversals = await PaymentAllocationReversal.find({ businessId, allocationId: { $in: allocations.map((row) => row._id) } }).session(session).select("allocationId amount");
+  const reversedByAllocation = reversals.reduce((map, row) => {
+    const key = row.allocationId.toString();
+    map.set(key, (map.get(key) || 0) + toMinorUnits(row.amount, "Reversal amount", { allowZero: true }));
+    return map;
+  }, new Map());
+  return allocations.reduce((sum, row) => Math.max(toMinorUnits(row.allocatedAmount, "Allocated amount", { allowZero: true }) - (reversedByAllocation.get(row._id.toString()) || 0), 0) + sum, 0);
+};
+const netPaymentAllocations = async ({ businessId, paymentId, session }) => {
+  const allocations = await PaymentAllocation.find({ businessId, paymentId }).session(session).select("_id allocatedAmount");
   const reversals = await PaymentAllocationReversal.find({ businessId, allocationId: { $in: allocations.map((row) => row._id) } }).session(session).select("allocationId amount");
   const reversedByAllocation = reversals.reduce((map, row) => {
     const key = row.allocationId.toString();
@@ -37,8 +46,6 @@ const validateReversalRequest = ({ allocationAmount, alreadyReversed, requestedA
   if (toMinorUnits(requested) > toMinorUnits(allocationAmount)) throw new AppError("Reversal exceeds allocated amount", 400);
   return requested;
 };
-const paymentAllocations = (paymentId, session) => PaymentAllocation.find({ paymentId }).session(session).select("allocatedAmount");
-
 const createPayment = async ({ businessId, userId, payload }) => {
   const direction = String(payload.direction || "").toUpperCase();
   if (!["RECEIVED", "PAID"].includes(direction)) throw new AppError("Payment direction must be RECEIVED or PAID", 400);
@@ -46,17 +53,26 @@ const createPayment = async ({ businessId, userId, payload }) => {
   if (direction === "RECEIVED" && !payload.customerId) throw new AppError("A received payment requires a customer", 400);
   if (direction === "PAID" && !payload.supplierId) throw new AppError("A paid payment requires a supplier", 400);
   const amount = fromMinorUnits(toMinorUnits(payload.amount));
+  const idempotencyKey = String(payload.idempotencyKey || "").trim();
+  if (idempotencyKey) {
+    const existing = await Payment.findOne({ businessId, idempotencyKey });
+    if (existing) return existing;
+  }
   const session = await mongoose.startSession();
   try {
     let payment;
     await session.withTransaction(async () => {
       if (payload.customerId && !(await Customer.findOne({ _id: payload.customerId, businessId }).session(session))) throw new AppError("Customer not found", 404);
       if (payload.supplierId && !(await Supplier.findOne({ _id: payload.supplierId, businessId }).session(session))) throw new AppError("Supplier not found", 404);
-      [payment] = await Payment.create([{ businessId, direction, amount, currency: payload.currency || "INR", paymentDate: payload.paymentDate ? new Date(payload.paymentDate) : new Date(), paymentMethod: payload.paymentMethod || "OTHER", referenceNumber: payload.referenceNumber || "", customerId: payload.customerId || null, supplierId: payload.supplierId || null, notes: payload.notes || "", createdBy: userId }], { session });
-      if (payment.customerId) await CustomerLedger.create([{ businessId, customerId: payment.customerId, eventType: "PAYMENT", amount, direction: "CREDIT", paymentId: payment._id, referenceNumber: payment.referenceNumber, notes: payment.notes, createdBy: userId }], { session });
-      if (payment.supplierId) await SupplierLedger.create([{ businessId, supplierId: payment.supplierId, eventType: "PAYMENT", amount, direction: "CREDIT", paymentId: payment._id, referenceNumber: payment.referenceNumber, notes: payment.notes, createdBy: userId }], { session });
+      [payment] = await Payment.create([{ businessId, direction, amount, currency: payload.currency || "INR", paymentDate: payload.paymentDate ? new Date(payload.paymentDate) : new Date(), paymentMethod: payload.paymentMethod || "OTHER", referenceNumber: payload.referenceNumber || "", idempotencyKey, customerId: payload.customerId || null, supplierId: payload.supplierId || null, notes: payload.notes || "", createdBy: userId }], { session });
     });
     return payment;
+  } catch (error) {
+    if (idempotencyKey && error?.code === 11000) {
+      const existing = await Payment.findOne({ businessId, idempotencyKey });
+      if (existing) return existing;
+    }
+    throw error;
   } finally { session.endSession(); }
 };
 
@@ -70,7 +86,7 @@ const allocatePayment = async ({ businessId, userId, paymentId, payload }) => {
     await session.withTransaction(async () => {
       const payment = await Payment.findOne({ _id: paymentId, businessId, status: "POSTED" }).session(session);
       if (!payment) throw new AppError("Payment not found", 404);
-      const used = sumAmounts(await paymentAllocations(payment._id, session));
+      const used = await netPaymentAllocations({ businessId, paymentId: payment._id, session });
       if (toMinorUnits(payment.amount) - used < toMinorUnits(amount)) throw new AppError("Allocation exceeds available payment amount", 400);
       if (invoiceId) {
         if (payment.direction !== "RECEIVED") throw new AppError("Only received payments can be allocated to invoices", 400);

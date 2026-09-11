@@ -8,6 +8,7 @@ const SalesReturn = require("../models/SalesReturn");
 const { getDerivedInvoiceRows } = require("../services/financial-read.service");
 const asyncHandler = require("../utils/asyncHandler");
 const AppError = require("../utils/appError");
+const { isOverdueByBusinessDate } = require("../utils/business-date");
 const { listCustomerLedger } = require("../services/payment.service");
 const {
   buildCustomerStatement,
@@ -72,7 +73,7 @@ const getCustomerById = asyncHandler(async (req, res) => {
     totalInvoiced: invoices.reduce((sum, invoice) => sum + Number(invoice.grandTotal || 0), 0),
     totalCollected: invoices.reduce((sum, invoice) => sum + Number(invoice.amountPaid || 0), 0),
     outstanding: invoices.reduce((sum, invoice) => sum + Number(invoice.balanceDue || 0), 0),
-    overdue: invoices.filter((invoice) => invoice.balanceDue > 0 && new Date(invoice.dueDate) < new Date()).reduce((sum, invoice) => sum + Number(invoice.balanceDue || 0), 0),
+    overdue: invoices.filter((invoice) => invoice.balanceDue > 0 && isOverdueByBusinessDate(invoice.dueDate)).reduce((sum, invoice) => sum + Number(invoice.balanceDue || 0), 0),
     reconciliationMismatches: invoices.filter((invoice) => invoice.financialRead?.reconciliation?.status === "MISMATCH").length,
   };
   res.status(200).json({

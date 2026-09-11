@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { toMinorUnits, fromMinorUnits } = require("../src/utils/money");
+const { deriveFinancialState } = require("../src/services/financial-read.service");
 const { createPayment, allocatePayment, validateAllocationCounterparty, validateReversalRequest } = require("../src/services/payment.service");
 const { paymentCreateValidator } = require("../src/validators/payment.validation");
 
@@ -52,4 +53,45 @@ test("allocation reversal rejects duplicates and over-reversal while preserving 
   assert.equal(validateReversalRequest({ allocationAmount: 100, alreadyReversed: false, requestedAmount: 40 }), 40);
   assert.throws(() => validateReversalRequest({ allocationAmount: 100, alreadyReversed: true, requestedAmount: 40 }), /already been reversed/);
   assert.throws(() => validateReversalRequest({ allocationAmount: 100, alreadyReversed: false, requestedAmount: 101 }), /exceeds allocated/);
+});
+
+test("invoice payment lifecycle derives partial, final paid, and never negative balances", () => {
+  const invoice = { grandTotal: 1180, amountPaid: 0, balanceDue: 1180, paymentStatus: "unpaid" };
+  const first = deriveFinancialState({ sourceType: "INVOICE", document: invoice, migrated: true, allocatedAmount: 400 });
+  assert.equal(first.paidAmount, 400);
+  assert.equal(first.outstandingAmount, 780);
+  assert.equal(first.paymentStatus, "partial");
+
+  const second = deriveFinancialState({ sourceType: "INVOICE", document: invoice, migrated: true, allocatedAmount: 700 });
+  assert.equal(second.paidAmount, 700);
+  assert.equal(second.outstandingAmount, 480);
+  assert.equal(second.paymentStatus, "partial");
+
+  const final = deriveFinancialState({ sourceType: "INVOICE", document: invoice, migrated: true, allocatedAmount: 1180 });
+  assert.equal(final.paidAmount, 1180);
+  assert.equal(final.outstandingAmount, 0);
+  assert.equal(final.paymentStatus, "paid");
+
+  const over = deriveFinancialState({ sourceType: "INVOICE", document: invoice, migrated: true, allocatedAmount: 1280 });
+  assert.equal(over.paidAmount, 1180);
+  assert.equal(over.outstandingAmount, 0);
+  assert.equal(over.paymentStatus, "paid");
+});
+
+test("payment creation supports idempotency key validation", () => {
+  const result = paymentCreateValidator({
+    direction: "RECEIVED",
+    amount: 400,
+    customerId: "64f000000000000000000001",
+    idempotencyKey: "invoice-1180-payment-400-submit-1",
+  });
+  assert.equal(result.valid, true);
+  const invalid = paymentCreateValidator({
+    direction: "RECEIVED",
+    amount: 400,
+    customerId: "64f000000000000000000001",
+    idempotencyKey: "x".repeat(121),
+  });
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.errors.idempotencyKey);
 });
