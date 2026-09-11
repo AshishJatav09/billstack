@@ -177,7 +177,7 @@ const getDashboardSummary = asyncHandler(async (req, res) => {
       .sort("name")
       .limit(8),
     Expense.aggregate([
-      { $match: { businessId, status: { $ne: "CANCELLED" }, expenseDate: { $gte: monthStart } } },
+      { $match: { businessId, status: { $ne: "CANCELLED" } } },
       { $group: { _id: null, totalExpenses: { $sum: "$totalAmount" }, paidExpenses: { $sum: "$paidAmount" }, unpaidExpenses: { $sum: "$balanceAmount" }, gstRecorded: { $sum: "$taxAmount" } } },
     ]),
     Customer.countDocuments({ businessId }),
@@ -237,10 +237,12 @@ const getDashboardSummary = asyncHandler(async (req, res) => {
         lowStockProducts: lowStockProducts.length,
         outOfStockProducts: outOfStockProducts.length,
         monthlyExpenses: monthlyExpensesRaw[0]?.totalExpenses || 0,
+        paidExpenses: monthlyExpensesRaw[0]?.paidExpenses || 0,
+        unpaidExpenses: monthlyExpensesRaw[0]?.unpaidExpenses || 0,
         monthlyPaidExpenses: monthlyExpensesRaw[0]?.paidExpenses || 0,
         monthlyUnpaidExpenses: monthlyExpensesRaw[0]?.unpaidExpenses || 0,
         monthlyExpenseGstRecorded: monthlyExpensesRaw[0]?.gstRecorded || 0,
-        netOperatingDifference: monthlyRevenue - (monthlyExpensesRaw[0]?.paidExpenses || 0),
+        netOperatingDifference: (invoiceTotals[0]?.totalSales || 0) - (monthlyExpensesRaw[0]?.paidExpenses || 0),
         activeOrders: activeOrderCount,
         processingOrders: processingOrderCount,
         overdueTasks: overdueTaskCount,

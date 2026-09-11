@@ -130,7 +130,7 @@ const DashboardHomePage = () => {
       tone: "text-brand-600 dark:text-brand-300",
     },
     { label: "Payment collected", value: formatMoney(metrics.paidAmount), detail: "Recorded received payments", tone: "text-emerald-600 dark:text-emerald-300" },
-    { label: "Net after expenses", value: formatMoney(metrics.netOperatingDifference), detail: `${formatMoney(metrics.monthlyPaidExpenses)} paid expenses cut`, tone: "text-slate-900 dark:text-slate-100" },
+    { label: "Net after expenses", value: formatMoney(metrics.netOperatingDifference), detail: `${formatMoney(metrics.paidExpenses || metrics.monthlyPaidExpenses)} paid expenses cut`, tone: "text-slate-900 dark:text-slate-100" },
     { label: "Receivables", value: formatMoney(metrics.unpaidAmount), detail: "Awaiting collection", tone: "text-amber-600 dark:text-amber-300" },
     {
       label: "Overdue amount",

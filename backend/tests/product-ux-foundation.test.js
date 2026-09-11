@@ -323,10 +323,11 @@ test("dashboard recent transactions use derived payment state and avoid forced t
   assert.match(dashboardController, /recentDerivedInvoices/);
   assert.match(dashboardController, /recentInvoices: recentDerivedInvoices/);
   assert.match(dashboardController, /paidExpenses/);
-  assert.match(dashboardController, /netOperatingDifference: monthlyRevenue - \(monthlyExpensesRaw\[0\]\?\.paidExpenses \|\| 0\)/);
+  assert.match(dashboardController, /paidExpenses: monthlyExpensesRaw\[0\]\?\.paidExpenses \|\| 0/);
+  assert.match(dashboardController, /netOperatingDifference: \(invoiceTotals\[0\]\?\.totalSales \|\| 0\) - \(monthlyExpensesRaw\[0\]\?\.paidExpenses \|\| 0\)/);
   assert.match(dashboardPage, /Payment collected|Amount collected|Collection snapshot/);
   assert.match(dashboardPage, /Net after expenses/);
-  assert.match(dashboardPage, /monthlyPaidExpenses/);
+  assert.match(dashboardPage, /paidExpenses \|\| metrics\.monthlyPaidExpenses/);
   assert.doesNotMatch(dashboardPage, /min-w-\[640px\]/);
   assert.match(layout, /h-screen overflow-hidden/);
   assert.match(layout, /overflow-y-auto overflow-x-hidden/);
@@ -359,4 +360,6 @@ test("dashboard actions render the relevant invoice flow and invoice editor avoi
   assert.doesNotMatch(invoicePage, /min-w-\[960px\]/);
   assert.doesNotMatch(dashboardPage, /Site visits/);
   assert.match(styles, /\.bg-brand-600[\s\S]*color: #ffffff !important/);
+  assert.match(styles, /:root\[data-theme="light"\] \.text-white\.bg-brand-600/);
+  assert.doesNotMatch(invoicePage, /No contact details recorded/);
 });
