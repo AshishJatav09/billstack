@@ -153,7 +153,7 @@ const applyWorkflowInvoiceStockDeduction = async ({ business, businessId, invoic
 
   for (const item of lineItems) {
     const product = productMap.get(String(item.productId));
-    if (!product) throw new AppError("Invoice product not found", 400);
+    if (!product) continue;
     if (!product.trackInventory) continue;
 
     const quantity = Number(item.quantity || 0);

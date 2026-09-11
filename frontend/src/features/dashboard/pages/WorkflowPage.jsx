@@ -630,10 +630,10 @@ const WorkflowPage = () => {
         </form>
 
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="relative min-w-[240px] flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input className="input pl-9" placeholder={`Search ${currentTab.label.toLowerCase()}`} value={query} onChange={(e) => setQuery(e.target.value)} />
+          <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <div className="relative min-w-0">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input className="input w-full pl-10" placeholder={`Search ${currentTab.label.toLowerCase()}`} value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
             <span className="text-sm font-medium text-slate-500">{filtered.length} records</span>
           </div>
