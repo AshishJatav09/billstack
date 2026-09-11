@@ -122,6 +122,10 @@ const DashboardHomePage = () => {
   const checklist = data.onboardingChecklist || [];
   const completedChecklist = checklist.filter((item) => item.complete).length;
   const remainingChecklist = checklist.length - completedChecklist;
+  const paidExpenses = Number(metrics.paidExpenses ?? metrics.monthlyPaidExpenses ?? 0);
+  const netAfterExpenses = Number.isFinite(Number(metrics.netOperatingDifference))
+    ? Number(metrics.netOperatingDifference)
+    : Number(metrics.totalSales || 0) - paidExpenses;
   const kpis = [
     {
       label: "Total sales",
@@ -130,7 +134,7 @@ const DashboardHomePage = () => {
       tone: "text-brand-600 dark:text-brand-300",
     },
     { label: "Payment collected", value: formatMoney(metrics.paidAmount), detail: "Recorded received payments", tone: "text-emerald-600 dark:text-emerald-300" },
-    { label: "Net after expenses", value: formatMoney(metrics.netOperatingDifference), detail: `${formatMoney(metrics.paidExpenses || metrics.monthlyPaidExpenses)} paid expenses cut`, tone: "text-slate-900 dark:text-slate-100" },
+    { label: "Net after expenses", value: formatMoney(netAfterExpenses), detail: `${formatMoney(paidExpenses)} paid expenses cut`, tone: "text-slate-900 dark:text-slate-100" },
     { label: "Receivables", value: formatMoney(metrics.unpaidAmount), detail: "Awaiting collection", tone: "text-amber-600 dark:text-amber-300" },
     {
       label: "Overdue amount",

@@ -178,7 +178,41 @@ const getDashboardSummary = asyncHandler(async (req, res) => {
       .limit(8),
     Expense.aggregate([
       { $match: { businessId, status: { $ne: "CANCELLED" } } },
-      { $group: { _id: null, totalExpenses: { $sum: "$totalAmount" }, paidExpenses: { $sum: "$paidAmount" }, unpaidExpenses: { $sum: "$balanceAmount" }, gstRecorded: { $sum: "$taxAmount" } } },
+      {
+        $group: {
+          _id: null,
+          totalExpenses: { $sum: "$totalAmount" },
+          paidExpenses: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ["$paymentStatus", "PAID"] },
+                    { $lte: [{ $ifNull: ["$paidAmount", 0] }, 0] },
+                  ],
+                },
+                "$totalAmount",
+                { $ifNull: ["$paidAmount", 0] },
+              ],
+            },
+          },
+          unpaidExpenses: {
+            $sum: {
+              $cond: [
+                { $eq: ["$paymentStatus", "PAID"] },
+                0,
+                {
+                  $ifNull: [
+                    "$balanceAmount",
+                    { $max: [{ $subtract: ["$totalAmount", { $ifNull: ["$paidAmount", 0] }] }, 0] },
+                  ],
+                },
+              ],
+            },
+          },
+          gstRecorded: { $sum: "$taxAmount" },
+        },
+      },
     ]),
     Customer.countDocuments({ businessId }),
     Product.countDocuments({ businessId }),
