@@ -77,7 +77,8 @@ body {
   display: none;
 }
 
-.field {
+.field,
+.input {
   width: 100%;
   border: 1px solid var(--panel-border);
   border-radius: 0.75rem;
@@ -87,9 +88,37 @@ body {
   font-size: 0.875rem;
 }
 
-.field:focus {
+.field::placeholder,
+.input::placeholder {
+  color: #94a3b8;
+}
+
+.field:focus,
+.input:focus {
   outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
   outline-offset: 1px;
+}
+
+.btn-primary,
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  padding: 0.65rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.btn-primary {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.btn-secondary {
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+  color: var(--text-primary);
 }
 
 :root[data-theme="light"] .bg-slate-950,

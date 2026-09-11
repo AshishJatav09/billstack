@@ -130,6 +130,7 @@ const DashboardHomePage = () => {
       tone: "text-brand-600 dark:text-brand-300",
     },
     { label: "Payment collected", value: formatMoney(metrics.paidAmount), detail: "Recorded received payments", tone: "text-emerald-600 dark:text-emerald-300" },
+    { label: "Net after expenses", value: formatMoney(metrics.netOperatingDifference), detail: `${formatMoney(metrics.monthlyPaidExpenses)} paid expenses cut`, tone: "text-slate-900 dark:text-slate-100" },
     { label: "Receivables", value: formatMoney(metrics.unpaidAmount), detail: "Awaiting collection", tone: "text-amber-600 dark:text-amber-300" },
     {
       label: "Overdue amount",
@@ -180,7 +181,7 @@ const DashboardHomePage = () => {
         </button>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {kpis.map((item) => (
           <div key={item.label} className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
             <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>

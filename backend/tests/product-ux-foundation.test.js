@@ -129,7 +129,7 @@ test("Real Estate SELF_HOSTED workspace hides irrelevant operational modules fro
   assert.match(visibility, /"inventory"/);
   assert.match(visibility, /"suppliers"/);
   assert.match(visibility, /"purchases"/);
-  assert.doesNotMatch(visibility.match(/REAL_ESTATE_CLIENT_HIDDEN_NAV_MODULES[\s\S]*?\]\);/)?.[0] || "", /"appointments_scheduling"/);
+  assert.match(visibility.match(/REAL_ESTATE_CLIENT_HIDDEN_NAV_MODULES[\s\S]*?\]\);/)?.[0] || "", /"appointments_scheduling"/);
   assert.match(visibility, /"production_job_work"/);
   assert.match(sidebar, /shouldShowWorkspaceNavigation/);
   assert.match(dashboard, /shouldShowDashboardSurface/);
@@ -271,7 +271,7 @@ test("Real Estate handover UI hides inactive sales/workflow tabs and dead search
   assert.match(salesLifecycle, /listCreditNotesRequest\(\) : Promise\.resolve\(\[\]\)/);
   assert.match(workflow, /visibleTabs/);
   assert.match(workflow, /Monthly Billing/);
-  assert.match(workflow, /Site Visits/);
+  assert.match(workflow, /Manage monthly client billing for this workspace/);
   assert.match(workflow, /allowedTabs/);
   assert.match(workflow, /shouldShowWorkspaceNavigation/);
   assert.doesNotMatch(navbar, /Search coming soon/);
@@ -322,7 +322,11 @@ test("dashboard recent transactions use derived payment state and avoid forced t
 
   assert.match(dashboardController, /recentDerivedInvoices/);
   assert.match(dashboardController, /recentInvoices: recentDerivedInvoices/);
+  assert.match(dashboardController, /paidExpenses/);
+  assert.match(dashboardController, /netOperatingDifference: monthlyRevenue - \(monthlyExpensesRaw\[0\]\?\.paidExpenses \|\| 0\)/);
   assert.match(dashboardPage, /Payment collected|Amount collected|Collection snapshot/);
+  assert.match(dashboardPage, /Net after expenses/);
+  assert.match(dashboardPage, /monthlyPaidExpenses/);
   assert.doesNotMatch(dashboardPage, /min-w-\[640px\]/);
   assert.match(layout, /h-screen overflow-hidden/);
   assert.match(layout, /overflow-y-auto overflow-x-hidden/);

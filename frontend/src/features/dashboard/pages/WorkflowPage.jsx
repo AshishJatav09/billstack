@@ -116,7 +116,7 @@ const WorkflowPage = () => {
   const visibleTabs = useMemo(() => tabs
     .filter((tab) => isActiveModule(moduleData, tab.moduleKey) && shouldShowWorkspaceNavigation(tab.moduleKey, moduleData, business))
     .map((tab) => ({ ...tab, label: isRealEstateSelfHostedWorkspace(moduleData, business) ? tab.realEstateLabel : tab.label })), [moduleData, business]);
-  const activeTab = (visibleTabs.find((tab) => tab.path === location.pathname) || visibleTabs[0] || tabs.find((tab) => tab.path === location.pathname) || tabs[0]).key;
+  const activeTab = (visibleTabs.find((tab) => tab.path === location.pathname) || visibleTabs[0] || tabs[0]).key;
   const [data, setData] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
@@ -528,7 +528,7 @@ const WorkflowPage = () => {
           <p className="text-sm font-semibold text-brand-600">Business workspace</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">{currentTab.label}</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-500">
-            Manage recurring client billing and site visit activity for this workspace.
+            {isRealEstateClient ? "Manage monthly client billing for this workspace." : "Manage reusable workflow activity for this workspace."}
           </p>
         </div>
         <button type="button" onClick={loadData} className="btn-secondary"><RefreshCw size={16} /> Refresh</button>
@@ -554,7 +554,7 @@ const WorkflowPage = () => {
       {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-medium text-rose-700">{error}</div> : null}
       {success ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">{success}</div> : null}
 
-      <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
+      <div className="grid gap-5 xl:grid-cols-[380px_1fr]">
         <form onSubmit={submit} className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-2">
             <Plus size={18} className="text-brand-600" />
@@ -623,7 +623,7 @@ const WorkflowPage = () => {
             {activeTab === "projects" || activeTab === "tasks" || activeTab === "production" ? (
               <input className="input" type="date" value={form.dueDate || ""} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
             ) : null}
-            <button type="submit" disabled={saving} className="btn-primary w-full justify-center">
+            <button type="submit" disabled={saving} className="btn-primary mt-2 w-full justify-center">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus size={16} />} Save
             </button>
           </div>
