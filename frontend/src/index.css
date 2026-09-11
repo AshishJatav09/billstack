@@ -138,6 +138,22 @@ body {
   color: var(--theme-text-strong) !important;
 }
 
+.bg-brand-600,
+.bg-brand-700,
+.bg-emerald-600,
+.bg-rose-600,
+.btn-primary {
+  color: #ffffff !important;
+}
+
+.bg-brand-600 svg,
+.bg-brand-700 svg,
+.bg-emerald-600 svg,
+.bg-rose-600 svg,
+.btn-primary svg {
+  color: #ffffff !important;
+}
+
 .theme-hero {
   border: 1px solid var(--theme-border-soft);
   background:

@@ -133,7 +133,7 @@ test("Real Estate SELF_HOSTED workspace hides irrelevant operational modules fro
   assert.match(visibility, /"production_job_work"/);
   assert.match(sidebar, /shouldShowWorkspaceNavigation/);
   assert.match(dashboard, /shouldShowDashboardSurface/);
-  assert.match(dashboard, /New site visit/);
+  assert.doesNotMatch(dashboard, /New site visit/);
   assert.match(dashboard, /Monthly billing due/);
 });
 

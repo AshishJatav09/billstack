@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useLocation } from "react-router-dom";
 import { CheckCircle2, CircleAlert, Download, FilePlus2, Mail, MoreHorizontal, Pencil, Plus, Printer, Search, Send, Trash2, X } from "lucide-react";
 import { allocatePaymentRequest, cancelInvoiceRequest, createCustomerRequest, createInvoiceRequest, createPaymentRequest, createProductRequest, dashboardSummaryRequest, downloadInvoicePdfRequest, emailInvoiceRequest, listCustomersRequest, listInvoicesRequest, listProductsRequest, sendInvoiceCommunicationRequest, updateInvoiceRequest } from "../../auth/api";
 import { uiStore } from "../../../store/uiStore";
@@ -29,6 +30,7 @@ const eInvoiceInfo = (invoice) => {
 };
 
 const InvoicesPage = () => {
+  const location = useLocation();
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
   const [filters, setFilters] = useState({ page: 1, limit: 10, search: "", paymentStatus: "", status: "", sortBy: "invoiceDate", sortOrder: "desc" });
@@ -55,6 +57,17 @@ const InvoicesPage = () => {
   const [paymentTarget, setPaymentTarget] = useState(null);
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentError, setPaymentError] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("action") === "create") {
+      setEditingId("");
+      setForm(makeForm());
+      setErrors({});
+      setPostIssue(null);
+      setShowEditor(true);
+    }
+  }, [location.search]);
 
   const selectedCustomer = customers.find((customer) => customer._id === form.customerId);
   const totals = useMemo(() => {
