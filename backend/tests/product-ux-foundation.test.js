@@ -335,3 +335,18 @@ test("customer workspace uses dropdown selection and latest invoice balance befo
   assert.match(customersPage, /latestAllowedPaise/);
   assert.match(customersPage, /already paid or has no available outstanding balance/);
 });
+
+test("dashboard actions render the relevant invoice flow and invoice editor avoids horizontal clipping", () => {
+  const dashboardPage = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/dashboard/pages/DashboardHomePage.jsx"), "utf8");
+  const invoicePage = fs.readFileSync(path.join(__dirname, "../../frontend/src/features/dashboard/pages/InvoicesPage.jsx"), "utf8");
+  const styles = fs.readFileSync(path.join(__dirname, "../../frontend/src/index.css"), "utf8");
+
+  assert.match(dashboardPage, /\/dashboard\/invoices\?action=create/);
+  assert.match(invoicePage, /new URLSearchParams\(location\.search\)/);
+  assert.match(invoicePage, /invoice-editor/);
+  assert.match(invoicePage, /scrollIntoView/);
+  assert.match(invoicePage, /Select a service or type a manual item/);
+  assert.doesNotMatch(invoicePage, /min-w-\[960px\]/);
+  assert.doesNotMatch(dashboardPage, /Site visits/);
+  assert.match(styles, /\.bg-brand-600[\s\S]*color: #ffffff !important/);
+});
