@@ -244,6 +244,10 @@ test("client invoice payment menu is portal-based and payment submit recovers cl
 
   assert.match(invoicePage, /createPortal/);
   assert.match(invoicePage, /toggleActionMenu/);
+  assert.match(invoicePage, /data-invoice-menu/);
+  assert.match(invoicePage, /closeOnOutside/);
+  assert.match(invoicePage, /window\.innerHeight - 300/);
+  assert.match(invoicePage, /Loader2/);
   assert.match(invoicePage, /openPaymentModal\(invoice\)/);
   assert.match(invoicePage, /paymentTarget \|\| postIssue\?\.invoice/);
   assert.match(invoicePage, /Payment recorded and allocated to the invoice/);
