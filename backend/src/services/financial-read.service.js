@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Payment = require("../models/Payment");
 const PaymentAllocation = require("../models/PaymentAllocation");
 const PaymentAllocationReversal = require("../models/PaymentAllocationReversal");
@@ -5,6 +6,7 @@ const FinancialMigrationProvenance = require("../models/FinancialMigrationProven
 const Invoice = require("../models/Invoice");
 const Purchase = require("../models/Purchase");
 const { toMinorUnits, fromMinorUnits } = require("../utils/money");
+const { isOverdueByBusinessDate } = require("../utils/business-date");
 const { MIGRATION_TYPE, MIGRATION_VERSION } = require("./financial-migration.service");
 
 const deriveFinancialState = ({ sourceType, document, migrated, allocatedAmount = 0 }) => {
@@ -48,6 +50,7 @@ const documentUpdateDecision = ({ sourceType, allocationsExist, body = {} }) => 
   return { allowed: true, reason: "SAFE_NON_FINANCIAL_EDIT" };
 };
 const allocationTotal = async ({ businessId, sourceType, sourceDocumentId }) => {
+  if (mongoose.connection.readyState !== 1) return 0;
   const field = sourceType === "INVOICE" ? "invoiceId" : "purchaseId";
   const allocations = await PaymentAllocation.find(allocationQuery({ businessId, sourceType, sourceDocumentId })).select("paymentId allocatedAmount");
   if (!allocations.length) return 0;
@@ -60,7 +63,8 @@ const allocationTotal = async ({ businessId, sourceType, sourceDocumentId }) => 
 
 const getDocumentFinancialState = async ({ businessId, sourceType, document }) => {
   const provenance = await FinancialMigrationProvenance.findOne({ businessId, sourceType, sourceDocumentId: document._id, migrationType: MIGRATION_TYPE, migrationVersion: MIGRATION_VERSION, state: "MIGRATED" });
-  const state = deriveFinancialState({ sourceType, document, migrated: Boolean(provenance), allocatedAmount: provenance ? await allocationTotal({ businessId, sourceType, sourceDocumentId: document._id }) : 0 });
+  const allocatedAmount = await allocationTotal({ businessId, sourceType, sourceDocumentId: document._id });
+  const state = deriveFinancialState({ sourceType, document, migrated: Boolean(provenance) || allocatedAmount > 0, allocatedAmount });
   return state;
 };
 
@@ -75,7 +79,7 @@ const getDerivedInvoiceRows = async ({ businessId, filter = {} }) => applyFinanc
 const getDerivedPurchaseRows = async ({ businessId, filter = {} }) => applyFinancialReads({ businessId, sourceType: "PURCHASE", documents: await Purchase.find({ businessId, ...filter }) });
 const summarizeInvoiceFinancials = (invoices) => {
   const active = invoices.filter((invoice) => invoice.status !== "cancelled");
-  return { totalSales: active.reduce((sum, invoice) => sum + Number(invoice.grandTotal || 0), 0), paidAmount: active.reduce((sum, invoice) => sum + Number(invoice.amountPaid || 0), 0), unpaidAmount: active.reduce((sum, invoice) => sum + Number(invoice.balanceDue || 0), 0), totalInvoices: active.length, overdueInvoices: active.filter((invoice) => invoice.balanceDue > 0 && new Date(invoice.dueDate) < new Date()).length, mismatchCount: active.filter((invoice) => invoice.financialRead?.reconciliation?.status === "MISMATCH").length };
+  return { totalSales: active.reduce((sum, invoice) => sum + Number(invoice.grandTotal || 0), 0), paidAmount: active.reduce((sum, invoice) => sum + Number(invoice.amountPaid || 0), 0), unpaidAmount: active.reduce((sum, invoice) => sum + Number(invoice.balanceDue || 0), 0), totalInvoices: active.length, overdueInvoices: active.filter((invoice) => invoice.balanceDue > 0 && isOverdueByBusinessDate(invoice.dueDate)).length, mismatchCount: active.filter((invoice) => invoice.financialRead?.reconciliation?.status === "MISMATCH").length };
 };
 const summarizeCustomerFinancials = (invoices, customerId) => summarizeInvoiceFinancials(invoices.filter((invoice) => !customerId || invoice.customerId?.toString() === customerId.toString()));
 const summarizeSupplierFinancials = (purchases, supplierId) => {

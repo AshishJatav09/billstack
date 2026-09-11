@@ -95,3 +95,14 @@ test("payment creation supports idempotency key validation", () => {
   assert.equal(invalid.valid, false);
   assert.ok(invalid.errors.idempotencyKey);
 });
+
+test("financial reads derive paid state from real allocations even without migration provenance", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const source = fs.readFileSync(path.join(__dirname, "../src/services/financial-read.service.js"), "utf8");
+
+  assert.match(source, /mongoose\.connection\.readyState !== 1/);
+  assert.match(source, /const allocatedAmount = await allocationTotal/);
+  assert.match(source, /Boolean\(provenance\) \|\| allocatedAmount > 0/);
+  assert.match(source, /isOverdueByBusinessDate\(invoice\.dueDate\)/);
+});

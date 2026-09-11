@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
 import { CheckCircle2, CircleAlert, Download, FilePlus2, Mail, MoreHorizontal, Pencil, Plus, Printer, Search, Send, Trash2, X } from "lucide-react";
-import { allocatePaymentRequest, cancelInvoiceRequest, createCustomerRequest, createInvoiceRequest, createPaymentRequest, createProductRequest, dashboardSummaryRequest, downloadInvoicePdfRequest, emailInvoiceRequest, listCustomersRequest, listInvoicesRequest, listProductsRequest, sendInvoiceCommunicationRequest, updateInvoiceRequest } from "../../auth/api";
+import { allocatePaymentRequest, cancelInvoiceRequest, createCustomerRequest, createInvoiceRequest, createPaymentRequest, getInvoiceRequest, createProductRequest, dashboardSummaryRequest, downloadInvoicePdfRequest, emailInvoiceRequest, listCustomersRequest, listInvoicesRequest, listProductsRequest, sendInvoiceCommunicationRequest, updateInvoiceRequest } from "../../auth/api";
 import { uiStore } from "../../../store/uiStore";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -234,9 +234,23 @@ const InvoicesPage = () => {
     if (!Number.isFinite(amount) || amount <= 0) return setPaymentError("Enter an amount greater than zero.");
     setPaymentSaving(true); setPaymentError("");
     try {
-      const customerId = invoice.customerId?._id || invoice.customerId;
+      const freshInvoice = await getInvoiceRequest(invoice._id);
+      const authoritativeInvoice = freshInvoice?.invoice || freshInvoice?.data || freshInvoice;
+      const outstanding = Number(authoritativeInvoice?.balanceDue || 0);
+      if (outstanding <= 0) {
+        setPaymentError("This invoice is already paid. Refreshing invoice list now.");
+        await Promise.all([loadInvoices(), loadMasterData()]);
+        return;
+      }
+      if (amount > outstanding) {
+        setPaymentForm((current) => ({ ...current, amount: String(outstanding) }));
+        setPaymentError(`Only ${money(outstanding)} is outstanding now. Amount has been updated.`);
+        await loadInvoices();
+        return;
+      }
+      const customerId = authoritativeInvoice.customerId?._id || authoritativeInvoice.customerId || invoice.customerId?._id || invoice.customerId;
       const payment = await createPaymentRequest({ amount, direction: "RECEIVED", customerId, currency: "INR", paymentMethod: paymentForm.paymentMethod, paymentDate: paymentForm.paymentDate, referenceNumber: paymentForm.referenceNumber, notes: paymentForm.notes, idempotencyKey: paymentForm.idempotencyKey });
-      await allocatePaymentRequest(payment._id, { invoiceId: invoice._id, allocatedAmount: amount });
+      await allocatePaymentRequest(payment._id, { invoiceId: authoritativeInvoice._id || invoice._id, allocatedAmount: amount });
       setPaymentOpen(false);
       setPaymentTarget(null);
       setPaymentForm(makePaymentForm());
