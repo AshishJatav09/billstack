@@ -207,12 +207,26 @@ const InvoicesPage = () => {
     } catch (error) { setCustomerError(error.response?.data?.message || "Unable to add customer."); } finally { setCustomerSaving(false); }
   };
 
-  const openPaymentModal = (invoice) => {
-    setPaymentTarget(invoice);
-    setPaymentError("");
-    setPaymentForm({ ...makePaymentForm(), amount: invoice.balanceDue || invoice.grandTotal || "" });
-    setPaymentOpen(true);
+  const openPaymentModal = async (invoice) => {
     setOpenMenu("");
+    setMenuPosition(null);
+    setPaymentError("");
+    try {
+      const freshInvoice = await getInvoiceRequest(invoice._id);
+      const authoritativeInvoice = freshInvoice?.invoice || freshInvoice?.data || freshInvoice;
+      const outstanding = Number(authoritativeInvoice?.balanceDue || 0);
+      if (outstanding <= 0) {
+        setPostIssue((current) => (current?.invoice?._id === invoice._id ? null : current));
+        await Promise.all([loadInvoices(), loadMasterData()]);
+        uiStore.getState().pushToast({ tone: "success", message: "This invoice is already paid." });
+        return;
+      }
+      setPaymentTarget(authoritativeInvoice);
+      setPaymentForm({ ...makePaymentForm(), amount: outstanding });
+      setPaymentOpen(true);
+    } catch (error) {
+      setMessage(error.response?.data?.message || "Unable to refresh invoice balance.");
+    }
   };
 
   const toggleActionMenu = (event, invoiceId) => {
@@ -253,6 +267,7 @@ const InvoicesPage = () => {
       await allocatePaymentRequest(payment._id, { invoiceId: authoritativeInvoice._id || invoice._id, allocatedAmount: amount });
       setPaymentOpen(false);
       setPaymentTarget(null);
+      setPostIssue((current) => (current?.invoice?._id === (authoritativeInvoice._id || invoice._id) ? null : current));
       setPaymentForm(makePaymentForm());
       uiStore.getState().pushToast({ tone: "success", message: "Payment recorded and allocated to the invoice." });
       await Promise.all([loadInvoices(), loadMasterData()]);
@@ -326,7 +341,7 @@ const InvoicesPage = () => {
     {cards.length ? <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{cards.map((card) => <div key={card.label} className="rounded-xl border p-4" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><p className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>{card.label}</p><p className="mt-2 text-xl font-semibold">{card.value}</p><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{card.note}</p></div>)}</section> : null}
     {message ? <div className="flex gap-3 rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-700 dark:text-rose-200"><CircleAlert size={18} className="shrink-0" />{message}</div> : null}
 
-    {postIssue ? <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="flex items-center gap-2 text-sm font-semibold text-emerald-600"><CheckCircle2 size={17} /> Invoice {postIssue.invoice.invoiceNumber} is issued</p>{postIssue.sendError ? <p className="mt-1 text-sm text-amber-600">{postIssue.sendError}</p> : <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>You can now record a partial or full payment for this invoice.</p>}</div><div className="flex flex-wrap gap-2">{postIssue.sendError ? <button type="button" onClick={async () => { try { await sendInvoiceCommunicationRequest(postIssue.invoice._id, { channel: "EMAIL", category: "INVOICE_CREATED" }); setPostIssue((current) => ({ ...current, sendError: "" })); uiStore.getState().pushToast({ tone: "success", message: "Invoice sent successfully." }); } catch (error) { setPostIssue((current) => ({ ...current, sendError: error.response?.data?.message || "Unable to send invoice." })); } }} className="rounded-xl border px-4 py-2.5 text-sm font-medium" style={{ borderColor: "var(--panel-border)" }}>Retry send</button> : null}<button type="button" onClick={() => openPaymentModal(postIssue.invoice)} className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white">Record Payment</button></div></div></section> : null}
+    {postIssue ? <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="flex items-center gap-2 text-sm font-semibold text-emerald-600"><CheckCircle2 size={17} /> Invoice {postIssue.invoice.invoiceNumber} is issued</p>{postIssue.sendError ? <p className="mt-1 text-sm text-amber-600">{postIssue.sendError}</p> : <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{Number(postIssue.invoice.balanceDue || 0) > 0 ? "You can now record a partial or full payment for this invoice." : "Payment completed for this invoice."}</p>}</div><div className="flex flex-wrap gap-2">{postIssue.sendError ? <button type="button" onClick={async () => { try { await sendInvoiceCommunicationRequest(postIssue.invoice._id, { channel: "EMAIL", category: "INVOICE_CREATED" }); setPostIssue((current) => ({ ...current, sendError: "" })); uiStore.getState().pushToast({ tone: "success", message: "Invoice sent successfully." }); } catch (error) { setPostIssue((current) => ({ ...current, sendError: error.response?.data?.message || "Unable to send invoice." })); } }} className="rounded-xl border px-4 py-2.5 text-sm font-medium" style={{ borderColor: "var(--panel-border)" }}>Retry send</button> : null}{Number(postIssue.invoice.balanceDue || 0) > 0 ? <button type="button" onClick={() => openPaymentModal(postIssue.invoice)} className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white">Record Payment</button> : null}</div></div></section> : null}
 
     {showEditor ? <form id="invoice-editor" onSubmit={(event) => save(event)} className="rounded-2xl border p-4 sm:p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><div className="flex flex-wrap items-start justify-between gap-4 border-b pb-5" style={{ borderColor: "var(--panel-border)" }}><div><p className="text-sm font-medium text-brand-600 dark:text-brand-300">{editingId ? "Editing invoice" : "New invoice"}</p><h3 className="mt-1 text-xl font-semibold">{editingId ? "Update invoice details" : "Create an invoice"}</h3><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>Normal creation issues the invoice immediately. True draft support stays hidden until ledger-safe draft semantics exist.</p></div><button type="button" onClick={resetEditor} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "var(--panel-border)" }}><X size={16} /> Close</button></div>
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]"><div className="space-y-6"><section><div className="flex items-center justify-between gap-3"><h4 className="font-semibold">Customer</h4><button type="button" onClick={() => setCustomerOpen(true)} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium" style={{ borderColor: "var(--panel-border)" }}><Plus size={16} /> Add new customer</button></div><label className="mt-4 block"><span className="mb-2 block text-sm font-medium">Search/select customer</span><div className="relative"><Search size={16} className="pointer-events-none absolute left-3 top-3.5" style={{ color: "var(--text-muted)" }} /><select name="customerId" value={form.customerId} onChange={changeForm} className="w-full rounded-xl border bg-transparent py-3 pl-9 pr-3 text-sm" style={{ borderColor: "var(--panel-border)" }}><option value="">Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` · ${customer.phone}` : ""}</option>)}</select></div>{errors.customerId ? <span className="mt-1 block text-xs text-rose-500">{errors.customerId}</span> : null}</label>{selectedCustomer ? <div className="mt-3 rounded-xl bg-brand-500/5 px-4 py-3 text-sm"><p className="font-medium">{selectedCustomer.name}</p><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{[selectedCustomer.email, selectedCustomer.phone, selectedCustomer.gstNumber, selectedCustomer.stateCode].filter(Boolean).join(" · ") || "No contact details recorded"}</p></div> : null}</section>

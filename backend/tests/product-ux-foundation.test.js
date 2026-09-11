@@ -249,6 +249,9 @@ test("client invoice payment menu is portal-based and payment submit recovers cl
   assert.match(invoicePage, /Payment recorded and allocated to the invoice/);
   assert.match(invoicePage, /getInvoiceRequest/);
   assert.match(invoicePage, /authoritativeInvoice/);
+  assert.match(invoicePage, /This invoice is already paid/);
+  assert.match(invoicePage, /setPostIssue\(\(current\) => \(current\?\.invoice\?\._id === \(authoritativeInvoice\._id \|\| invoice\._id\) \? null : current\)\)/);
+  assert.match(invoicePage, /Number\(postIssue\.invoice\.balanceDue \|\| 0\) > 0 \? <button/);
   assert.match(invoicePage, /Only \$\{money\(outstanding\)\} is outstanding now/);
   assert.match(invoicePage, /setPaymentSaving\(false\)/);
   assert.doesNotMatch(invoicePage, /absolute right-3 top-11 z-10 w-48/);

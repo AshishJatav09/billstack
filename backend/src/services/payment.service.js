@@ -98,6 +98,12 @@ const allocatePayment = async ({ businessId, userId, paymentId, payload }) => {
         const outstanding = toMinorUnits(invoice.grandTotal, "Invoice total amount", { allowZero: true }) - allocated;
         if (toMinorUnits(amount) > outstanding) throw new AppError("Allocation exceeds invoice outstanding amount", 400);
         [allocation] = await PaymentAllocation.create([{ paymentId: payment._id, businessId, invoiceId: invoice._id, allocatedAmount: amount, createdBy: userId }], { session });
+        const paidMinor = Math.min(allocated + toMinorUnits(amount), toMinorUnits(invoice.grandTotal, "Invoice total amount", { allowZero: true }));
+        const balanceMinor = Math.max(toMinorUnits(invoice.grandTotal, "Invoice total amount", { allowZero: true }) - paidMinor, 0);
+        invoice.amountPaid = fromMinorUnits(paidMinor);
+        invoice.balanceDue = fromMinorUnits(balanceMinor);
+        invoice.paymentStatus = balanceMinor === 0 ? "paid" : paidMinor > 0 ? "partial" : "unpaid";
+        await invoice.save({ session });
         await createCustomerLedgerEntryOnce({ businessId, customerId: invoice.customerId, eventType: "PAYMENT", amount, direction: "CREDIT", invoiceId: invoice._id, allocationId: allocation._id, sourceKey: `PAYMENT_ALLOCATION:${allocation._id}`, referenceNumber: payment.referenceNumber, notes: "Payment allocation", createdBy: userId }, { session });
       } else {
         if (payment.direction !== "PAID") throw new AppError("Only paid payments can be allocated to purchases", 400);
@@ -109,6 +115,10 @@ const allocatePayment = async ({ businessId, userId, paymentId, payload }) => {
         const outstanding = toMinorUnits(purchase.totalAmount, "Purchase total amount", { allowZero: true }) - allocated;
         if (toMinorUnits(amount) > outstanding) throw new AppError("Allocation exceeds purchase outstanding amount", 400);
         [allocation] = await PaymentAllocation.create([{ paymentId: payment._id, businessId, purchaseId: purchase._id, allocatedAmount: amount, createdBy: userId }], { session });
+        const paidMinor = Math.min(allocated + toMinorUnits(amount), toMinorUnits(purchase.totalAmount, "Purchase total amount", { allowZero: true }));
+        purchase.paidAmount = fromMinorUnits(paidMinor);
+        purchase.paymentStatus = paidMinor >= toMinorUnits(purchase.totalAmount, "Purchase total amount", { allowZero: true }) ? "paid" : "partial";
+        await purchase.save({ session });
         await createSupplierLedgerEntryOnce({ businessId, supplierId: purchase.supplierId, eventType: "PAYMENT", amount, direction: "CREDIT", purchaseId: purchase._id, allocationId: allocation._id, sourceKey: `PAYMENT_ALLOCATION:${allocation._id}`, referenceNumber: payment.referenceNumber, notes: "Payment allocation", createdBy: userId }, { session });
       }
     });

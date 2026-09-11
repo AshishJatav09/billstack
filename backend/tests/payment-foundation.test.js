@@ -106,3 +106,15 @@ test("financial reads derive paid state from real allocations even without migra
   assert.match(source, /Boolean\(provenance\) \|\| allocatedAmount > 0/);
   assert.match(source, /isOverdueByBusinessDate\(invoice\.dueDate\)/);
 });
+
+test("allocation syncs invoice cached payment fields for dashboard aggregates without duplicating ledgers", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const source = fs.readFileSync(path.join(__dirname, "../src/services/payment.service.js"), "utf8");
+
+  assert.match(source, /invoice\.amountPaid = fromMinorUnits\(paidMinor\)/);
+  assert.match(source, /invoice\.balanceDue = fromMinorUnits\(balanceMinor\)/);
+  assert.match(source, /invoice\.paymentStatus = balanceMinor === 0 \? "paid" : paidMinor > 0 \? "partial" : "unpaid"/);
+  assert.match(source, /await invoice\.save\(\{ session \}\)/);
+  assert.match(source, /createCustomerLedgerEntryOnce/);
+});
