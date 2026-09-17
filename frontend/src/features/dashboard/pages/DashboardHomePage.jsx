@@ -21,7 +21,7 @@ import {
 import { ErrorState, LoadingState } from "../../../components/ui/PageState";
 import { dashboardSummaryRequest, getBusinessModulesRequest } from "../../auth/api";
 import { useAuth } from "../../auth/useAuth";
-import { isActiveModule, isSelfHostedWorkspace, productLabelForWorkspace, shouldShowDashboardSurface, visibleModuleKeys } from "../../workspace/workspaceVisibility";
+import { isActiveModule, isRealEstateSelfHostedWorkspace, isSelfHostedWorkspace, productLabelForWorkspace, shouldShowDashboardSurface, visibleModuleKeys } from "../../workspace/workspaceVisibility";
 
 const formatMoney = (value) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -114,7 +114,7 @@ const DashboardHomePage = () => {
   const quickActions = [
     { label: "Create invoice", detail: "Start a sale", icon: FilePlus2, to: "/dashboard/invoices?action=create", moduleKey: "invoices", primary: true },
     { label: "Create quotation", detail: "Draft an estimate", icon: BadgeIndianRupee, to: "/dashboard/quotes", moduleKey: "quotations" },
-    { label: "Add customer", detail: "New contact", icon: UsersRound, to: "/dashboard/customers", moduleKey: "customers" },
+    { label: isRealEstateSelfHostedWorkspace(moduleData, business) ? "Add client" : "Add customer", detail: "New contact", icon: UsersRound, to: "/dashboard/customers", moduleKey: "customers" },
     { label: `Add ${productLabelForWorkspace(moduleData).replace("Products / ", "").replace("Products & ", "").toLowerCase()}`, detail: productLabelForWorkspace(moduleData), icon: PackagePlus, to: "/dashboard/products", moduleKey: "products_services" },
     { label: "Record expense", detail: "Track operating spend", icon: ReceiptText, to: "/dashboard/expenses", moduleKey: "expenses", roles: ["owner", "admin", "accountant"] },
     { label: "New production job", detail: "Plan stock output", icon: ClipboardList, to: "/dashboard/production-jobs", moduleKey: "production_job_work" },
@@ -177,13 +177,30 @@ const DashboardHomePage = () => {
             .
           </p>
         </div>
-        <button
-          onClick={() => navigate(showModule("invoices") ? "/dashboard/invoices?action=create" : "/dashboard/customers")}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
-        >
-          <FilePlus2 size={17} /> {showModule("invoices") ? "Create invoice" : "Open workspace"}
-        </button>
       </section>
+
+      {quickActions.length ? (
+        <section aria-labelledby="dashboard-quick-actions" className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+          <h3 id="dashboard-quick-actions" className="shrink-0 text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Quick actions</h3>
+          <div className="grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            {quickActions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <button
+                  key={action.label}
+                  type="button"
+                  onClick={() => navigate(action.to)}
+                  className={`inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-left text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${action.primary ? "border-brand-600 bg-brand-600 text-white hover:bg-brand-700" : "hover:bg-slate-500/5"}`}
+                  style={!action.primary ? { borderColor: "var(--panel-border)", background: "var(--panel-bg)", color: "var(--text-primary)" } : undefined}
+                >
+                  <Icon size={16} className="shrink-0" />
+                  <span>{action.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {kpis.map((item) => (
@@ -325,38 +342,6 @@ const DashboardHomePage = () => {
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
-            <h3 className="font-semibold">Quick actions</h3>
-            <div className="mt-4 grid gap-2">
-              {quickActions.map((action) => {
-                const Icon = action.icon;
-                return (
-                  <button
-                    key={action.label}
-                    type="button"
-                    disabled={action.disabled}
-                    onClick={() => action.to && navigate(action.to)}
-                    className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left transition ${
-                      action.primary ? "border-brand-600 bg-brand-600 text-white" : "border-transparent hover:bg-slate-500/5 disabled:cursor-not-allowed disabled:opacity-55"
-                    }`}
-                    style={!action.primary ? { color: "var(--text-primary)" } : undefined}
-                  >
-                    <span className="flex items-center gap-3">
-                      <Icon size={17} />
-                      <span>
-                        <span className="block text-sm font-medium">{action.label}</span>
-                        <span className={`block text-xs ${action.primary ? "text-brand-100" : ""}`} style={!action.primary ? { color: "var(--text-muted)" } : undefined}>
-                          {action.detail}
-                        </span>
-                      </span>
-                    </span>
-                    <ArrowRight size={15} />
-                  </button>
-                );
-              })}
-              {!quickActions.length ? <p className="rounded-xl bg-slate-500/5 p-3 text-sm" style={{ color: "var(--text-muted)" }}>No quick actions are available for your current role.</p> : null}
-            </div>
-          </div>
 
           {checklist.length ? (
             <div className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
