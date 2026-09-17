@@ -1,0 +1,20 @@
+<!doctype html><html><body><div id="root"></div><script type="module">
+import React from "react";
+import ReactDOM from "react-dom/client";
+import {BrowserRouter, Routes, Route} from "react-router-dom";
+import DashboardLayout from "/src/components/layout/DashboardLayout.jsx";
+import DashboardHomePage from "/src/features/dashboard/pages/DashboardHomePage.jsx";
+import InvoicesPage from "/src/features/dashboard/pages/InvoicesPage.jsx";
+import CustomersPage from "/src/features/dashboard/pages/CustomersPage.jsx";
+import SalesLifecyclePage from "/src/features/dashboard/pages/SalesLifecyclePage.jsx";
+import ExpensesPage from "/src/features/dashboard/pages/ExpensesPage.jsx";
+import ReportsPage from "/src/features/dashboard/pages/ReportsPage.jsx";
+import BusinessSettingsPage from "/src/features/dashboard/pages/BusinessSettingsPage.jsx";
+import WorkflowPage from "/src/features/dashboard/pages/WorkflowPage.jsx";
+import "/src/index.css";
+const page=(component)=>React.createElement(component);
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(BrowserRouter,null,React.createElement(Routes,null,
+ React.createElement(Route,{path:"dashboard",element:page(DashboardLayout)},
+ React.createElement(Route,{index:true,element:page(DashboardHomePage)}),
+ ...[["invoices",InvoicesPage],["customers",CustomersPage],["quotes",SalesLifecyclePage],["expenses",ExpensesPage],["reports",ReportsPage],["settings",BusinessSettingsPage],["recurring-billing",WorkflowPage]].map(([path,component])=>React.createElement(Route,{key:path,path,element:page(component)}))))));
+</script></body></html>

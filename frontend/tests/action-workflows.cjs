@@ -1,0 +1,117 @@
+// Start Vite, then run with Playwright installed or BILLSTACK_PLAYWRIGHT_PATH set.
+// Uses only intercepted fixture requests; no production/accounting data is changed.
+const {chromium}=require(process.env.BILLSTACK_PLAYWRIGHT_PATH || "playwright");
+const assert=require("node:assert/strict");
+const base=process.env.BILLSTACK_QA_URL || "http://localhost:5173";
+(async()=>{
+ const browser=await chromium.launch({channel:"msedge",headless:true,args:["--disable-features=LocalNetworkAccessChecks"]});
+ for(const mode of ["SELF_HOSTED","SAAS"]){
+  const context=await browser.newContext({viewport:{width:1366,height:768}});
+  let creates=0, allocationFail=true, paymentCalls=0;
+  const paymentKeys=[];
+  const client={_id:"client",name:"Test Client",email:"test@example.com"};
+  const product={_id:"service",name:"Office service",sellingPrice:10000,taxRate:18,status:"active"};
+  const modules={deploymentMode:mode,businessProfile:{industryCode:"REAL_ESTATE"},catalog:["invoices","customers","quotations","expenses","products_services","recurring_billing","reports","communications","projects_tasks","credit_notes","sales_returns"].map(key=>({key,state:"ACTIVE"}))};
+  const summary={metrics:{totalSales:0,paidAmount:0,unpaidAmount:0,totalInvoices:0,overdueInvoices:0,overdueAmount:0,paidExpenses:0,netOperatingDifference:0},recentInvoices:[],revenueChart:[],workflowMetrics:{recurringDueSoon:0}};
+  const invoice={_id:"issued",customerId:client,invoiceNumber:"INV-2026-0001",grandTotal:11800,balanceDue:11800,invoiceDate:"2026-09-17",dueDate:"2026-09-17",status:"issued",paymentStatus:"unpaid",lineItems:[]};
+  await context.addInitScript(({mode})=>localStorage.setItem("billstack-auth",JSON.stringify({accessToken:"fixture",user:{name:"QA",role:"owner"},business:{_id:"biz",id:"biz",name:"QA Workspace",deploymentMode:mode,onboardingCompleted:true,businessProfile:{industryCode:"REAL_ESTATE"},subscription:{isAccessible:true},gstConfiguration:{enabled:false},bankDetails:{}}})),{mode});
+  await context.route("http://localhost:5000/api/**",async route=>{
+   const url=new URL(route.request().url()),p=url.pathname,method=route.request().method();
+   let data={};
+   if(p.endsWith("/modules"))data=modules;
+   else if(p.endsWith("/dashboard/summary"))data=summary;
+   else if(p==="/api/customers")data={items:[client],pagination:{page:1,totalPages:1,total:1}};
+   else if(p==="/api/products")data={items:[product],pagination:{page:1,totalPages:1,total:1}};
+   else if(p==="/api/invoices"&&method==="POST"){creates++;data=invoice;}
+   else if(p==="/api/invoices")data={items:creates?[invoice]:[],pagination:{page:1,totalPages:1,total:creates?1:0}};
+   else if(p==="/api/invoices/issued")data=invoice;
+   else if(p.endsWith("/allocations"))data=[];
+   else if(p==="/api/payments"&&method==="POST"){paymentCalls++;paymentKeys.push(route.request().postDataJSON().idempotencyKey);data={_id:"payment",amount:4000};}
+   else if(p.endsWith("/allocate")&&method==="POST"){
+    if(allocationFail){allocationFail=false;return route.fulfill({status:400,json:{message:"Fixture allocation failure"}});}
+    data={_id:"allocation"};invoice.balanceDue=7800;invoice.paymentStatus="partial";
+   }
+   else if(p.endsWith("/expenses/categories"))data=["Miscellaneous"];
+   else if(p.endsWith("/expenses/summary"))data={totalExpenses:0,paid:0,unpaid:0,gstRecorded:0,byCategory:[]};
+   else if(p==="/api/expenses")data={items:[],pagination:{page:1,totalPages:1,total:0}};
+   else if(p.endsWith("/reports/summary"))data={monthlySales:[],customerWiseSales:[],pendingPayment:[],productWiseSales:[],purchaseReport:[],taxReport:{},profitReport:{},expenseReport:{}};
+   else if(p.includes("gst"))data={sales:{},purchases:{},hsnSacSummary:{}};
+   else if(p.includes("communications/summary"))data={providers:{}};
+   else data=[];
+   await route.fulfill({json:{data}});
+  });
+  await context.route(base+"/dashboard**",async route=>route.fulfill({response:await route.fetch({url:base+"/tests/action-workflows.html"})}));
+  const page=await context.newPage(),errors=[];
+  page.on("pageerror",err=>errors.push(err.message));
+  for(const [label,selector,routeName] of [["Create invoice","#invoice-editor","invoices"],["Create quotation","#quote-editor","quotes"],[mode==="SELF_HOSTED"?"Add client":"Add customer","#customer-editor","customers"],["Record expense","#expense-editor","expenses"]]){
+   await page.goto(base+"/dashboard");
+   await page.locator(".dashboard-action").filter({hasText:label}).click();
+   const form=page.locator(selector);await form.waitFor();
+   await page.waitForFunction(()=>!new URLSearchParams(location.search).has("action"));
+   await page.waitForTimeout(150);
+   assert.equal(await form.evaluate(el=>el.contains(document.activeElement)),true);
+   if(routeName==="customers"||routeName==="expenses"){
+    await form.getByRole("button",{name:"Cancel",exact:true}).click();
+    assert.equal(await form.count(),0);
+    await page.reload();assert.equal(await form.count(),0);
+   }else if(routeName==="invoices"){
+    await form.getByRole("button",{name:"Close",exact:true}).click();
+    await page.reload();assert.equal(await form.count(),0);
+   }else{
+    await form.getByRole("button",{name:"Cancel",exact:true}).click();
+    assert.equal(await form.locator("select").first().inputValue(),"");
+   }
+   // Direct URL enters the same real form; action intent is consumed.
+   await page.goto(base+"/dashboard/"+routeName+"?action=create");
+   await page.locator(selector).waitFor();
+   await page.waitForFunction(()=>!new URLSearchParams(location.search).has("action"));
+  }
+  await page.goto(base+"/dashboard/invoices?action=create");
+  const editor=page.locator("#invoice-editor");await editor.waitFor();
+  await editor.locator('select[name="customerId"]').selectOption("client");
+  await editor.getByPlaceholder("Type item or service").fill("Service");
+  await editor.getByLabel("Rate",{exact:true}).fill("10000");
+  await editor.getByLabel("GST %",{exact:true}).fill("18");
+  await editor.getByLabel(/Payment at issue/).selectOption("partial");
+  await editor.getByLabel("Received amount",{exact:true}).fill("4000");
+  await editor.getByRole("button",{name:"Issue Invoice",exact:true}).click();
+  await page.getByText(/Retry to complete payment without creating another invoice/).waitFor();
+  await editor.getByRole("button",{name:"Issue Invoice",exact:true}).click();
+  await page.waitForFunction(()=>!document.querySelector("#invoice-editor"));
+  assert.equal(creates,1);assert.equal(paymentCalls,2); // same stable key, backend deduplicates
+  assert.ok(paymentKeys[0]);assert.equal(paymentKeys[0],paymentKeys[1]);
+  await page.locator("[data-invoice-menu-trigger]").click();
+  await page.locator("[data-invoice-menu]").waitFor();
+  assert.equal(await page.locator("[data-invoice-menu]").evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight}),true);
+  await page.getByRole("heading",{name:"All invoices",exact:true}).click();
+  assert.equal(await page.locator("[data-invoice-menu]").count(),0);
+  await page.locator("[data-invoice-menu-trigger]").click();
+  await page.setViewportSize({width:1440,height:900});
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator("[data-invoice-menu]").count(),0);
+  await page.goto(base+"/dashboard/customers");
+  await page.getByRole("button",{name:"Receive payment",exact:true}).click();
+  await page.locator("#customer-payment-editor").waitFor();
+  await page.locator("#customer-payment-editor").getByRole("button",{name:"Cancel",exact:true}).click();
+  for(const path of ["","invoices","customers","quotes","expenses","reports","recurring-billing","settings"]){
+   await page.goto(base+"/dashboard/"+path);await page.waitForTimeout(400);
+   if(path==="settings")assert.equal(await page.getByText("Modules & Add-ons",{exact:true}).count(),mode==="SAAS"?1:0);
+   if(path==="quotes"&&mode==="SELF_HOSTED"){
+    assert.equal(await page.getByRole("button",{name:"Credit Notes",exact:true}).count(),0);
+    assert.equal(await page.getByRole("button",{name:"Sales Returns",exact:true}).count(),0);
+   }
+   for(const [width,height] of [[1366,768],[1440,900],[1920,1080],[768,1024],[390,844]]){
+    await page.setViewportSize({width,height});await page.waitForTimeout(180);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,path+" overflow");
+   }
+  }
+  modules.catalog=modules.catalog.filter(item=>!["quotations","credit_notes","sales_returns"].includes(item.key));
+  await page.goto(base+"/dashboard/quotes?action=create");
+  await page.getByText("Sales actions are unavailable",{exact:true}).waitFor();
+  assert.equal(await page.locator("#quote-editor").count(),0);
+  assert.equal(errors.length,0,errors.join("\n"));
+  console.log(mode+": actual forms, focus, consumed intent, cancel/refresh, issued-invoice retry and responsive major screens PASS");
+  await context.close();
+ }
+ await browser.close();
+})().catch(err=>{console.error(err);process.exit(1)});

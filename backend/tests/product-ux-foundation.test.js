@@ -228,7 +228,9 @@ test("fast invoice UI exposes inline customer, manual lines, save-for-future, is
   assert.match(invoicePage, /saveForFuture/);
   assert.match(invoicePage, /createProductRequest/);
   assert.match(invoicePage, /Issue & Send/);
-  assert.match(invoicePage, /Issue & Record Payment/);
+  assert.match(invoicePage, /Payment at issue/);
+  assert.match(invoicePage, /Partial received/);
+  assert.match(invoicePage, /Full paid/);
   assert.match(invoicePage, /recordPaymentAfterIssue/);
   assert.match(invoicePage, /createPaymentRequest/);
   assert.match(invoicePage, /allocatePaymentRequest/);
@@ -310,7 +312,7 @@ test("reports page surfaces GST and allocation-derived payment state in standard
   const reportController = fs.readFileSync(path.join(__dirname, "../src/controllers/report.controller.js"), "utf8");
 
   assert.match(reportsPage, /Reports \/ GST/);
-  assert.match(reportsPage, /Allocation-backed reports/);
+  assert.match(reportsPage, /Review sales, invoice balances, expenses and GST/);
   assert.match(reportsPage, /Total GST/);
   assert.match(reportsPage, /No pending invoice payments/);
   assert.match(reportController, /getDerivedInvoiceRows/);
@@ -338,7 +340,7 @@ test("dashboard recent transactions use derived payment state and avoid forced t
   assert.match(layout, /overflow-y-auto overflow-x-hidden/);
   assert.match(sidebar, /workspace-sidebar/);
   assert.match(sidebar, /sidebar-nav no-scrollbar/);
-  assert.match(styles, /\*\::-webkit-scrollbar/);
+  assert.match(styles, /scrollbar-width: thin/);
 });
 
 test("customer workspace uses dropdown selection and latest invoice balance before allocation", () => {
@@ -358,7 +360,7 @@ test("dashboard actions render the relevant invoice flow and invoice editor avoi
   const styles = fs.readFileSync(path.join(__dirname, "../../frontend/src/index.css"), "utf8");
 
   assert.match(dashboardPage, /\/dashboard\/invoices\?action=create/);
-  assert.match(invoicePage, /new URLSearchParams\(location\.search\)/);
+  assert.match(invoicePage, /useCreateAction/);
   assert.match(invoicePage, /invoice-editor/);
   assert.match(invoicePage, /scrollIntoView/);
   assert.match(invoicePage, /Select a service or type a manual item/);

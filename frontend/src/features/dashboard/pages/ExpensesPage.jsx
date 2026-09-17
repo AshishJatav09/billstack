@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleAlert, IndianRupee, Plus, ReceiptText, Search, X } from "lucide-react";
 import { EmptyState, LoadingState } from "../../../components/ui/PageState";
 import { uiStore } from "../../../store/uiStore";
+import { useCreateAction } from "../../workspace/useCreateAction";
 import {
   cancelExpenseRequest,
   createExpenseRequest,
@@ -49,6 +50,7 @@ const ExpensesPage = () => {
   const [editor, setEditor] = useState(null);
   const [form, setForm] = useState(blankExpense);
   const [saving, setSaving] = useState(false);
+  const savingLock = useRef(false);
 
   const estimatedTotal = useMemo(() => {
     return money(estimateExpenseTotal(form));
@@ -76,6 +78,7 @@ const ExpensesPage = () => {
   useEffect(() => { loadExpenses(); }, [filters.page, filters.search, filters.category, filters.paymentStatus, filters.from, filters.to]);
 
   const openCreate = () => { setForm(blankExpense); setEditor("new"); };
+  useCreateAction({ ready: !loading, moduleKey: "expenses", roles: ["owner", "admin", "accountant"], onCreate: openCreate, focusSelector: '#expense-editor input' });
   const openEdit = (expense) => {
     setForm({
       ...blankExpense,
@@ -91,6 +94,8 @@ const ExpensesPage = () => {
 
   const saveExpense = async (event) => {
     event.preventDefault();
+    if (savingLock.current) return;
+    savingLock.current = true;
     setSaving(true);
     setError("");
     try {
@@ -115,6 +120,7 @@ const ExpensesPage = () => {
     } catch (err) {
       setError(err.response?.data?.message || "Unable to save expense.");
     } finally {
+      savingLock.current = false;
       setSaving(false);
     }
   };
@@ -200,13 +206,13 @@ const ExpensesPage = () => {
           <h3 className="font-semibold">How expenses are handled</h3>
           <div className="mt-4 space-y-3 text-sm" style={{ color: "var(--text-muted)" }}>
             <p><ReceiptText size={16} className="mr-2 inline text-brand-500" /> Expenses are operating spend, not supplier purchases or inventory receipts.</p>
-            <p>GST is stored as a snapshot for reporting visibility. This foundation does not claim input tax credit or file GST returns.</p>
+            <p>GST is stored as a snapshot for reporting visibility. Recording an expense does not claim input tax credit or file GST returns.</p>
             <p>Expense paid/unpaid status is kept on the expense record and does not create customer or supplier ledger/payment allocations.</p>
           </div>
         </div>
       </section>
 
-      {editor ? <ExpenseModal form={form} setForm={updateForm} categories={categories} saving={saving} estimatedTotal={estimatedTotal} mode={editor === "new" ? "new" : "edit"} onSave={saveExpense} onClose={() => setEditor(null)} /> : null}
+      {editor ? <ExpenseModal form={form} setForm={updateForm} categories={categories} saving={saving} error={error} estimatedTotal={estimatedTotal} mode={editor === "new" ? "new" : "edit"} onSave={saveExpense} onClose={() => setEditor(null)} /> : null}
     </div>
   );
 };
@@ -216,10 +222,10 @@ const StatusPill = ({ value }) => {
   return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${color === "emerald" ? "bg-emerald-500/10 text-emerald-600" : color === "amber" ? "bg-amber-500/10 text-amber-600" : "bg-slate-500/10 text-slate-500"}`}>{value}</span>;
 };
 
-const ExpenseModal = ({ form, setForm, categories, saving, estimatedTotal, mode, onSave, onClose }) => (
+const ExpenseModal = ({ form, setForm, categories, saving, error, estimatedTotal, mode, onSave, onClose }) => (
   <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/55 p-4">
-    <form onSubmit={onSave} className="mx-auto my-6 w-full max-w-3xl rounded-2xl border p-6 shadow-2xl" style={{ borderColor: "var(--panel-border)", background: "var(--theme-surface-strong)" }}>
-      <div className="flex justify-between gap-4"><div><p className="text-sm font-medium text-brand-600">Expense details</p><h3 className="mt-1 text-xl font-semibold">{mode === "new" ? "Add expense" : "Edit expense"}</h3></div><button type="button" onClick={onClose}><X size={20} /></button></div>
+    <form id="expense-editor" onSubmit={onSave} className="mx-auto my-6 w-full max-w-3xl rounded-2xl border p-6 shadow-2xl" style={{ borderColor: "var(--panel-border)", background: "var(--theme-surface-strong)" }}>
+      <div className="flex justify-between gap-4"><div><p className="text-sm font-medium text-brand-600">Expense details</p><h3 className="mt-1 text-xl font-semibold">{mode === "new" ? "Add expense" : "Edit expense"}</h3></div><button type="button" disabled={saving} onClick={onClose}><X size={20} /></button></div>
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Field label="Expense date"><input required type="date" value={form.expenseDate || ""} onChange={(e) => setForm("expenseDate", e.target.value)} className="field" /></Field>
         <Field label="Category"><select value={form.category || "Miscellaneous"} onChange={(e) => setForm("category", e.target.value)} className="field">{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></Field>
@@ -235,12 +241,12 @@ const ExpenseModal = ({ form, setForm, categories, saving, estimatedTotal, mode,
         <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={Boolean(form.gstEnabled)} onChange={(e) => setForm("gstEnabled", e.target.checked)} /> Record GST on this expense</label>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
           <Field label="GST rate"><input min="0" max="100" step="0.01" type="number" value={form.gstRate || ""} onChange={(e) => setForm("gstRate", e.target.value)} disabled={!form.gstEnabled} className="field disabled:opacity-50" /></Field>
-          <div><p className="text-sm font-medium">Estimated total</p><p className="mt-3 text-2xl font-semibold">{estimatedTotal}</p><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>Server recalculates this authoritatively.</p></div>
+          <div><p className="text-sm font-medium">Estimated total</p><p className="mt-3 text-2xl font-semibold">{estimatedTotal}</p><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>Final total is calculated when you save.</p></div>
         </div>
       </div>
       <Field label="Description"><input value={form.description || ""} onChange={(e) => setForm("description", e.target.value)} className="field" /></Field>
       <Field label="Notes"><textarea rows="3" value={form.notes || ""} onChange={(e) => setForm("notes", e.target.value)} className="field" /></Field>
-      <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-xl border px-4 py-2.5 text-sm" style={{ borderColor: "var(--panel-border)" }}>Cancel</button><button disabled={saving} className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{saving ? "Saving..." : "Save expense"}</button></div>
+      {error ? <p role="alert" className="mt-3 text-sm text-rose-600">{error}</p> : null}<div className="mt-6 flex justify-end gap-3"><button type="button" disabled={saving} onClick={onClose} className="rounded-xl border px-4 py-2.5 text-sm" style={{ borderColor: "var(--panel-border)" }}>Cancel</button><button disabled={saving} className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{saving ? "Saving..." : "Save expense"}</button></div>
     </form>
   </div>
 );

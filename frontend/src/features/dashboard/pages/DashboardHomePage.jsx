@@ -51,10 +51,10 @@ const DashboardHomePage = () => {
   const link = (label, to) => canOpen(to) ? <button type="button" onClick={() => navigate(to)} className="dashboard-text-action">{label}<ArrowRight size={14} /></button> : null;
   const quickActions = [
     { label: "Create invoice", icon: FilePlus2, to: "/dashboard/invoices?action=create", moduleKey: "invoices", primary: true },
-    { label: "Create quotation", icon: BadgeIndianRupee, to: "/dashboard/quotes", moduleKey: "quotations" },
-    { label: realEstate ? "Add client" : "Add customer", icon: UsersRound, to: "/dashboard/customers", moduleKey: "customers" },
+    { label: "Create quotation", icon: BadgeIndianRupee, to: "/dashboard/quotes?action=create", moduleKey: "quotations" },
+    { label: realEstate ? "Add client" : "Add customer", icon: UsersRound, to: "/dashboard/customers?action=create", moduleKey: "customers" },
     { label: `Add ${productLabelForWorkspace(moduleData).replace("Products / ", "").replace("Products & ", "").toLowerCase()}`, icon: PackagePlus, to: "/dashboard/products", moduleKey: "products_services" },
-    { label: "Record expense", icon: ReceiptText, to: "/dashboard/expenses", moduleKey: "expenses", roles: ["owner", "admin", "accountant"] },
+    { label: "Record expense", icon: ReceiptText, to: "/dashboard/expenses?action=create", moduleKey: "expenses", roles: ["owner", "admin", "accountant"] },
     { label: "New production job", icon: ClipboardList, to: "/dashboard/production-jobs", moduleKey: "production_job_work" },
   ].filter((item) => showModule(item.moduleKey) && (!item.roles || item.roles.includes(user?.role)));
   const paidExpenses = metrics.paidExpenses ?? metrics.monthlyPaidExpenses;
@@ -77,7 +77,7 @@ const DashboardHomePage = () => {
     { label: "Approvals", value: workflow.pendingApprovals, detail: "Awaiting a decision", icon: FilePlus2, to: "/dashboard/approvals", moduleKey: "documents_approvals" },
   ].filter((item) => showModule(item.moduleKey) && item.value != null);
   const checklist = (data.onboardingChecklist || []).filter((item) => !item.complete && item.to && canOpen(item.to));
-  const showGettingStarted = metrics.totalInvoices === 0 && checklist.length > 0;
+  const showGettingStarted = !selfHosted && metrics.totalInvoices === 0 && checklist.length > 0;
   const alerts = [
     showModule("invoices") && metrics.overdueInvoices > 0 && { title: `${metrics.overdueInvoices} overdue invoices`, detail: `${money(metrics.overdueAmount)} awaiting collection`, to: "/dashboard/invoices", action: "Review invoices", icon: Clock3 },
     showModule("recurring_billing") && workflow.recurringDueSoon > 0 && { title: `${workflow.recurringDueSoon} ${realEstate ? "monthly bills" : "recurring bills"} due`, detail: "Due now or within 7 days", to: "/dashboard/recurring-billing", action: "Review billing", icon: RefreshCw },

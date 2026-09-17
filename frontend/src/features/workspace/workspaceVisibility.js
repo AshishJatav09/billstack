@@ -128,3 +128,6 @@ export const productLabelForWorkspace = (moduleData) => {
 
 export const isSelfHostedWorkspace = (moduleData, business) =>
   (moduleData?.deploymentMode || business?.deploymentMode) === "SELF_HOSTED";
+
+export const shouldShowCommercialSettings = (moduleData, business) =>
+  !isSelfHostedWorkspace(moduleData, business);

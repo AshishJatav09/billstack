@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { gstSummaryRequest, reportsSummaryRequest } from "../../auth/api";
+import { authStore } from "../../../store/authStore";
+import { getBusinessModulesRequest } from "../../auth/api";
+import { isActiveModule, shouldShowWorkspaceNavigation } from "../../workspace/workspaceVisibility";
 
 const money = (value) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(value || 0));
 
@@ -10,34 +13,44 @@ const ReportsPage = () => {
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [moduleData, setModuleData] = useState(null);
+  const { business } = authStore();
+  const showModule = (key) => isActiveModule(moduleData, key) && shouldShowWorkspaceNavigation(key, moduleData, business);
+  const invalidRange = dateRange.from && dateRange.to && dateRange.from > dateRange.to;
 
   useEffect(() => {
+    let current = true;
     const loadReports = async () => {
+      if (invalidRange) { setIsLoading(false); return; }
       setIsLoading(true);
       setError("");
       try {
-        const [response, gst] = await Promise.all([reportsSummaryRequest(), gstSummaryRequest(dateRange)]);
+        const [response, gst, modules] = await Promise.all([reportsSummaryRequest(), gstSummaryRequest(dateRange), getBusinessModulesRequest()]);
+        if (!current) return;
         setData(response);
         setGstData(gst);
+        setModuleData(modules);
       } catch (loadError) {
+        if (!current) return;
         setError(loadError.response?.data?.message || "Unable to load reports");
       } finally {
-        setIsLoading(false);
+        if (current) setIsLoading(false);
       }
     };
     loadReports();
+    return () => { current = false; };
   }, [dateRange.from, dateRange.to]);
 
   const chartRows = useMemo(() => (data?.monthlySales || []).map((item) => ({ month: `${item._id.month}/${String(item._id.year).slice(-2)}`, totalSales: item.totalSales, paidAmount: item.paidAmount })), [data]);
 
-  if (isLoading) return <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading reports...</p>;
-  if (error) return <p className="text-sm text-rose-600">{error}</p>;
+  if (isLoading && !data) return <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading reports...</p>;
+  if (error && !data) return <p role="alert" className="text-sm text-rose-600">{error}</p>;
 
-  return <div className="mx-auto max-w-[1500px] space-y-6 overflow-x-hidden pb-8">
+  return <div className="mx-auto max-w-[1500px] space-y-6 pb-8">
     <section className="rounded-2xl border p-5 sm:p-7" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
       <p className="text-sm font-medium text-brand-600">Reports / GST</p>
       <h2 className="mt-2 text-3xl font-semibold tracking-tight">Sales, tax and payment reports</h2>
-      <p className="mt-2 max-w-3xl text-sm" style={{ color: "var(--text-muted)" }}>Allocation-backed reports use BillStack&apos;s derived payment state, so paid invoices stop showing as pending.</p>
+      <p className="mt-2 max-w-3xl text-sm" style={{ color: "var(--text-muted)" }}>Review sales, invoice balances, expenses and GST.</p>
     </section>
 
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -63,7 +76,9 @@ const ReportsPage = () => {
           </ResponsiveContainer>
         </div>
       </Card>
-      <Card title="GST reporting workspace" description="Snapshot-based GST from issued invoices and purchases. Cancelled invoices are excluded.">
+      <Card title="GST reporting workspace" description="GST on issued invoices and purchases. Cancelled invoices are excluded.">
+        {invalidRange ? <p role="alert" className="mb-3 text-sm text-rose-600">From date must be on or before To date.</p> : error ? <p role="alert" className="mb-3 text-sm text-rose-600">{error}</p> : null}
+        {isLoading ? <p role="status" className="mb-3 text-xs">Updating GST report...</p> : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>From<input type="date" value={dateRange.from} onChange={(event) => setDateRange((current) => ({ ...current, from: event.target.value }))} className="field mt-1" /></label>
           <label className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>To<input type="date" value={dateRange.to} onChange={(event) => setDateRange((current) => ({ ...current, to: event.target.value }))} className="field mt-1" /></label>
@@ -72,8 +87,8 @@ const ReportsPage = () => {
           <Metric label="Input GST" value={money(gstData?.purchases?.totalGst)} compact />
           <Metric label="Sales GST" value={money(gstData?.sales?.totalGst)} compact />
         </div>
-        <div className="mt-4 overflow-x-auto rounded-xl border no-scrollbar" style={{ borderColor: "var(--panel-border)" }}>
-          <table className="w-full min-w-[420px] text-left text-sm">
+        <div className="mt-4 overflow-x-auto rounded-xl border" style={{ borderColor: "var(--panel-border)" }}>
+          <table className="w-full text-left text-sm">
             <thead className="bg-slate-500/5 text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}><tr><th className="p-3">HSN/SAC</th><th className="p-3 text-right">Taxable value</th></tr></thead>
             <tbody>{Object.entries(gstData?.hsnSacSummary || {}).map(([code, value]) => <tr key={code} className="border-t" style={{ borderColor: "var(--panel-border)" }}><td className="p-3 font-medium">{code}</td><td className="p-3 text-right">{money(value)}</td></tr>)}{!Object.keys(gstData?.hsnSacSummary || {}).length ? <tr><td colSpan="2" className="p-6 text-center" style={{ color: "var(--text-muted)" }}>No GST HSN/SAC data for this range.</td></tr> : null}</tbody>
           </table>
@@ -87,7 +102,7 @@ const ReportsPage = () => {
     </section>
 
     <section className="grid gap-4 xl:grid-cols-2">
-      <ListCard title="Product-wise sales" rows={data.productWiseSales} empty="No product sales yet." render={(item) => <><p className="font-semibold">{item._id || "Product/service"}</p><p>Quantity sold: {item.quantitySold}</p><p>Revenue: {money(item.revenue)}</p><p>Tax: {money(item.tax)}</p></>} />
+      {showModule("products_services") ? <ListCard title="Product-wise sales" rows={data.productWiseSales} empty="No product sales yet." render={(item) => <><p className="font-semibold">{item._id || "Product/service"}</p><p>Quantity sold: {item.quantitySold}</p><p>Revenue: {money(item.revenue)}</p><p>Tax: {money(item.tax)}</p></>} /> : null}
       <Card title="Tax and profit report">
         <div className="grid gap-3 sm:grid-cols-2">
           <Metric label="Tax collected" value={money(data.taxReport.totalTaxCollected)} compact />
@@ -100,7 +115,7 @@ const ReportsPage = () => {
 
     <section className="grid gap-4 xl:grid-cols-2">
       <ListCard title="Expense report" rows={data.expenseReport?.categoryWiseExpenses || []} empty="No expense data yet." render={(item) => <><p className="font-semibold">{item._id || "Uncategorized"}</p><p>Total: {money(item.total)}</p><p>Paid: {money(item.paid)}</p><p>Unpaid: {money(item.unpaid)}</p><p>GST recorded: {money(item.gstRecorded)}</p></>} />
-      <ListCard title="Purchase report" rows={data.purchaseReport} empty="No purchases yet." render={(purchase) => <><p className="font-semibold">{purchase.supplierId?.supplierName || "Supplier"}</p><p>Date: {purchase.purchaseDate ? new Date(purchase.purchaseDate).toLocaleDateString("en-IN") : "—"}</p><p>Total: {money(purchase.totalAmount)}</p><p>Status: {purchase.paymentStatus}</p></>} />
+      {showModule("purchases") ? <ListCard title="Purchase report" rows={data.purchaseReport} empty="No purchases yet." render={(purchase) => <><p className="font-semibold">{purchase.supplierId?.supplierName || "Supplier"}</p><p>Date: {purchase.purchaseDate ? new Date(purchase.purchaseDate).toLocaleDateString("en-IN") : "—"}</p><p>Total: {money(purchase.totalAmount)}</p><p>Status: {purchase.paymentStatus}</p></>} /> : null}
     </section>
   </div>;
 };

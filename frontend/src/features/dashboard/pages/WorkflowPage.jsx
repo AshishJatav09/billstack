@@ -210,6 +210,7 @@ const WorkflowPage = () => {
 
   const submit = async (event) => {
     event.preventDefault();
+    if (saving) return;
     setSaving(true);
     setError("");
     setSuccess("");
@@ -326,7 +327,7 @@ const WorkflowPage = () => {
         </div>
       );
     }
-    if (!filtered.length) return <EmptyState title={`No ${currentTab.label.toLowerCase()} yet`} description="Create the first record when this module is active and your plan allows it." />;
+    if (!filtered.length) return <EmptyState title={`No ${currentTab.label.toLowerCase()} yet`} description="Create your first record to get started." />;
 
     if (activeTab === "orders") {
       return filtered.map((item) => (
@@ -608,6 +609,9 @@ const WorkflowPage = () => {
                 <option value="">Standalone task</option>
                 {projects.map((project) => <option key={project._id || project.id} value={project._id || project.id}>{project.name}</option>)}
               </select>
+            ) : null}
+            {activeTab === "recurring" ? (
+              <label className="text-xs font-medium">First billing date<input className="input mt-1" type="date" value={form.startDate || new Date().toISOString().slice(0, 10)} onChange={(e) => setForm({ ...form, startDate: e.target.value })} required /></label>
             ) : null}
             {activeTab === "recurring" ? (
               <select className="input" value={form.frequency || "MONTHLY"} onChange={(e) => setForm({ ...form, frequency: e.target.value })}>

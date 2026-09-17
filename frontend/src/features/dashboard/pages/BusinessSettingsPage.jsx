@@ -16,7 +16,7 @@ import {
   verifyModuleRazorpayPaymentRequest,
 } from "../../auth/api";
 import { authStore } from "../../../store/authStore";
-import { isRealEstateSelfHostedWorkspace } from "../../workspace/workspaceVisibility";
+import { isRealEstateSelfHostedWorkspace, shouldShowCommercialSettings } from "../../workspace/workspaceVisibility";
 
 const getApiOrigin = () => {
   const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
@@ -514,7 +514,7 @@ const BusinessSettingsPage = () => {
             </p>
           </div>
 
-          {!isRealEstateSelfHosted ? <ModulesPanel
+          {shouldShowCommercialSettings(moduleData, business) ? <ModulesPanel
             moduleData={moduleData}
             moduleError={moduleError}
             moduleMessage={moduleMessage}
