@@ -3,8 +3,10 @@ const Expense = require("../models/Expense");
 const Product = require("../models/Product");
 const Purchase = require("../models/Purchase");
 const StockMovement = require("../models/StockMovement");
+const Customer = require("../models/Customer");
+const { reportPagination } = require("../utils/report-pagination");
 const asyncHandler = require("../utils/asyncHandler");
-const { getDerivedInvoiceRows, getDerivedPurchaseRows } = require("../services/financial-read.service");
+const { getDerivedInvoiceRows, getDerivedPurchaseRows, summarizeInvoiceFinancials } = require("../services/financial-read.service");
 
 const getReportsSummary = asyncHandler(async (req, res) => {
   const businessId = req.user.businessId;
@@ -79,8 +81,7 @@ const getReportsSummary = asyncHandler(async (req, res) => {
           tax: { $sum: "$lineItems.tax" },
         },
       },
-      { $sort: { revenue: -1 } },
-      { $limit: 25 },
+      { $sort: { revenue: -1, _id: 1 } },
     ]),
     Invoice.aggregate([
       { $match: { businessId, status: { $ne: "cancelled" } } },
@@ -172,24 +173,37 @@ const getReportsSummary = asyncHandler(async (req, res) => {
           count: { $sum: 1 },
         },
       },
-      { $sort: { total: -1 } },
+      { $sort: { total: -1, _id: 1 } },
     ]),
   ]);
 
   const derivedInvoices = (await getDerivedInvoiceRows({ businessId, filter: {} })).filter((invoice) => invoice.status !== "cancelled");
+  const customerIds = [...new Set(derivedInvoices.map(invoice => String(invoice.customerId?._id || invoice.customerId || "")).filter(id => /^[a-f\d]{24}$/i.test(id)))];
+  const customers = await Customer.find({ businessId, _id: { $in: customerIds } }).select("name").lean();
+  const customerNames = new Map(customers.map(customer => [String(customer._id), customer.name]));
   const monthMap = new Map(); const customerMap = new Map();
   derivedInvoices.forEach((invoice) => {
     const monthKey = `${new Date(invoice.invoiceDate).getFullYear()}-${new Date(invoice.invoiceDate).getMonth() + 1}`;
     const month = monthMap.get(monthKey) || { _id: { year: new Date(invoice.invoiceDate).getFullYear(), month: new Date(invoice.invoiceDate).getMonth() + 1 }, totalSales: 0, paidAmount: 0, balanceDue: 0 };
     month.totalSales += Number(invoice.grandTotal || 0); month.paidAmount += Number(invoice.amountPaid || 0); month.balanceDue += Number(invoice.balanceDue || 0); monthMap.set(monthKey, month);
-    const customerKey = invoice.customerDetails?.name || invoice.customerId?.name || String(invoice.customerId || "Unknown");
-    const customer = customerMap.get(customerKey) || { _id: customerKey, totalSales: 0, paidAmount: 0, balanceDue: 0, invoiceCount: 0 };
+    const customerId = String(invoice.customerId?._id || invoice.customerId || "");
+    const customerName = invoice.customerDetails?.name || invoice.customerId?.name || customerNames.get(customerId) || "Unknown client";
+    const customerKey = customerId || customerName;
+    const customer = customerMap.get(customerKey) || { _id: customerKey, customerName, totalSales: 0, paidAmount: 0, balanceDue: 0, invoiceCount: 0 };
     customer.totalSales += Number(invoice.grandTotal || 0); customer.paidAmount += Number(invoice.amountPaid || 0); customer.balanceDue += Number(invoice.balanceDue || 0); customer.invoiceCount += 1; customerMap.set(customerKey, customer);
   });
   monthlySales = Array.from(monthMap.values()).sort((a, b) => b._id.year - a._id.year || b._id.month - a._id.month).slice(0, 12);
-  customerWiseSales = Array.from(customerMap.values()).sort((a, b) => b.totalSales - a.totalSales).slice(0, 20);
-  pendingPayment = derivedInvoices.filter((invoice) => Number(invoice.balanceDue || 0) > 0).sort((a, b) => Number(b.balanceDue || 0) - Number(a.balanceDue || 0)).slice(0, 50);
+  customerWiseSales = Array.from(customerMap.values()).sort((a, b) => b.balanceDue - a.balanceDue || b.totalSales - a.totalSales || String(a._id).localeCompare(String(b._id)));
+  pendingPayment = derivedInvoices.filter((invoice) => Number(invoice.balanceDue || 0) > 0).sort((a, b) => Number(b.balanceDue || 0) - Number(a.balanceDue || 0) || String(a._id).localeCompare(String(b._id))).map(invoice => ({ _id: invoice._id, invoiceNumber: invoice.invoiceNumber, customerName: invoice.customerDetails?.name || invoice.customerId?.name || customerNames.get(String(invoice.customerId)) || "Unknown client", dueDate: invoice.dueDate, grandTotal: invoice.grandTotal, balanceDue: invoice.balanceDue, paymentStatus: invoice.paymentStatus }));
   purchaseReport = await getDerivedPurchaseRows({ businessId, filter: {} });
+  purchaseReport.sort((a, b) => new Date(b.purchaseDate) - new Date(a.purchaseDate) || String(a._id).localeCompare(String(b._id)));
+  const pagedReports = {};
+  const pagination = {};
+  for (const [key, rows] of Object.entries({ pending: pendingPayment, customers: customerWiseSales, expenses: expenseSummary, products: productWiseSales, purchases: purchaseReport, inventory: inventoryValuation })) {
+    const result = reportPagination(rows, req.query, key);
+    pagedReports[key] = result.items;
+    pagination[key] = result.pagination;
+  }
 
   const invoiceProfit = profitReport[0][0] || {};
   const purchaseProfit = profitReport[1][0] || {};
@@ -203,17 +217,19 @@ const getReportsSummary = asyncHandler(async (req, res) => {
     data: {
       dailySales,
       monthlySales,
-      customerWiseSales,
-      productWiseSales,
+      customerWiseSales: pagedReports.customers,
+      productWiseSales: pagedReports.products,
+      pagination,
+      collectionSummary: summarizeInvoiceFinancials(derivedInvoices),
       taxReport: taxReport[0] || {
         totalTaxCollected: 0,
         totalDiscountGiven: 0,
         taxableSales: 0,
       },
-      inventoryValuation,
+      inventoryValuation: pagedReports.inventory,
       stockMovement,
-      purchaseReport,
-      pendingPayment,
+      purchaseReport: pagedReports.purchases,
+      pendingPayment: pagedReports.pending,
       profitReport: {
         totalRevenue: invoiceProfit.totalRevenue || 0,
         totalTaxCollected: invoiceProfit.totalTaxCollected || 0,
@@ -229,7 +245,7 @@ const getReportsSummary = asyncHandler(async (req, res) => {
         totalExpenseGstRecorded,
         totalPaidExpenses,
         totalUnpaidExpenses,
-        categoryWiseExpenses: expenseSummary,
+        categoryWiseExpenses: pagedReports.expenses,
       },
     },
   });

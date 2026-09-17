@@ -60,7 +60,13 @@ test("shared actions, retry recovery, copy, modal errors and discoverable scroll
  assert.match(paymentModal,/id="customer-payment-editor"/);
  assert.doesNotMatch(paymentModal,/\{error\}/);
  assert.match(read("features/dashboard/pages/SalesLifecyclePage.jsx"),/if \(!visibleTabs.length\)/);
+ assert.match(read("features/dashboard/pages/SalesLifecyclePage.jsx"),/visibleTabs.length > 1 \? <nav/);
+ assert.doesNotMatch(read("features/dashboard/pages/SalesLifecyclePage.jsx"),/lg:row-span-3/);
+ const reports=read("features/dashboard/pages/ReportsPage.jsx");
+ assert.match(reports,/aria-label="Report sections"/);
+ assert.match(reports,/table-fixed/);
+ assert.doesNotMatch(reports,/Metric label="Sales GST"/);
  assert.doesNotMatch(read("components/layout/Navbar.jsx"),/aria-label="Notifications"/);
  assert.match(read("features/dashboard/pages/ReportsPage.jsx"),/From date must be on or before To date/);
- assert.match(read("features/dashboard/pages/ReportsPage.jsx"),/showModule\("purchases"\)/);
+ assert.match(read("features/dashboard/pages/ReportsPage.jsx"),/module: "purchases"/);
 });

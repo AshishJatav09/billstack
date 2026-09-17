@@ -641,8 +641,8 @@ export const dashboardSummaryRequest = async () => {
   return response.data.data;
 };
 
-export const reportsSummaryRequest = async () => {
-  const response = await api.get("/reports/summary");
+export const reportsSummaryRequest = async (params = {}) => {
+  const response = await api.get("/reports/summary", { params });
   return response.data.data;
 };
 

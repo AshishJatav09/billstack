@@ -1,127 +1,90 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { gstSummaryRequest, reportsSummaryRequest } from "../../auth/api";
+import { gstSummaryRequest, reportsSummaryRequest, getBusinessModulesRequest } from "../../auth/api";
 import { authStore } from "../../../store/authStore";
-import { getBusinessModulesRequest } from "../../auth/api";
 import { isActiveModule, shouldShowWorkspaceNavigation } from "../../workspace/workspaceVisibility";
+import { money, compactMoney, safeName, reportRows } from "../reportPresentation";
+import "./reports.css";
 
-const money = (value) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(value || 0));
-
-const ReportsPage = () => {
-  const [data, setData] = useState(null);
-  const [gstData, setGstData] = useState(null);
-  const [dateRange, setDateRange] = useState({ from: "", to: "" });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [moduleData, setModuleData] = useState(null);
-  const { business } = authStore();
-  const showModule = (key) => isActiveModule(moduleData, key) && shouldShowWorkspaceNavigation(key, moduleData, business);
-  const invalidRange = dateRange.from && dateRange.to && dateRange.from > dateRange.to;
-
-  useEffect(() => {
-    let current = true;
-    const loadReports = async () => {
-      if (invalidRange) { setIsLoading(false); return; }
-      setIsLoading(true);
-      setError("");
-      try {
-        const [response, gst, modules] = await Promise.all([reportsSummaryRequest(), gstSummaryRequest(dateRange), getBusinessModulesRequest()]);
-        if (!current) return;
-        setData(response);
-        setGstData(gst);
-        setModuleData(modules);
-      } catch (loadError) {
-        if (!current) return;
-        setError(loadError.response?.data?.message || "Unable to load reports");
-      } finally {
-        if (current) setIsLoading(false);
-      }
-    };
-    loadReports();
-    return () => { current = false; };
-  }, [dateRange.from, dateRange.to]);
-
-  const chartRows = useMemo(() => (data?.monthlySales || []).map((item) => ({ month: `${item._id.month}/${String(item._id.year).slice(-2)}`, totalSales: item.totalSales, paidAmount: item.paidAmount })), [data]);
-
-  if (isLoading && !data) return <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading reports...</p>;
-  if (error && !data) return <p role="alert" className="text-sm text-rose-600">{error}</p>;
-
-  return <div className="mx-auto max-w-[1500px] space-y-6 pb-8">
-    <section className="rounded-2xl border p-5 sm:p-7" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
-      <p className="text-sm font-medium text-brand-600">Reports / GST</p>
-      <h2 className="mt-2 text-3xl font-semibold tracking-tight">Sales, tax and payment reports</h2>
-      <p className="mt-2 max-w-3xl text-sm" style={{ color: "var(--text-muted)" }}>Review sales, invoice balances, expenses and GST.</p>
-    </section>
-
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      <Metric label="Taxable sales" value={money(gstData?.sales?.taxableValue)} />
-      <Metric label="CGST" value={money(gstData?.sales?.cgst)} />
-      <Metric label="SGST" value={money(gstData?.sales?.sgst)} />
-      <Metric label="IGST" value={money(gstData?.sales?.igst)} />
-      <Metric label="Total GST" value={money(gstData?.sales?.totalGst)} strong />
-    </section>
-
-    <section className="grid gap-4 xl:grid-cols-2">
-      <Card title="Monthly sales">
-        <div className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartRows}>
-              <CartesianGrid stroke="rgba(148,163,184,0.25)" vertical={false} />
-              <XAxis dataKey="month" stroke="#64748b" />
-              <YAxis stroke="#64748b" />
-              <Tooltip formatter={(value) => money(value)} />
-              <Bar dataKey="totalSales" name="Sales" fill="#2563eb" radius={[8, 8, 0, 0]} />
-              <Bar dataKey="paidAmount" name="Paid" fill="#10b981" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
-      <Card title="GST reporting workspace" description="GST on issued invoices and purchases. Cancelled invoices are excluded.">
-        {invalidRange ? <p role="alert" className="mb-3 text-sm text-rose-600">From date must be on or before To date.</p> : error ? <p role="alert" className="mb-3 text-sm text-rose-600">{error}</p> : null}
-        {isLoading ? <p role="status" className="mb-3 text-xs">Updating GST report...</p> : null}
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>From<input type="date" value={dateRange.from} onChange={(event) => setDateRange((current) => ({ ...current, from: event.target.value }))} className="field mt-1" /></label>
-          <label className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>To<input type="date" value={dateRange.to} onChange={(event) => setDateRange((current) => ({ ...current, to: event.target.value }))} className="field mt-1" /></label>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <Metric label="Input GST" value={money(gstData?.purchases?.totalGst)} compact />
-          <Metric label="Sales GST" value={money(gstData?.sales?.totalGst)} compact />
-        </div>
-        <div className="mt-4 overflow-x-auto rounded-xl border" style={{ borderColor: "var(--panel-border)" }}>
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-500/5 text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}><tr><th className="p-3">HSN/SAC</th><th className="p-3 text-right">Taxable value</th></tr></thead>
-            <tbody>{Object.entries(gstData?.hsnSacSummary || {}).map(([code, value]) => <tr key={code} className="border-t" style={{ borderColor: "var(--panel-border)" }}><td className="p-3 font-medium">{code}</td><td className="p-3 text-right">{money(value)}</td></tr>)}{!Object.keys(gstData?.hsnSacSummary || {}).length ? <tr><td colSpan="2" className="p-6 text-center" style={{ color: "var(--text-muted)" }}>No GST HSN/SAC data for this range.</td></tr> : null}</tbody>
-          </table>
-        </div>
-      </Card>
-    </section>
-
-    <section className="grid gap-4 xl:grid-cols-2">
-      <ListCard title="Customer-wise sales" rows={data.customerWiseSales} empty="No customer sales yet." render={(item) => <><p className="font-semibold">{item._id || "Unknown customer"}</p><p>Total sales: {money(item.totalSales)}</p><p>Paid: {money(item.paidAmount)}</p><p>Balance: {money(item.balanceDue)}</p></>} />
-      <ListCard title="Pending payments" rows={data.pendingPayment} empty="No pending invoice payments." render={(invoice) => <><p className="font-semibold">{invoice.invoiceNumber}</p><p>{invoice.customerId?.name || invoice.customerDetails?.name}</p><p>Balance due: {money(invoice.balanceDue)}</p><p>Status: {String(invoice.paymentStatus || "unpaid").replaceAll("_", " ")}</p></>} />
-    </section>
-
-    <section className="grid gap-4 xl:grid-cols-2">
-      {showModule("products_services") ? <ListCard title="Product-wise sales" rows={data.productWiseSales} empty="No product sales yet." render={(item) => <><p className="font-semibold">{item._id || "Product/service"}</p><p>Quantity sold: {item.quantitySold}</p><p>Revenue: {money(item.revenue)}</p><p>Tax: {money(item.tax)}</p></>} /> : null}
-      <Card title="Tax and profit report">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Metric label="Tax collected" value={money(data.taxReport.totalTaxCollected)} compact />
-          <Metric label="Taxable sales" value={money(data.taxReport.taxableSales)} compact />
-          <Metric label="Total expenses" value={money(data.profitReport.totalExpenses)} compact />
-          <Metric label="Operating difference" value={money(data.profitReport.netOperatingDifference)} compact />
-        </div>
-      </Card>
-    </section>
-
-    <section className="grid gap-4 xl:grid-cols-2">
-      <ListCard title="Expense report" rows={data.expenseReport?.categoryWiseExpenses || []} empty="No expense data yet." render={(item) => <><p className="font-semibold">{item._id || "Uncategorized"}</p><p>Total: {money(item.total)}</p><p>Paid: {money(item.paid)}</p><p>Unpaid: {money(item.unpaid)}</p><p>GST recorded: {money(item.gstRecorded)}</p></>} />
-      {showModule("purchases") ? <ListCard title="Purchase report" rows={data.purchaseReport} empty="No purchases yet." render={(purchase) => <><p className="font-semibold">{purchase.supplierId?.supplierName || "Supplier"}</p><p>Date: {purchase.purchaseDate ? new Date(purchase.purchaseDate).toLocaleDateString("en-IN") : "—"}</p><p>Total: {money(purchase.totalAmount)}</p><p>Status: {purchase.paymentStatus}</p></>} /> : null}
-    </section>
-  </div>;
+const date = value => value && !Number.isNaN(new Date(value).getTime()) ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }) : "—";
+const clientName = row => safeName(row.customerName || row.customerId?.name || row.customerDetails?.name || row._id, "Unknown client");
+const Status = ({ value }) => <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${value === "partial" ? "bg-amber-500/10 text-amber-700 dark:text-amber-300" : "bg-rose-500/10 text-rose-600 dark:text-rose-300"}`}>{value === "partial" ? "Partially paid" : "Unpaid"}</span>;
+const amounts = entries => entries.map(([label, key]) => ({ label, numeric: true, cell: row => money(row[key]) }));
+const configurations = {
+  pending: { title: "Pending payments", module: "invoices", field: "pendingPayment", columns: [{ label: "Invoice", cell: row => <Link className="font-medium text-brand-600 hover:underline" to={`/dashboard/invoices/${row._id}`}>{row.invoiceNumber || "Invoice"}</Link> }, { label: "Client", cell: clientName }, { label: "Due date", cell: row => date(row.dueDate) }, ...amounts([["Amount", "grandTotal"], ["Balance", "balanceDue"]]), { label: "Status", cell: row => <Status value={row.paymentStatus} /> }] },
+  customers: { title: "Client sales", module: "customers", field: "customerWiseSales", columns: [{ label: "Client", cell: clientName }, ...amounts([["Total sales", "totalSales"], ["Collected", "paidAmount"], ["Outstanding", "balanceDue"]])] },
+  expenses: { title: "Expense report", module: "expenses", columns: [{ label: "Category", cell: row => safeName(row._id, "Uncategorized") }, ...amounts([["Total", "total"], ["Paid", "paid"], ["Unpaid", "unpaid"], ["GST", "gstRecorded"]])] },
+  products: { title: "Item sales", module: "products_services", field: "productWiseSales", columns: [{ label: "Item / service", cell: row => safeName(row._id, "Unknown item") }, { label: "Quantity", numeric: true, cell: row => row.quantitySold }, ...amounts([["Revenue", "revenue"], ["Tax", "tax"]])] },
+  purchases: { title: "Purchase report", module: "purchases", field: "purchaseReport", columns: [{ label: "Purchase", cell: row => row.purchaseNumber || "Purchase" }, { label: "Supplier", cell: row => safeName(row.supplierId?.supplierName, "Unknown supplier") }, { label: "Date", cell: row => date(row.purchaseDate) }, ...amounts([["Total", "totalAmount"], ["Paid", "paidAmount"]])] },
 };
 
-const Card = ({ title, description, children }) => <section className="rounded-2xl border p-5 sm:p-6" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><h3 className="text-lg font-semibold">{title}</h3>{description ? <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{description}</p> : null}<div className="mt-4">{children}</div></section>;
-const Metric = ({ label, value, strong, compact }) => <div className={`rounded-2xl border ${compact ? "p-4" : "p-5"}`} style={{ borderColor: "var(--panel-border)", background: "var(--theme-surface-soft)" }}><p className="text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>{label}</p><p className={`mt-2 ${strong ? "text-2xl" : "text-xl"} font-semibold`}>{value}</p></div>;
-const ListCard = ({ title, rows = [], empty, render }) => <Card title={title}>{rows.length ? <div className="grid gap-3">{rows.slice(0, 20).map((item) => <div key={item._id || item.invoiceNumber} className="rounded-xl border p-4 text-sm leading-6" style={{ borderColor: "var(--panel-border)", background: "var(--theme-surface-soft)" }}>{render(item)}</div>)}</div> : <p className="rounded-xl border border-dashed p-6 text-center text-sm" style={{ borderColor: "var(--panel-border)", color: "var(--text-muted)" }}>{empty}</p>}</Card>;
-
+const ReportsPage = () => {
+  const { business } = authStore();
+  const [data, setData] = useState(null), [gstData, setGstData] = useState(null), [moduleData, setModuleData] = useState(null);
+  const [dateRange, setDateRange] = useState({ from: "", to: "" });
+  const [tab, setTab] = useState("overview"), [query, setQuery] = useState({}), [refresh, setRefresh] = useState(0);
+  const [loading, setLoading] = useState(true), [gstLoading, setGstLoading] = useState(true), [error, setError] = useState(""), [gstError, setGstError] = useState("");
+  const [hsnPage, setHsnPage] = useState(1);
+  const showModule = key => isActiveModule(moduleData, key) && shouldShowWorkspaceNavigation(key, moduleData, business);
+  const invalidRange = dateRange.from && dateRange.to && dateRange.from > dateRange.to;
+  useEffect(() => {
+    let current = true;
+    setLoading(true); setError("");
+    Promise.all([reportsSummaryRequest(query), getBusinessModulesRequest()]).then(([reports, modules]) => { if (current) { setData(reports); setModuleData(modules); } }).catch(err => { if (current) setError(err.response?.data?.message || "Unable to load reports. Please retry."); }).finally(() => { if (current) setLoading(false); });
+    return () => { current = false; };
+  }, [query, refresh]);
+  useEffect(() => {
+    let current = true;
+    setHsnPage(1);
+    if (invalidRange) { setGstLoading(false); return; }
+    setGstLoading(true); setGstError("");
+    gstSummaryRequest(dateRange).then(gst => { if (current) setGstData(gst); }).catch(err => { if (current) setGstError(err.response?.data?.message || "Unable to load GST. Please retry."); }).finally(() => { if (current) setGstLoading(false); });
+    return () => { current = false; };
+  }, [dateRange.from, dateRange.to, refresh]);
+  const chartRows = useMemo(() => (data?.monthlySales || []).slice(0, 12).reverse().map(row => ({ month: `${row._id.month}/${String(row._id.year).slice(-2)}`, totalSales: row.totalSales, paidAmount: row.paidAmount })), [data]);
+  const tabs = [{ key: "overview", title: "Overview" }, ...Object.entries(configurations).filter(([, item]) => showModule(item.module)).map(([key, item]) => ({ key, title: item.title })), { key: "gst", title: "GST details" }];
+  const activeTab = tabs.some(item => item.key === tab) ? tab : "overview";
+  const changePage = (key, page, size) => setQuery(current => ({ ...current, [`${key}Page`]: page, [`${key}Size`]: size }));
+  const openDetail = key => { changePage(key, 1, 10); setTab(key); };
+  const dataset = (key, preview = false) => {
+    const config = configurations[key];
+    const rows = key === "expenses" ? data.expenseReport?.categoryWiseExpenses || [] : data[config.field] || [];
+    const footer = key === "expenses" && data.expenseReport ? <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs tabular-nums">{[["Total", "totalExpenses"], ["Paid", "totalPaidExpenses"], ["Unpaid", "totalUnpaidExpenses"], ["GST", "totalExpenseGstRecorded"]].map(([label, field]) => <span key={field}>{label}: {money(data.expenseReport[field])}</span>)}</div> : null;
+    return <ReportTable key={key} {...config} rows={rows} preview={preview} pagination={data.pagination?.[key]} loading={loading} onPage={(page, size) => changePage(key, page, size)} onViewAll={() => openDetail(key)} footer={footer} />;
+  };
+  return <div className="mx-auto max-w-[1500px] space-y-4 pb-6">
+    <header><h2 className="text-2xl font-semibold tracking-tight">Reports / GST</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>Sales, collections, outstanding balances and expenses.</p></header>
+    <section aria-label="GST summary" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">{[["Taxable sales", "taxableValue"], ["CGST", "cgst"], ["SGST", "sgst"], ["IGST", "igst"], ["Total GST", "totalGst"]].map(([label, key]) => <Metric key={key} label={label} value={gstData ? money(gstData.sales?.[key]) : "—"} />)}</section>
+    <section className="rounded-2xl border p-3" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
+      <div className="flex flex-wrap items-end gap-3"><label className="min-w-0 flex-1 text-xs font-medium">GST from<input type="date" value={dateRange.from} onChange={event => setDateRange(current => ({ ...current, from: event.target.value }))} className="field mt-1 py-2" /></label><label className="min-w-0 flex-1 text-xs font-medium">GST to<input type="date" value={dateRange.to} onChange={event => setDateRange(current => ({ ...current, to: event.target.value }))} className="field mt-1 py-2" /></label><button type="button" disabled={loading || gstLoading} onClick={() => setRefresh(value => value + 1)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border px-3 text-sm disabled:opacity-50" style={{ borderColor: "var(--panel-border)" }}><RefreshCw size={15} className={loading || gstLoading ? "animate-spin" : ""} />Refresh</button></div>
+      <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>Date range applies to GST only. Sales and collection reports cover all dates.</p>
+      {invalidRange ? <p role="alert" className="mt-2 text-sm text-rose-600">From date must be on or before To date.</p> : gstError ? <p role="alert" className="mt-2 text-sm text-rose-600">{gstError}</p> : null}
+      {gstLoading ? <p role="status" className="mt-2 text-xs">Updating GST report…</p> : null}
+      <nav aria-label="Report sections" className="mt-3 flex flex-wrap gap-1 border-t pt-3" style={{ borderColor: "var(--panel-border)" }}>{tabs.map(item => <button type="button" key={item.key} aria-pressed={activeTab === item.key} onClick={() => { if (item.key === "overview") setQuery({}); setTab(item.key); }} className={`min-h-10 rounded-lg px-3 py-2 text-sm font-medium ${activeTab === item.key ? "bg-brand-600 text-white" : "hover:bg-slate-500/10"}`}>{item.title}</button>)}</nav>
+    </section>
+    {error ? <p role="alert" className="text-sm text-rose-600">{error} Use Refresh to retry.</p> : null}
+    {loading ? <p role="status" className="text-sm" style={{ color: "var(--text-muted)" }}>Updating reports…</p> : null}
+    {data && activeTab === "overview" ? <>
+      <section className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><Card title="Monthly sales"><div className="h-[280px] min-w-0">{chartRows.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={chartRows} margin={{ left: 0, right: 8 }}><CartesianGrid stroke="rgba(148,163,184,0.25)" vertical={false} /><XAxis dataKey="month" stroke="#64748b" tick={{ fontSize: 11 }} /><YAxis stroke="#64748b" tickFormatter={compactMoney} tick={{ fontSize: 11 }} /><Tooltip formatter={money} /><Bar dataKey="totalSales" name="Sales" fill="#2563eb" radius={[5, 5, 0, 0]} /><Bar dataKey="paidAmount" name="Collected" fill="#10b981" radius={[5, 5, 0, 0]} /></BarChart></ResponsiveContainer> : <div className="flex h-full items-center justify-center text-sm" style={{ color: "var(--text-muted)" }}>No monthly sales yet.</div>}</div></Card><Card title="Collection summary"><div className="grid grid-cols-2 gap-3 lg:grid-cols-1">{[["Total sales", data.collectionSummary?.totalSales], ["Collected", data.collectionSummary?.paidAmount], ["Outstanding", data.collectionSummary?.unpaidAmount], ["Operating difference", data.profitReport?.netOperatingDifference]].map(([label, value]) => <div key={label} className="border-b pb-2 last:border-0" style={{ borderColor: "var(--panel-border)" }}><p className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</p><p className="mt-1 font-semibold tabular-nums">{value == null ? "—" : money(value)}</p></div>)}</div><p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>Operating difference is sales less total expenses, not cash in hand.</p></Card></section>
+      {["pending", "customers", "expenses"].filter(key => showModule(configurations[key].module)).map(key => dataset(key, true))}
+    </> : null}
+    {data && configurations[activeTab] && showModule(configurations[activeTab].module) ? dataset(activeTab) : null}
+    {activeTab === "gst" ? <Card title="GST details"><p className="mb-3 text-sm">Input GST: {money(gstData?.purchases?.totalGst)}. Cancelled invoices are excluded.</p><p className="mb-3 text-xs" style={{ color: "var(--text-muted)" }}>All-date invoice tax: {money(data?.taxReport?.totalTaxCollected)} · Invoice subtotal before discounts: {money(data?.taxReport?.taxableSales)}</p><ReportTable title="HSN/SAC breakdown" rows={Object.entries(gstData?.hsnSacSummary || {}).map(([code, value]) => ({ code, value }))} columns={[{ label: "HSN/SAC", cell: row => row.code }, { label: "Taxable value", numeric: true, cell: row => money(row.value) }]} localPage={hsnPage} onPage={setHsnPage} loading={gstLoading} /></Card> : null}
+  </div>;
+};
+const Card = ({ title, children }) => <section className="min-w-0 rounded-2xl border p-4" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><h3 className="text-base font-semibold">{title}</h3><div className="mt-3">{children}</div></section>;
+const Metric = ({ label, value }) => <div className="min-w-0 rounded-xl border p-3" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><p className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</p><p className="mt-1 break-words text-lg font-semibold tabular-nums">{value}</p></div>;
+const ReportTable = ({ title, rows, columns, preview = false, pagination, loading, onPage, onViewAll, footer, localPage }) => {
+  const meta = pagination || { total: rows.length, page: localPage || 1, limit: 10, totalPages: Math.max(1, Math.ceil(rows.length / 10)) };
+  const displayed = reportRows(rows, meta, preview, Boolean(pagination));
+  return <section aria-label={title} aria-busy={loading} className="min-w-0 rounded-2xl border" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
+    <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"><h3 className="text-sm font-semibold">{title} <span className="font-normal" style={{ color: "var(--text-muted)" }}>({meta.total})</span></h3>{preview && meta.total > 5 ? <button type="button" disabled={loading} onClick={onViewAll} className="text-xs font-medium text-brand-600 disabled:opacity-50">View all {title.toLowerCase()} →</button> : null}</div>
+    <table className="reports-table block w-full table-fixed text-left text-sm md:table"><thead className="hidden bg-slate-500/5 text-xs md:table-header-group"><tr>{columns.map(column => <th key={column.label} className={`px-4 py-2 font-medium ${column.numeric ? "text-right" : ""}`}>{column.label}</th>)}</tr></thead><tbody className="block md:table-row-group">{displayed.map((row, index) => <tr key={row._id || row.code || index} className="grid grid-cols-2 gap-x-3 gap-y-2 border-t px-4 py-3 md:table-row md:p-0" style={{ borderColor: "var(--panel-border)" }}>{columns.map(column => <td key={column.label} className={`block min-w-0 break-words md:table-cell md:px-4 md:py-2 ${column.numeric ? "tabular-nums md:text-right" : ""}`}><span className="report-cell-label mb-0.5 block text-xs md:hidden" style={{ color: "var(--text-muted)" }}>{column.label}</span>{column.cell(row)}</td>)}</tr>)}</tbody></table>
+    {!displayed.length ? <p className="px-4 py-5 text-sm" style={{ color: "var(--text-muted)" }}>No records available.</p> : null}
+    {footer ? <div className="border-t px-4 py-3" style={{ borderColor: "var(--panel-border)" }}>{footer}</div> : null}
+    {!preview && meta.total > 0 ? <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-xs" style={{ borderColor: "var(--panel-border)" }}><div className="flex items-center gap-2"><span>{(meta.page - 1) * meta.limit + 1}–{Math.min(meta.page * meta.limit, meta.total)} of {meta.total}</span>{pagination ? <label>Rows <select aria-label={`${title} rows per page`} disabled={loading} value={meta.limit} onChange={event => onPage(1, Number(event.target.value))} className="rounded border bg-transparent p-1">{[10, 25, 50].map(size => <option key={size}>{size}</option>)}</select></label> : null}</div><div className="flex gap-2"><button type="button" disabled={loading || meta.page <= 1} onClick={() => onPage(meta.page - 1, meta.limit)} className="min-h-9 rounded-lg border px-3 disabled:opacity-40">Previous</button><span className="self-center">{meta.page} / {meta.totalPages}</span><button type="button" disabled={loading || meta.page >= meta.totalPages} onClick={() => onPage(meta.page + 1, meta.limit)} className="min-h-9 rounded-lg border px-3 disabled:opacity-40">Next</button></div></div> : null}
+  </section>;
+};
 export default ReportsPage;

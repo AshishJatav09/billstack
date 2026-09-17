@@ -34,7 +34,10 @@ const base=process.env.BILLSTACK_QA_URL || "http://localhost:5173";
    else if(p.endsWith("/expenses/categories"))data=["Miscellaneous"];
    else if(p.endsWith("/expenses/summary"))data={totalExpenses:0,paid:0,unpaid:0,gstRecorded:0,byCategory:[]};
    else if(p==="/api/expenses")data={items:[],pagination:{page:1,totalPages:1,total:0}};
-   else if(p.endsWith("/reports/summary"))data={monthlySales:[],customerWiseSales:[],pendingPayment:[],productWiseSales:[],purchaseReport:[],taxReport:{},profitReport:{},expenseReport:{}};
+   else if(p.endsWith("/reports/summary")){
+    const size=Number(url.searchParams.get("pendingSize")||10),page=Number(url.searchParams.get("pendingPage")||1);
+    data={monthlySales:[],collectionSummary:{totalSales:11800,paidAmount:4000,unpaidAmount:7800},customerWiseSales:[{_id:"client",customerName:"Test Client",totalSales:11800,paidAmount:4000,balanceDue:7800}],pendingPayment:Array.from({length:Math.min(size,3000-(page-1)*size)},(_,i)=>({_id:"pending-"+((page-1)*size+i),invoiceNumber:"INV-"+((page-1)*size+i),customerName:client.name,grandTotal:11800,balanceDue:7800,paymentStatus:"partial"})),pagination:{pending:{page,limit:size,total:3000,totalPages:Math.ceil(3000/size)},customers:{page:1,limit:10,total:1,totalPages:1}},productWiseSales:[],purchaseReport:[],taxReport:{},profitReport:{},expenseReport:{}};
+   }
    else if(p.includes("gst"))data={sales:{},purchases:{},hsnSacSummary:{}};
    else if(p.includes("communications/summary"))data={providers:{}};
    else data=[];
@@ -97,12 +100,34 @@ const base=process.env.BILLSTACK_QA_URL || "http://localhost:5173";
    await page.goto(base+"/dashboard/"+path);await page.waitForTimeout(400);
    if(path==="settings")assert.equal(await page.getByText("Modules & Add-ons",{exact:true}).count(),mode==="SAAS"?1:0);
    if(path==="quotes"&&mode==="SELF_HOSTED"){
+    assert.equal(await page.locator('nav[aria-label="Sales sections"]').count(),0);
     assert.equal(await page.getByRole("button",{name:"Credit Notes",exact:true}).count(),0);
     assert.equal(await page.getByRole("button",{name:"Sales Returns",exact:true}).count(),0);
+   }
+   if(path==="reports"){
+    const report=page.getByRole("region",{name:"Pending payments",exact:true});
+    assert.equal(await report.locator("tbody tr").count(),5);
+    await report.getByRole("button",{name:/View all pending payments/}).click();
+    await page.waitForTimeout(250);
+    assert.equal(await report.locator("tbody tr").count(),10);
+    await report.getByRole("button",{name:"Next",exact:true}).click();
+    await report.getByText("INV-10",{exact:true}).waitFor();
+    await report.getByLabel("Pending payments rows per page").selectOption("25");
+    await page.waitForTimeout(250);
+    assert.equal(await report.locator("tbody tr").count(),25);
    }
    for(const [width,height] of [[1366,768],[1440,900],[1920,1080],[768,1024],[390,844]]){
     await page.setViewportSize({width,height});await page.waitForTimeout(180);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,path+" overflow");
+    if(path==="reports"){
+     const navigation=page.getByRole("navigation",{name:"Report sections",exact:true});
+     for(const button of await navigation.getByRole("button").all()){
+      await button.click();await page.waitForTimeout(150);
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,"report tab overflow at "+width);
+     }
+     await navigation.getByRole("button",{name:"Overview",exact:true}).click();await page.waitForTimeout(150);
+     if(width>=1366){const measurements=await page.getByRole("heading",{name:"Reports / GST",exact:true}).evaluate(el=>{const root=el.parentElement.parentElement;return {height:root.getBoundingClientRect().height,children:[...root.children].map(child=>({title:child.querySelector("h3")?.textContent,height:child.getBoundingClientRect().height,display:getComputedStyle(child).display,rows:[...child.querySelectorAll("tbody tr")].map(tr=>({height:tr.getBoundingClientRect().height,display:getComputedStyle(tr).display}))}))}});assert.ok(measurements.height<height*2,JSON.stringify(measurements));}
+    }
    }
   }
   modules.catalog=modules.catalog.filter(item=>!["quotations","credit_notes","sales_returns"].includes(item.key));

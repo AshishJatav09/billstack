@@ -312,9 +312,9 @@ test("reports page surfaces GST and allocation-derived payment state in standard
   const reportController = fs.readFileSync(path.join(__dirname, "../src/controllers/report.controller.js"), "utf8");
 
   assert.match(reportsPage, /Reports \/ GST/);
-  assert.match(reportsPage, /Review sales, invoice balances, expenses and GST/);
+  assert.match(reportsPage, /Sales, collections, outstanding balances and expenses/);
   assert.match(reportsPage, /Total GST/);
-  assert.match(reportsPage, /No pending invoice payments/);
+  assert.match(reportsPage, /No records available/);
   assert.match(reportController, /getDerivedInvoiceRows/);
   assert.match(reportController, /pendingPayment = derivedInvoices/);
 });
