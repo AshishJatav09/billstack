@@ -131,3 +131,10 @@ export const isSelfHostedWorkspace = (moduleData, business) =>
 
 export const shouldShowCommercialSettings = (moduleData, business) =>
   !isSelfHostedWorkspace(moduleData, business);
+
+export const settingsVisibility = (moduleData, business) => ({
+  inventory: isActiveModule(moduleData, "inventory") && shouldShowWorkspaceNavigation("inventory", moduleData, business),
+  integrations: !isRealEstateSelfHostedWorkspace(moduleData, business),
+  accountSecurity: !isRealEstateSelfHostedWorkspace(moduleData, business),
+  commercial: shouldShowCommercialSettings(moduleData, business),
+});

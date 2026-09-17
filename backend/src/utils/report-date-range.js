@@ -1,4 +1,4 @@
-const AppError = require("./AppError");
+const AppError = require("./appError");
 const reportDateRange = ({ from, to } = {}) => {
   const parse = value => {
     if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new AppError("Use a valid YYYY-MM-DD report date.", 400);

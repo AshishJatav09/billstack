@@ -14,6 +14,7 @@ const Task = require("../models/Task");
 const User = require("../models/User");
 const AppError = require("../utils/appError");
 const { buildGstSnapshot } = require("../utils/gst");
+const { buildTaxDocument } = require("../utils/tax-document");
 const { buildInvoiceNumber, buildInvoiceTotals } = require("../utils/invoice");
 const { log } = require("../utils/logger");
 const { buildInventoryFlags } = require("./inventory.service");
@@ -201,11 +202,8 @@ const createInvoiceFromWorkflow = async ({ business, customer, lineItems, source
   if (existing) return existing;
 
   const invoiceDate = new Date();
-  const totals = buildInvoiceTotals({ lineItems, amountPaid: 0 });
   const products = await Product.find({ _id: { $in: lineItems.map((item) => item.productId) }, businessId: business._id }).session(session);
-  const gstSnapshot = business.gstConfiguration?.enabled
-    ? buildGstSnapshot({ business, counterparty: customer, lineItems: totals.lineItems, products })
-    : null;
+  const { totals, gstSnapshot } = buildTaxDocument({ business, counterparty: customer, products, lineItems, placeOfSupplyCode: source.placeOfSupplyCode, amountPaid: 0 });
   const invoiceNumber = nextNumber({ business, field: "invoiceNumbering", prefix: "INV", format: "INV-{YYYY}-{0001}", date: invoiceDate });
 
   const payload = {
@@ -560,14 +558,15 @@ const createRecurringProfile = async ({ businessId, userId, payload }) => {
       const interval = Number(payload.interval || 1);
       if (!RECURRING_FREQUENCIES.includes(frequency)) throw new AppError("Invalid recurring billing frequency", 400);
       if (!Number.isInteger(interval) || interval <= 0) throw new AppError("Recurring interval must be a positive integer", 400);
-      const { lineItems } = await normalizeLineItems({ businessId, rawItems: payload.lineItems, session });
-      const totals = buildInvoiceTotals({ lineItems });
+      const { lineItems, products } = await normalizeLineItems({ businessId, rawItems: payload.lineItems, session });
+      const { totals } = buildTaxDocument({ business, counterparty: customer, products, lineItems, placeOfSupplyCode: payload.placeOfSupplyCode });
       [profile] = await RecurringBillingProfile.create([{
         businessId,
         customerId: customer._id,
         name: payload.name,
         description: payload.description || "",
         lineItems: totals.lineItems,
+        placeOfSupplyCode: payload.placeOfSupplyCode || customer.placeOfSupplyCode || customer.stateCode || "",
         subtotal: totals.subtotal,
         totalTax: totals.totalTax,
         totalDiscount: totals.totalDiscount,
@@ -652,7 +651,7 @@ const generateRecurringInvoice = async ({ businessId, userId, id, runDate = new 
         business,
         customer,
         lineItems: profile.lineItems,
-        source: { type: "RECURRING", id: profile._id, occurrenceKey: key, paymentTermsDays: profile.paymentTermsDays },
+        source: { type: "RECURRING", id: profile._id, occurrenceKey: key, paymentTermsDays: profile.paymentTermsDays, placeOfSupplyCode: profile.placeOfSupplyCode },
         userId,
         session,
       });

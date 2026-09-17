@@ -98,7 +98,18 @@ const base=process.env.BILLSTACK_QA_URL || "http://localhost:5173";
   await page.locator("#customer-payment-editor").getByRole("button",{name:"Cancel",exact:true}).click();
   for(const path of ["","invoices","customers","quotes","expenses","reports","recurring-billing","settings"]){
    await page.goto(base+"/dashboard/"+path);await page.waitForTimeout(400);
-   if(path==="settings")assert.equal(await page.getByText("Modules & Add-ons",{exact:true}).count(),mode==="SAAS"?1:0);
+   if(path==="settings") {
+    assert.equal(await page.getByText("Modules & Add-ons",{exact:true}).count(),mode==="SAAS"?1:0);
+    assert.equal(await page.getByText("Indian GST configuration",{exact:true}).count(),0);
+    for(const [width,height] of [[1920,1080],[1440,900],[1366,768],[768,1024],[390,844]]) {
+     await page.setViewportSize({width,height});
+     for(const label of ["Business Profile","GST & Tax","Invoice & Payment","Branding","Communications"]) {
+      await page.getByRole("navigation",{name:"Settings sections"}).getByRole("button",{name:label,exact:true}).click();
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,`${mode} settings ${label} ${width} overflow`);
+     }
+    }
+    await page.setViewportSize({width:1366,height:768});
+   }
    if(path==="quotes"&&mode==="SELF_HOSTED"){
     assert.equal(await page.locator('nav[aria-label="Sales sections"]').count(),0);
     assert.equal(await page.getByRole("button",{name:"Credit Notes",exact:true}).count(),0);
@@ -124,6 +135,13 @@ const base=process.env.BILLSTACK_QA_URL || "http://localhost:5173";
      for(const button of await navigation.getByRole("button").all()){
       await button.click();await page.waitForTimeout(150);
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,"report tab overflow at "+width);
+      if(width>=768){
+       const aligned=await page.locator(".reports-table").evaluateAll(tables=>tables.every(table=>[...table.querySelectorAll("tbody tr")].every(row=>[...row.children].every((cell,index)=>{
+        const header=table.querySelectorAll("thead th")[index];
+        return getComputedStyle(cell).textAlign===getComputedStyle(header).textAlign&&Math.abs(cell.getBoundingClientRect().left-header.getBoundingClientRect().left)<1&&Math.abs(cell.getBoundingClientRect().right-header.getBoundingClientRect().right)<1;
+       }))));
+       assert.equal(aligned,true,"Report headers and cells must share column edges and alignment at "+width);
+      }
      }
      await navigation.getByRole("button",{name:"Overview",exact:true}).click();await page.waitForTimeout(150);
      if(width>=1366){const measurements=await page.getByRole("heading",{name:"Reports / GST",exact:true}).evaluate(el=>{const root=el.parentElement.parentElement;return {height:root.getBoundingClientRect().height,children:[...root.children].map(child=>({title:child.querySelector("h3")?.textContent,height:child.getBoundingClientRect().height,display:getComputedStyle(child).display,rows:[...child.querySelectorAll("tbody tr")].map(tr=>({height:tr.getBoundingClientRect().height,display:getComputedStyle(tr).display}))}))}});assert.ok(measurements.height<height*2,JSON.stringify(measurements));}

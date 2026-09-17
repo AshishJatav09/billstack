@@ -3,6 +3,7 @@ const express = require("express");
 const {
   cancelInvoice,
   createInvoice,
+  previewInvoiceTax,
   downloadInvoicePdf,
   emailInvoicePdf,
   getInvoiceById,
@@ -32,6 +33,7 @@ const router = express.Router();
 router.use(authMiddleware, tenantMiddleware, requireActiveSubscription());
 
 router.get("/", listInvoices);
+router.post("/tax-preview", permit("owner", "admin", "staff", "accountant"), validate(invoiceCreateValidator), previewInvoiceTax);
 router.get("/:invoiceId/allocations", validateObjectIdParam("invoiceId"), listInvoiceAllocations);
 router.get("/:invoiceId/e-invoice", validateObjectIdParam("invoiceId"), getEInvoiceDetails);
 router.post("/:invoiceId/e-invoice/check", validateObjectIdParam("invoiceId"), checkInvoiceReadiness);

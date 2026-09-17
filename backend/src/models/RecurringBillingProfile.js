@@ -45,6 +45,7 @@ const recurringBillingProfileSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+recurringBillingProfileSchema.add({ placeOfSupplyCode: { type: String, default: "" } });
 recurringBillingProfileSchema.index({ businessId: 1, status: 1, nextBillingDate: 1 });
 recurringBillingProfileSchema.index({ businessId: 1, customerId: 1 });
 recurringBillingProfileSchema.index({ businessId: 1, "generatedInvoices.occurrenceKey": 1 });

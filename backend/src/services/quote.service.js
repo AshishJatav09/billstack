@@ -9,6 +9,7 @@ const StockMovement = require("../models/StockMovement");
 const AppError = require("../utils/appError");
 const { buildGstSnapshot, validateGstin, validateStateCode } = require("../utils/gst");
 const { buildInvoiceNumber, buildInvoiceTotals } = require("../utils/invoice");
+const { buildTaxDocument } = require("../utils/tax-document");
 const { log } = require("../utils/logger");
 const { generateQuotePdfBuffer } = require("../utils/pdfQuote");
 const { dispatchInvoiceIssuedAutomation } = require("./communication.service");
@@ -33,6 +34,8 @@ const normalizeLineItems = async ({ businessId, rawItems, session }) => {
     return {
       productId: product._id,
       productName: product.name,
+      hsnSac: product.hsnSac || "",
+      gstClassification: product.gstClassification || "TAXABLE",
       quantity: Number(item.quantity || 0),
       rate: Number(item.rate ?? product.sellingPrice ?? 0),
       taxRate: Number(item.taxRate ?? item.tax ?? product.taxRate ?? 0),
@@ -122,7 +125,7 @@ const createQuote = async ({ businessId, userId, payload }) => {
       if (!customer || !business) throw new AppError("Customer or business not found", 404);
 
       const items = await normalizeLineItems({ businessId, rawItems: payload.lineItems, session });
-      const totals = buildInvoiceTotals({ lineItems: items, shippingCharges: payload.shippingCharges, roundOff: payload.roundOff });
+      const { totals, gstSnapshot } = buildTaxDocument({ business, counterparty: customer, placeOfSupplyCode: payload.placeOfSupplyCode, lineItems: items, shippingCharges: payload.shippingCharges, roundOff: payload.roundOff });
       const numbering = business.quoteNumbering || {};
       const sequence = numbering.nextSequence || 1;
       const quoteNumber = buildInvoiceNumber({
@@ -142,6 +145,7 @@ const createQuote = async ({ businessId, userId, payload }) => {
           totalTax: totals.totalTax,
           totalDiscount: totals.totalDiscount,
           grandTotal: totals.grandTotal,
+          gstSnapshot, placeOfSupplyCode: gstSnapshot?.placeOfSupplyCode || "", shippingCharges: totals.shippingCharges, roundOff: totals.roundOff,
           customerSnapshot: buildCustomerSnapshot(customer),
           businessSnapshot: buildBusinessSnapshot(business),
           createdBy: userId,
@@ -181,7 +185,7 @@ const updateQuote = async ({ businessId, id, payload }) => {
       if (!customer || !business) throw new AppError("Customer or business not found", 404);
 
       const items = await normalizeLineItems({ businessId, rawItems: payload.lineItems || quote.lineItems, session });
-      const totals = buildInvoiceTotals({ lineItems: items, shippingCharges: payload.shippingCharges, roundOff: payload.roundOff });
+      const { totals, gstSnapshot } = buildTaxDocument({ business, counterparty: customer, placeOfSupplyCode: payload.placeOfSupplyCode ?? quote.placeOfSupplyCode, lineItems: items, shippingCharges: payload.shippingCharges ?? quote.shippingCharges, roundOff: payload.roundOff ?? quote.roundOff });
 
       quote.customerId = customer._id;
       quote.lineItems = totals.lineItems;
@@ -189,6 +193,7 @@ const updateQuote = async ({ businessId, id, payload }) => {
       quote.totalTax = totals.totalTax;
       quote.totalDiscount = totals.totalDiscount;
       quote.grandTotal = totals.grandTotal;
+      quote.gstSnapshot = gstSnapshot; quote.placeOfSupplyCode = gstSnapshot?.placeOfSupplyCode || ""; quote.shippingCharges = totals.shippingCharges; quote.roundOff = totals.roundOff;
       quote.customerSnapshot = buildCustomerSnapshot(customer);
       quote.businessSnapshot = buildBusinessSnapshot(business);
       await quote.save({ session });
@@ -237,14 +242,7 @@ const convertQuote = async ({ businessId, userId, id }) => {
       if (!business || !customer) throw new AppError("Business or customer not found", 404);
 
       const products = await Product.find({ _id: { $in: quote.lineItems.map((item) => item.productId) }, businessId }).session(session);
-      const totals = buildInvoiceTotals({ lineItems: quote.lineItems, amountPaid: 0 });
-      if (business.gstConfiguration?.enabled) {
-        if (!validateGstin(business.gstConfiguration.gstin || business.gstTaxId) || !validateStateCode(business.gstConfiguration.stateCode)) throw new AppError("Invalid business GST configuration", 400);
-        if (customer.gstNumber && !validateGstin(customer.gstNumber)) throw new AppError("Invalid customer GSTIN", 400);
-      }
-      const gstSnapshot = business.gstConfiguration?.enabled
-        ? buildGstSnapshot({ business, counterparty: customer, lineItems: totals.lineItems, products })
-        : null;
+      const { totals, gstSnapshot } = buildTaxDocument({ business, counterparty: customer, products, lineItems: quote.lineItems, placeOfSupplyCode: quote.placeOfSupplyCode, shippingCharges: quote.shippingCharges, roundOff: quote.roundOff, amountPaid: 0 });
 
       const sequence = business.invoiceNumbering?.nextSequence || 1;
       const invoiceDate = new Date();

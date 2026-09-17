@@ -3,7 +3,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const AppError = require("../utils/appError");
 const { serializeBusinessWithPlan } = require("../utils/businessPlan");
 const { applyControlledPlanChange, ensureBusinessSubscription } = require("../utils/subscription");
-const { validateGstin, validateStateCode } = require("../utils/gst");
+const { normalizeBusinessGst } = require("../../../shared/gst-policy.cjs");
 const { writeAuditLog } = require("../services/audit.service");
 const { getPresetRecommendations } = require("../services/module.service");
 const { createSampleData, removeSampleData, recommendPlanForProfile } = require("../services/commercial-plan.service");
@@ -34,7 +34,9 @@ const updateBusinessSetup = asyncHandler(async (req, res) => {
   }
 
   business.name = req.body.name.trim();
-  business.industry = req.body.industry?.trim() || "";
+  const lockedRealEstate = business.deploymentMode === "SELF_HOSTED" && business.businessProfile?.industryCode === "REAL_ESTATE";
+  if (lockedRealEstate && req.body.industry !== undefined && req.body.industry.trim() !== business.industry) throw new AppError("Industry is fixed for this licensed workspace", 400);
+  business.industry = req.body.industry?.trim() || business.industry || "";
   const selectedNeeds = Array.isArray(req.body.selectedNeeds)
     ? req.body.selectedNeeds
     : String(req.body.selectedNeeds || "")
@@ -50,6 +52,7 @@ const updateBusinessSetup = asyncHandler(async (req, res) => {
   const preset = (req.body.preset || req.body.businessModel || "CUSTOM").toString().toUpperCase();
   const recommendations = getPresetRecommendations(preset);
   business.businessProfile = {
+    ...(business.businessProfile?.toObject?.() || business.businessProfile || {}),
     playerType: req.body.playerType?.trim() || business.businessProfile?.playerType || "",
     businessModel: req.body.businessModel || business.businessProfile?.businessModel || "",
     businessSize: req.body.businessSize?.trim() || business.businessProfile?.businessSize || "",
@@ -60,9 +63,9 @@ const updateBusinessSetup = asyncHandler(async (req, res) => {
       req.body.gstRegistered === "true" ||
       business.businessProfile?.gstRegistered ||
       false,
-    selectedNeeds,
-    recommendedModules: Array.from(new Set([...recommendations.moduleKeys, ...selectedModules])),
-    preset: recommendations.preset,
+    selectedNeeds: req.body.selectedNeeds === undefined ? business.businessProfile?.selectedNeeds || [] : selectedNeeds,
+    recommendedModules: req.body.selectedModules === undefined && req.body.preset === undefined && req.body.businessModel === undefined ? business.businessProfile?.recommendedModules || [] : Array.from(new Set([...recommendations.moduleKeys, ...selectedModules])),
+    preset: req.body.preset === undefined && req.body.businessModel === undefined ? business.businessProfile?.preset || recommendations.preset : recommendations.preset,
     onboardingStatus: "COMPLETED",
   };
   business.billingEmail = req.body.billingEmail?.trim().toLowerCase() || "";
@@ -73,16 +76,11 @@ const updateBusinessSetup = asyncHandler(async (req, res) => {
   const gstEnabled = req.body.gstEnabled === true || req.body.gstEnabled === "true";
   const gstin = (req.body.gstConfigurationGstin || req.body.gstTaxId || "").trim().toUpperCase();
   const stateCode = (req.body.gstStateCode || "").trim();
-  if (gstEnabled) {
-    if (!validateGstin(gstin)) throw new AppError("Invalid GSTIN", 400);
-    if (!validateStateCode(stateCode)) throw new AppError("Invalid GST state code", 400);
-  }
-  business.gstConfiguration = {
-    enabled: gstEnabled,
-    gstin,
-    stateCode,
-    state: req.body.gstState?.trim() || "",
-  };
+  try {
+    business.gstConfiguration = normalizeBusinessGst({ enabled: gstEnabled, gstin, stateCode, state: req.body.gstState?.trim() || "" });
+  } catch (error) { throw new AppError(error.message, 400); }
+  business.gstTaxId = business.gstConfiguration.gstin;
+  business.businessProfile.gstRegistered = gstEnabled;
   business.invoiceTerms = req.body.invoiceTerms?.trim() || "";
   business.defaultTaxSettings = {
     taxName: req.body.taxName?.trim() || "GST",

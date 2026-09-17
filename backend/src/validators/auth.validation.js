@@ -86,17 +86,21 @@ const businessSetupValidator = (body) => {
     errors.name = "Business name must be at least 2 characters";
   }
 
-  if (body.billingEmail && !isEmail(body.billingEmail)) {
+  if (body.billingEmail && !isEmail(String(body.billingEmail).trim())) {
     errors.billingEmail = "Billing email must be valid";
   }
 
-  if (body.email && !isEmail(body.email)) {
+  if (body.email && !isEmail(String(body.email).trim())) {
     errors.email = "Business email must be valid";
   }
 
-  if (body.taxRate !== undefined && Number.isNaN(Number(body.taxRate))) {
-    errors.taxRate = "Tax rate must be a valid number";
+  if (body.taxRate !== undefined && (!Number.isFinite(Number(body.taxRate)) || Number(body.taxRate) < 0 || Number(body.taxRate) > 100)) {
+    errors.taxRate = "Tax rate must be between 0 and 100";
   }
+  if (body.taxMode && body.taxMode !== "exclusive") errors.taxMode = "Only Tax Exclusive is currently supported";
+  if (body.bankIfscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(String(body.bankIfscCode).trim().toUpperCase())) errors.bankIfscCode = "Enter a valid 11-character IFSC";
+  if (body.bankUpiId && !/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/.test(String(body.bankUpiId).trim())) errors.bankUpiId = "Enter a valid UPI ID";
+  if (body.bankAccountNumber !== undefined && typeof body.bankAccountNumber !== "string") errors.bankAccountNumber = "Account number must be supplied as text";
 
   if (
     body.allowNegativeStock !== undefined &&

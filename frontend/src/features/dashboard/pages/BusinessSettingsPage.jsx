@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import gstStates from "../../../../../shared/indian-gst-states.json";
 import {
   communicationSummaryRequest,
   acceptModuleOfferRequest,
@@ -16,7 +17,7 @@ import {
   verifyModuleRazorpayPaymentRequest,
 } from "../../auth/api";
 import { authStore } from "../../../store/authStore";
-import { isRealEstateSelfHostedWorkspace, shouldShowCommercialSettings } from "../../workspace/workspaceVisibility";
+import { isRealEstateSelfHostedWorkspace, shouldShowCommercialSettings, settingsVisibility } from "../../workspace/workspaceVisibility";
 
 const getApiOrigin = () => {
   const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
@@ -64,6 +65,9 @@ const BusinessSettingsPage = () => {
     allowNegativeStock: business?.inventorySettings?.allowNegativeStock || false,
   });
   const [logoFile, setLogoFile] = useState(null);
+  const [section, setSection] = useState("Business Profile");
+  const [saved, setSaved] = useState(false);
+  const saveLock = useRef(false);
   const [saveError, setSaveError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const [isSaving, setIsSaving] = useState(false);
@@ -79,12 +83,14 @@ const BusinessSettingsPage = () => {
   const [manualUpiOfferId, setManualUpiOfferId] = useState("");
   const [manualUpiReference, setManualUpiReference] = useState("");
   const isRealEstateSelfHosted = isRealEstateSelfHostedWorkspace(moduleData, business);
+  const visibility = settingsVisibility(moduleData, business);
 
   const logoPreviewUrl = useMemo(() => {
     if (logoFile) return URL.createObjectURL(logoFile);
     if (business?.logoUrl) return `${getApiOrigin()}${business.logoUrl}`;
     return "";
   }, [business?.logoUrl, logoFile]);
+  useEffect(() => () => { if (logoFile && logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl); }, [logoFile, logoPreviewUrl]);
 
   const refreshIntegrationData = async () => {
     try {
@@ -104,7 +110,7 @@ const BusinessSettingsPage = () => {
     communicationSummaryRequest()
       .then(setCommunicationSummary)
       .catch(() => setCommunicationSummary(null));
-    refreshIntegrationData();
+    if (visibility.integrations) refreshIntegrationData();
     refreshModules();
   }, []);
 
@@ -119,29 +125,51 @@ const BusinessSettingsPage = () => {
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;
-    setForm((current) => ({ ...current, [name]: type === "checkbox" ? checked : value }));
+    setSaved(false);
+    setForm((current) => {
+      const next = { ...current, [name]: type === "checkbox" ? checked : value };
+      if (name === "gstConfigurationGstin") {
+        next.gstConfigurationGstin = value.trim().toUpperCase();
+        if (/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(next.gstConfigurationGstin) && gstStates[next.gstConfigurationGstin.slice(0, 2)]) {
+          next.gstStateCode = next.gstConfigurationGstin.slice(0, 2); next.gstState = gstStates[next.gstStateCode];
+        }
+      }
+      if (name === "gstStateCode") next.gstState = gstStates[value] || "";
+      return next;
+    });
   };
 
   const handleProfileSubmit = async (event) => {
     event.preventDefault();
+    if (saveLock.current) return;
+    const errors = {};
+    for (const name of ["email", "billingEmail"]) if (form[name] && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form[name].trim())) errors[name] = "Enter a valid email address";
+    if (form.bankIfscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.bankIfscCode.trim().toUpperCase())) errors.bankIfscCode = "Enter a valid 11-character IFSC";
+    if (form.bankUpiId && !/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/.test(form.bankUpiId.trim())) errors.bankUpiId = "Enter a valid UPI ID";
+    if (form.gstEnabled && (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(form.gstConfigurationGstin) || !gstStates[form.gstStateCode])) errors.gstConfigurationGstin = "Enter a valid GSTIN and state";
+    if (form.gstEnabled && form.gstConfigurationGstin.slice(0, 2) !== form.gstStateCode) errors.gstStateCode = `GSTIN belongs to ${gstStates[form.gstConfigurationGstin.slice(0, 2)]} (${form.gstConfigurationGstin.slice(0, 2)}), but the selected business state is ${form.gstState} (${form.gstStateCode}). Please correct the GST details.`;
+    if (Object.keys(errors).length) { setFieldErrors(errors); setSaveError(Object.values(errors)[0]); return; }
+    saveLock.current = true;
     setIsSaving(true);
     setSaveError("");
     setFieldErrors({});
 
     try {
       const payload = new FormData();
-      Object.entries(form).forEach(([key, value]) => payload.append(key, value ?? ""));
+      Object.entries({ ...form, email: form.email.trim().toLowerCase(), billingEmail: form.billingEmail.trim().toLowerCase(), taxMode: "exclusive" }).forEach(([key, value]) => payload.append(key, value ?? ""));
 
       if (logoFile) payload.append("logo", logoFile);
 
       const data = await updateBusinessSetupRequest(payload);
       updateBusiness(data);
       setLogoFile(null);
+      setSaved(true);
     } catch (error) {
       setFieldErrors(error.response?.data?.errors || {});
       setSaveError(error.response?.data?.message || "Unable to update business profile");
     } finally {
       setIsSaving(false);
+      saveLock.current = false;
     }
   };
 
@@ -303,156 +331,38 @@ const BusinessSettingsPage = () => {
 
   return (
     <div className="space-y-6">
-      <section className="theme-hero rounded-[2rem] p-6 sm:p-8">
-        <p className="theme-hero-kicker text-sm uppercase tracking-[0.3em]">Business Settings</p>
-        <h2 className="theme-hero-title mt-3 text-3xl font-semibold">Profile, GST, billing defaults, and integrations</h2>
-        <p className="theme-hero-copy mt-3 max-w-3xl text-sm">
-          Manage business identity, invoice defaults, GST setup, inventory preferences,
-          provider readiness, and secure integration keys.
-        </p>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <form onSubmit={handleProfileSubmit} className="rounded-3xl border border-white/10 bg-white/5 p-6">
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-semibold text-white">Business Profile</h3>
-              <p className="mt-2 text-sm text-slate-400">Role: {user?.role}</p>
-            </div>
-            {logoPreviewUrl ? (
-              <img src={logoPreviewUrl} alt="Business logo" className="h-16 w-16 rounded-2xl object-cover" />
-            ) : (
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-sm text-slate-300">Logo</div>
-            )}
+      <header><h2 className="text-2xl font-semibold">Business Settings</h2><p className="mt-1 text-sm text-slate-500">Manage your company, GST, invoices and payment details.</p></header>
+      <nav aria-label="Settings sections" className="flex flex-wrap gap-2">
+        {["Business Profile", "GST & Tax", "Invoice & Payment", "Branding", "Communications", ...(visibility.inventory ? ["Inventory"] : [])].map(label => <button key={label} type="button" onClick={() => setSection(label)} aria-pressed={section === label} className={section === label ? "rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white" : "rounded-xl border px-3 py-2 text-sm"}>{label}</button>)}
+      </nav>
+      <section className="mx-auto w-full max-w-5xl space-y-4">
+        {section !== "Communications" && <form onSubmit={handleProfileSubmit} className="rounded-2xl border bg-white p-4 sm:p-6 dark:bg-slate-900">
+          <h3 className="mb-4 text-lg font-semibold">{section}</h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {section === "Inventory" && visibility.inventory && <label className="flex items-center gap-2"><input type="checkbox" name="allowNegativeStock" checked={form.allowNegativeStock} onChange={handleChange} />Allow negative stock when recording stock out</label>}
+            {(section === "Business Profile" ? [["name", "Business name"], ["industry", "Industry"], ["email", "Business email"], ["billingEmail", "Billing email"], ["phone", "Phone"], ["address", "Address"]] : section === "Invoice & Payment" ? [["invoicePrefix", "Invoice prefix"], ["invoiceNumberingFormat", "Invoice numbering format"], ["bankAccountName", "Account holder name"], ["bankName", "Bank name"], ["bankAccountNumber", "Account number"], ["bankIfscCode", "IFSC"], ["bankUpiId", "UPI ID"]] : []).map(([name, label]) => <label key={name} className="min-w-0"><span className="mb-1 block text-sm font-medium">{label}</span><input name={name} type={name.toLowerCase().includes("email") ? "email" : "text"} value={form[name]} readOnly={name === "industry" && isRealEstateSelfHosted} onChange={handleChange} className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm" />{fieldErrors[name] && <span className="mt-1 block text-xs text-rose-600">{fieldErrors[name]}</span>}</label>)}
+            {section === "GST & Tax" && <>
+              <label className="flex items-center gap-2 sm:col-span-2"><input type="checkbox" name="gstEnabled" checked={form.gstEnabled} onChange={handleChange} />GST Registered</label>
+              {form.gstEnabled && <>
+                <label><span className="mb-1 block text-sm">GSTIN</span><input name="gstConfigurationGstin" value={form.gstConfigurationGstin} maxLength={15} onChange={handleChange} className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm" /></label>
+                <label><span className="mb-1 block text-sm">State</span><select name="gstStateCode" value={form.gstStateCode} onChange={handleChange} className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm"><option value="">Select state</option>{Object.entries(gstStates).map(([code, state]) => <option key={code} value={code}>{state} ({code})</option>)}</select></label>
+                <label><span className="mb-1 block text-sm">State Code</span><input value={form.gstStateCode} readOnly className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm" /></label>
+              </>}
+              <label><span className="mb-1 block text-sm">Default GST Rate</span><select name="taxRate" value={form.taxRate} onChange={handleChange} className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm">{Array.from(new Set([0, 5, 12, 18, 28, Number(form.taxRate)])).sort((a,b) => a-b).map(rate => <option key={rate} value={rate}>{rate}%</option>)}</select></label>
+              <div><p className="text-sm font-medium">Tax calculation: Tax Exclusive</p><p className="mt-1 text-xs text-slate-500">GST is added to the entered rate. Each item uses its own GST rate.</p></div>
+            </>}
+            {section === "Invoice & Payment" && <label className="sm:col-span-2"><span className="mb-1 block text-sm">Invoice terms</span><textarea name="invoiceTerms" rows={3} value={form.invoiceTerms} onChange={handleChange} className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm" /></label>}
+            {section === "Branding" && <div className="sm:col-span-2"><p className="mb-3 text-sm font-medium">Business Logo</p>{logoPreviewUrl && <img src={logoPreviewUrl} alt="Business logo" className="mb-3 h-20 w-20 rounded-xl object-contain" />}<label className="inline-flex cursor-pointer rounded-xl border px-3 py-2 text-sm">Change logo<input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={event => { const file = event.target.files?.[0]; if (!file) return; if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type) || file.size > 2 * 1024 * 1024) { setSaveError("Choose JPG, PNG, WEBP or GIF up to 2 MB"); return; } setSaveError(""); setSaved(false); setLogoFile(file); }} /></label><p className="mt-2 text-xs text-slate-500">JPG, PNG, WEBP or GIF. Maximum 2 MB.</p></div>}
           </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            {[
-              ["name", "Business name"],
-              ["industry", "Industry"],
-              ["email", "Business email"],
-              ["billingEmail", "Billing email"],
-              ["phone", "Phone"],
-              ["gstTaxId", "GST / Tax ID"],
-              ["invoicePrefix", "Invoice prefix"],
-              ["invoiceNumberingFormat", "Invoice numbering format"],
-              ["taxName", "Tax name"],
-              ["taxRate", "Default tax rate"],
-              ["bankAccountName", "Bank account name"],
-              ["bankName", "Bank name"],
-              ["bankAccountNumber", "Account number"],
-              ["bankIfscCode", "IFSC code"],
-              ["bankUpiId", "UPI ID"],
-            ].map(([name, label]) => (
-              <label key={name} className={name === "invoiceNumberingFormat" || name === "bankUpiId" ? "md:col-span-2" : "block"}>
-                <span className="mb-2 block text-sm font-medium text-slate-200">{label}</span>
-                <input
-                  name={name}
-                  value={form[name]}
-                  onChange={handleChange}
-                  className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-brand-500"
-                />
-                {fieldErrors[name] ? <span className="mt-2 block text-xs text-rose-400">{fieldErrors[name]}</span> : null}
-              </label>
-            ))}
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-slate-200">Tax mode</span>
-              <select
-                name="taxMode"
-                value={form.taxMode}
-                onChange={handleChange}
-                className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-brand-500"
-              >
-                <option value="exclusive">Exclusive</option>
-                <option value="inclusive">Inclusive</option>
-              </select>
-            </label>
-
-            <label className="block md:col-span-2">
-              <span className="mb-2 block text-sm font-medium text-slate-200">Address</span>
-              <input
-                name="address"
-                value={form.address}
-                onChange={handleChange}
-                className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-brand-500"
-              />
-            </label>
-
-            <label className="block md:col-span-2">
-              <span className="mb-2 block text-sm font-medium text-slate-200">Invoice terms</span>
-              <textarea
-                name="invoiceTerms"
-                rows="4"
-                value={form.invoiceTerms}
-                onChange={handleChange}
-                className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-brand-500"
-              />
-            </label>
-
-            <label className="block md:col-span-2">
-              <span className="mb-2 block text-sm font-medium text-slate-200">Logo upload</span>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(event) => setLogoFile(event.target.files?.[0] || null)}
-                className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white file:mr-4 file:rounded-full file:border-0 file:bg-brand-600 file:px-4 file:py-2 file:text-white"
-              />
-            </label>
-
-            <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-slate-200 md:col-span-2">
-              <input type="checkbox" name="allowNegativeStock" checked={form.allowNegativeStock} onChange={handleChange} />
-              Allow negative stock when recording stock out
-            </label>
-
-            <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 md:col-span-2">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-white">Indian GST configuration</p>
-                  <p className="mt-1 text-xs text-slate-400">
-                    GST snapshots and e-invoice readiness use these business details.
-                  </p>
-                </div>
-                <label className="flex items-center gap-2 text-sm text-slate-200">
-                  <input type="checkbox" name="gstEnabled" checked={form.gstEnabled} onChange={handleChange} /> GST enabled
-                </label>
-              </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-3">
-                <label>
-                  <span className="mb-2 block text-sm font-medium text-slate-200">GSTIN</span>
-                  <input name="gstConfigurationGstin" value={form.gstConfigurationGstin} onChange={handleChange} className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-brand-500" />
-                </label>
-                <label>
-                  <span className="mb-2 block text-sm font-medium text-slate-200">State code</span>
-                  <input name="gstStateCode" value={form.gstStateCode} onChange={handleChange} placeholder="27" className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-brand-500" />
-                </label>
-                <label>
-                  <span className="mb-2 block text-sm font-medium text-slate-200">State</span>
-                  <input name="gstState" value={form.gstState} onChange={handleChange} placeholder="Maharashtra" className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-brand-500" />
-                </label>
-              </div>
-              <div className="mt-4 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-200">
-                E-invoice readiness checks are available on invoice details. Government submission and API secrets are intentionally not exposed here.
-              </div>
-            </div>
-          </div>
-
-          {saveError ? <p className="mt-4 text-sm text-rose-400">{saveError}</p> : null}
-
-          <button
-            type="submit"
-            disabled={isSaving}
-            className="mt-6 rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {isSaving ? "Saving profile..." : "Save business profile"}
-          </button>
-        </form>
-
-        <div className="space-y-6">
+          {saveError && <p role="alert" className="mt-4 text-sm text-rose-600">{saveError}</p>}
+          {saved && <p role="status" className="mt-4 text-sm text-emerald-600">Saved successfully</p>}
+          <button type="submit" disabled={isSaving} className="mt-4 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{isSaving ? "Saving..." : "Save changes"}</button>
+        </form>}
+        <div className={section === "Communications" ? "space-y-4" : "hidden"}>
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
             <p className="text-sm font-semibold text-white">Communication providers</p>
             <p className="mt-2 text-sm text-slate-300">
-              Payment reminders use BillStack's communication layer. WhatsApp sends only after native provider credentials are configured.
+              Email and WhatsApp delivery are available once connected. Check your current delivery status below.
             </p>
             <div className="mt-4 grid gap-2 text-sm text-slate-300">
               <ProviderStatus label="WhatsApp Business API" configured={communicationSummary?.providerStatus?.whatsapp?.configured} />
@@ -504,7 +414,7 @@ const BusinessSettingsPage = () => {
             </div>
           </div> : null}
 
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+          {!isRealEstateSelfHosted && <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
             <p className="text-sm font-semibold text-white">Account security</p>
             <p className="mt-2 text-sm text-slate-300">
               Google login is linked server-side by verified email only. OAuth secrets are never exposed to the browser.
@@ -514,6 +424,7 @@ const BusinessSettingsPage = () => {
             </p>
           </div>
 
+          }
           {shouldShowCommercialSettings(moduleData, business) ? <ModulesPanel
             moduleData={moduleData}
             moduleError={moduleError}

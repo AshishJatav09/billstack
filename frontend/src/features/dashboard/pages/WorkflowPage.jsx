@@ -14,6 +14,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { authStore } from "../../../store/authStore";
+import GstLocationPreview from "../GstLocationPreview";
 import { isActiveModule, isRealEstateSelfHostedWorkspace, shouldShowWorkspaceNavigation } from "../../workspace/workspaceVisibility";
 import {
   createAppointmentRequest,
@@ -231,6 +232,7 @@ const WorkflowPage = () => {
       }
       if (activeTab === "recurring") {
         await createRecurringProfileRequest({
+          placeOfSupplyCode: form.placeOfSupplyCode,
           customerId: form.customerId || firstCustomer,
           name: form.name,
           frequency: form.frequency || "MONTHLY",
@@ -610,6 +612,7 @@ const WorkflowPage = () => {
                 {projects.map((project) => <option key={project._id || project.id} value={project._id || project.id}>{project.name}</option>)}
               </select>
             ) : null}
+            {activeTab === "recurring" ? <GstLocationPreview form={form} setForm={setForm} customers={customers} lineItems={[{ productId: form.productId, quantity: Number(form.quantity || 1), rate: Number(form.rate || 0), taxRate: products.find(product => product._id === form.productId)?.taxRate || 0 }]} /> : null}
             {activeTab === "recurring" ? (
               <label className="text-xs font-medium">First billing date<input className="input mt-1" type="date" value={form.startDate || new Date().toISOString().slice(0, 10)} onChange={(e) => setForm({ ...form, startDate: e.target.value })} required /></label>
             ) : null}

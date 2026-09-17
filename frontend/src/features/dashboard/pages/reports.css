@@ -3,11 +3,14 @@ table.reports-table { display: table; width: 100%; table-layout: fixed; }
 .reports-table tbody { display: table-row-group; }
 .reports-table tbody tr { display: table-row; }
 .reports-table td { display: table-cell; padding: 8px 16px; vertical-align: middle; overflow-wrap: anywhere; }
+.reports-table th, .reports-table td { text-align: left; }
+.reports-table th.report-numeric, .reports-table td.report-numeric { text-align: right; font-variant-numeric: tabular-nums; }
 .reports-table .report-cell-label { display: none; }
 @media (max-width: 767px) {
   table.reports-table, .reports-table tbody { display: block; }
   .reports-table thead { display: none; }
   .reports-table tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px 16px; }
   .reports-table td { display: block; padding: 0; }
+  .reports-table td.report-numeric { text-align: left; }
   .reports-table .report-cell-label { display: block; }
 }

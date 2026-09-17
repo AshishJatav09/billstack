@@ -1,3 +1,4 @@
+const { buildTaxDocument } = require("../utils/tax-document");
 const mongoose = require("mongoose");
 
 const Business = require("../models/Business");
@@ -25,6 +26,13 @@ const {
 } = require("../utils/queryFeatures");
 
 const invoiceSortFields = ["invoiceDate", "dueDate", "grandTotal", "createdAt"];
+const previewInvoiceTax = asyncHandler(async (req, res) => {
+  const [business, customer] = await Promise.all([Business.findById(req.tenant.businessId), Customer.findOne({ _id: req.body.customerId, businessId: req.tenant.businessId })]);
+  if (!business || !customer) throw new AppError("Select a valid customer", 400);
+  const products = await Product.find({ _id: { $in: invoiceProductIds(req.body.lineItems || []) }, businessId: req.tenant.businessId });
+  const lineItems = buildInvoiceLineItems({ items: req.body.lineItems || [], products });
+  res.json({ data: buildTaxDocument({ business, counterparty: customer, products, lineItems, placeOfSupplyCode: req.body.placeOfSupplyCode, shippingCharges: req.body.shippingCharges, roundOff: req.body.roundOff }) });
+});
 
 const attachEInvoiceMetadata = async ({ businessId, invoices }) => {
   const list = Array.isArray(invoices) ? invoices : [invoices];
@@ -312,18 +320,12 @@ const createInvoice = asyncHandler(async (req, res) => {
       }).session(session);
 
       const normalizedItems = buildInvoiceLineItems({ items: rawItems, products });
-      const totals = buildInvoiceTotals({
+      const { totals, gstSnapshot } = buildTaxDocument({ business, counterparty: customer, products, placeOfSupplyCode: req.body.placeOfSupplyCode,
         lineItems: normalizedItems,
         shippingCharges: req.body.shippingCharges,
         roundOff: req.body.roundOff,
         amountPaid: req.body.amountPaid,
       });
-      if (business.gstConfiguration?.enabled) {
-        if (!validateGstin(business.gstConfiguration.gstin || business.gstTaxId) || !validateStateCode(business.gstConfiguration.stateCode)) throw new AppError("Invalid business GST configuration", 400);
-        if (customer.gstNumber && !validateGstin(customer.gstNumber)) throw new AppError("Invalid customer GSTIN", 400);
-        if ((req.body.placeOfSupplyCode || customer.placeOfSupplyCode || customer.stateCode) && !validateStateCode(req.body.placeOfSupplyCode || customer.placeOfSupplyCode || customer.stateCode)) throw new AppError("Invalid place of supply state code", 400);
-      }
-      const gstSnapshot = business.gstConfiguration?.enabled ? buildGstSnapshot({ business, counterparty: customer, lineItems: totals.lineItems, products, placeOfSupplyCode: req.body.placeOfSupplyCode }) : null;
 
       const sequence = business.invoiceNumbering?.nextSequence || 1;
       const invoiceDate = req.body.invoiceDate ? new Date(req.body.invoiceDate) : new Date();
@@ -480,19 +482,12 @@ const updateInvoice = asyncHandler(async (req, res) => {
       }).session(session);
 
       const normalizedItems = buildInvoiceLineItems({ items: rawItems, products });
-      const totals = buildInvoiceTotals({
+      const { totals, gstSnapshot } = buildTaxDocument({ business, counterparty: customer, products, placeOfSupplyCode: req.body.placeOfSupplyCode,
         lineItems: normalizedItems,
         shippingCharges: req.body.shippingCharges,
         roundOff: req.body.roundOff,
         amountPaid: req.body.amountPaid !== undefined ? req.body.amountPaid : invoice.amountPaid,
       });
-
-      if (business.gstConfiguration?.enabled) {
-        if (!validateGstin(business.gstConfiguration.gstin || business.gstTaxId) || !validateStateCode(business.gstConfiguration.stateCode)) throw new AppError("Invalid business GST configuration", 400);
-        if (customer.gstNumber && !validateGstin(customer.gstNumber)) throw new AppError("Invalid customer GSTIN", 400);
-        if ((req.body.placeOfSupplyCode || customer.placeOfSupplyCode || customer.stateCode) && !validateStateCode(req.body.placeOfSupplyCode || customer.placeOfSupplyCode || customer.stateCode)) throw new AppError("Invalid place of supply state code", 400);
-      }
-      const gstSnapshot = business.gstConfiguration?.enabled ? buildGstSnapshot({ business, counterparty: customer, lineItems: totals.lineItems, products, placeOfSupplyCode: req.body.placeOfSupplyCode }) : null;
 
       const previousItems = invoice.lineItems.map((item) => ({
         productId: item.productId,
@@ -687,6 +682,7 @@ const emailInvoicePdf = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  previewInvoiceTax,
   cancelInvoice,
   createInvoice,
   downloadInvoicePdf,

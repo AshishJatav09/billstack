@@ -49,10 +49,11 @@ const assessInvoiceReadiness = ({ invoice, business, customer }) => {
   }
 
   const snapshot = invoice.gstSnapshot || {};
-  const sellerGstin = normalizeGstin(snapshot.gstin || business.gstConfiguration?.gstin || business.gstTaxId);
+  const sellerGstin = normalizeGstin(snapshot.gstin);
   const buyerGstin = normalizeGstin(invoice.customerDetails?.gstNumber || customer?.gstNumber);
-  const sellerState = normalizeCode(snapshot.supplierStateCode || business.gstConfiguration?.stateCode);
-  const placeOfSupply = normalizeCode(snapshot.placeOfSupplyCode || customer?.placeOfSupplyCode || customer?.stateCode);
+  const sellerState = normalizeCode(snapshot.supplierStateCode);
+  const placeOfSupply = normalizeCode(snapshot.placeOfSupplyCode);
+  if (sellerGstin && sellerState && sellerGstin.slice(0, 2) !== sellerState) addError(errors, "INVALID_GST_DATA", "Historical seller state contradicts GSTIN.");
 
   if (!sellerGstin) addError(errors, "MISSING_GSTIN", "Seller GSTIN is required.");
   else if (!validateGstin(sellerGstin)) addError(errors, "MISSING_GSTIN", "Seller GSTIN is invalid.");

@@ -145,7 +145,8 @@ const amountToWordsInr = (value) => {
 
 const buildInvoicePdfDefinition = ({ invoice, business }) => {
   const logoDataUrl = loadLogoDataUrl(business.logoUrl);
-  const businessLines = buildBusinessLines(business);
+  const businessLines = buildBusinessLines({ ...business, gstTaxId: invoice.gstSnapshot?.gstin || invoice.businessDetails?.gstNumber || business.gstTaxId });
+  if (invoice.gstSnapshot?.placeOfSupplyCode) businessLines.push(`Place of Supply: ${invoice.gstSnapshot.placeOfSupply || require("../../../shared/gst-policy.cjs").states[invoice.gstSnapshot.placeOfSupplyCode] || ""} (${invoice.gstSnapshot.placeOfSupplyCode})`);
   const customerLines = buildCustomerLines(invoice);
   const bankLines = buildBankLines(business);
   const paymentStatus = String(invoice.paymentStatus || "unpaid").toUpperCase();
@@ -242,7 +243,7 @@ const buildInvoicePdfDefinition = ({ invoice, business }) => {
               { text: String(item.quantity), alignment: "center" },
               { text: formatCurrency(item.rate), alignment: "right" },
               { text: formatCurrency(item.discountAmount || item.discount), alignment: "right" },
-              { text: formatCurrency(item.taxableAmount || item.lineBase || item.itemTotal), alignment: "right" },
+              { text: formatCurrency(item.taxableAmount ?? item.lineBase ?? item.itemTotal), alignment: "right" },
               { text: formatCurrency(item.taxAmount || item.tax), alignment: "right" },
               { text: formatCurrency(item.itemTotal), alignment: "right" },
             ]),
@@ -280,7 +281,7 @@ const buildInvoicePdfDefinition = ({ invoice, business }) => {
                   widths: ["*", "auto"],
                   body: [
                     detailRow("Subtotal", formatCurrency(invoice.subtotal)),
-                    detailRow("Tax", formatCurrency(invoice.totalTax)),
+                    ...(invoice.gstSnapshot ? [detailRow("Taxable value", formatCurrency(invoice.gstSnapshot.taxableValue)), ...["cgst", "sgst", "igst"].filter(key => Number(invoice.gstSnapshot[key]) > 0).map(key => detailRow(key.toUpperCase(), formatCurrency(invoice.gstSnapshot[key])))] : [detailRow("Tax", formatCurrency(invoice.totalTax))]),
                     detailRow("Discount", formatCurrency(invoice.totalDiscount)),
                     detailRow("Shipping", formatCurrency(invoice.shippingCharges)),
                     detailRow("Round Off", formatCurrency(invoice.roundOff)),
@@ -425,5 +426,6 @@ const generateInvoicePdfBuffer = ({ invoice, business }) =>
   });
 
 module.exports = {
+  buildInvoicePdfDefinition,
   generateInvoicePdfBuffer,
 };

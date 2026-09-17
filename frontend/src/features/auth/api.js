@@ -1,4 +1,5 @@
 import api from "../../api/axios";
+export const previewInvoiceTaxRequest = async payload => (await api.post("/invoices/tax-preview", payload)).data.data;
 
 export const registerRequest = async (payload) => {
   const response = await api.post("/auth/register", payload);
