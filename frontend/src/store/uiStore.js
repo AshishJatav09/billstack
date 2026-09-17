@@ -3,15 +3,15 @@ import { create } from "zustand";
 const persistedTheme =
   typeof window === "undefined" ? "light" : localStorage.getItem("billstack-theme") || "light";
 
-const persistedSidebarVisibility =
-  typeof window === "undefined"
-    ? "visible"
-    : localStorage.getItem("billstack-sidebar-visibility") || "visible";
+const persistedSidebarCollapsed = typeof window !== "undefined" &&
+  (localStorage.getItem("billstack-sidebar-collapsed") === "true" ||
+    (localStorage.getItem("billstack-sidebar-collapsed") === null &&
+      localStorage.getItem("billstack-sidebar-visibility") === "hidden"));
 
 export const uiStore = create((set) => ({
   theme: persistedTheme,
   isSidebarOpen: false,
-  isSidebarPinned: persistedSidebarVisibility !== "hidden",
+  sidebarCollapsed: persistedSidebarCollapsed,
   toasts: [],
   setTheme: (theme) => {
     localStorage.setItem("billstack-theme", theme);
@@ -25,11 +25,11 @@ export const uiStore = create((set) => ({
     }),
   openSidebar: () => set({ isSidebarOpen: true }),
   closeSidebar: () => set({ isSidebarOpen: false }),
-  toggleSidebarPinned: () =>
+  toggleSidebarCollapsed: () =>
     set((state) => {
-      const nextPinned = !state.isSidebarPinned;
-      localStorage.setItem("billstack-sidebar-visibility", nextPinned ? "visible" : "hidden");
-      return { isSidebarPinned: nextPinned };
+      const sidebarCollapsed = !state.sidebarCollapsed;
+      localStorage.setItem("billstack-sidebar-collapsed", String(sidebarCollapsed));
+      return { sidebarCollapsed };
     }),
   pushToast: (toast) =>
     set((state) => {

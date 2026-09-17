@@ -1,5 +1,5 @@
 import { NavLink, matchPath, useLocation } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { createPortal } from "react-dom";
 import {
   BarChart3,
   BellRing,
@@ -11,7 +11,8 @@ import {
   FileText,
   LayoutDashboard,
   PackageCheck,
-  Pin,
+  PanelLeftClose,
+  PanelLeftOpen,
   ReceiptIndianRupee,
   RefreshCw,
   RotateCcw,
@@ -21,6 +22,7 @@ import {
   Users,
   UserRound,
   WalletCards,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 import { useEffect } from "react";
@@ -84,13 +86,47 @@ const inactiveStyle = {
 
 const Sidebar = () => {
   const { business, user } = authStore();
-  const { closeSidebar, isSidebarOpen, isSidebarPinned, toggleSidebarPinned } = uiStore();
+  const { closeSidebar, isSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } = uiStore();
   const location = useLocation();
-  const [isHoverPreview, setIsHoverPreview] = useState(false);
+  const [tooltip, setTooltip] = useState(null);
   const [moduleData, setModuleData] = useState(null);
   const [moduleStatus, setModuleStatus] = useState("loading");
-  const isCollapsed = !isSidebarPinned;
-  const isExpanded = !isCollapsed || isHoverPreview;
+  useEffect(() => {
+    closeSidebar();
+    setTooltip(null);
+  }, [location.pathname, closeSidebar]);
+  useEffect(() => {
+    if (!isSidebarOpen) return;
+    const drawer = document.getElementById("workspace-navigation");
+    const previousFocus = document.activeElement;
+    const media = window.matchMedia("(min-width: 1024px)");
+    if (!media.matches) drawer?.querySelector('button[aria-label="Close navigation"]')?.focus();
+    const onKeyDown = (event) => {
+      if (media.matches) return;
+      if (event.key === "Escape") closeSidebar();
+      if (event.key === "Tab") {
+        const controls = [...drawer.querySelectorAll("button, a[href]")].filter((node) => node.getClientRects().length);
+        const first = controls[0];
+        const last = controls.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    };
+    const onResize = () => { if (media.matches) closeSidebar(); };
+    document.addEventListener("keydown", onKeyDown);
+    media.addEventListener("change", onResize);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      media.removeEventListener("change", onResize);
+      if (!media.matches) previousFocus?.focus();
+    };
+  }, [isSidebarOpen, closeSidebar]);
+  useEffect(() => { setTooltip(null); }, [sidebarCollapsed]);
+  useEffect(() => {
+    const clearTooltip = () => setTooltip(null);
+    window.addEventListener("resize", clearTooltip);
+    return () => window.removeEventListener("resize", clearTooltip);
+  }, []);
   useEffect(() => {
     setModuleStatus("loading");
     getBusinessModulesRequest()
@@ -123,113 +159,77 @@ const Sidebar = () => {
     return item.label;
   };
 
+  const isLicensedWorkspace = business?.deploymentMode === "SELF_HOSTED";
+
+  const showTooltip = (event, label) => {
+    if (!sidebarCollapsed || !window.matchMedia("(min-width: 1024px)").matches) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setTooltip({ label, left: rect.right + 10, top: rect.top + rect.height / 2 });
+  };
+
   return (
     <>
-      {isSidebarOpen ? <button type="button" aria-label="Close navigation" onClick={closeSidebar} className="fixed inset-0 z-30 bg-slate-950/60 lg:hidden" /> : null}
-      {isCollapsed ? <div className="fixed inset-y-0 left-0 z-20 hidden w-2 lg:block" onMouseEnter={() => setIsHoverPreview(true)} /> : null}
-      <AnimatePresence initial={false}>
-        {isExpanded ? (
-          <motion.aside
-            key="sidebar"
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 280, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 340, damping: 34, mass: 0.8 }}
-            onMouseEnter={() => isCollapsed && setIsHoverPreview(true)}
-            onMouseLeave={() => isCollapsed && setIsHoverPreview(false)}
-            className={`fixed inset-y-0 left-0 z-30 flex flex-col overflow-hidden overscroll-contain py-6 transition-transform duration-200 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:sticky lg:top-0 lg:h-screen lg:translate-x-0`}
-            style={{
-              borderRight: "1px solid var(--panel-border)",
-              background: "color-mix(in srgb, var(--panel-bg) 96%, transparent)",
-              color: "var(--text-primary)",
-              backdropFilter: "blur(14px)",
-            }}
-          >
-            <div className="relative mb-7 px-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-sm font-bold text-white">B</div>
-                <div className="min-w-0">
-                  <p className="text-base font-bold tracking-tight">BillStack</p>
-                  <p className="truncate text-xs" style={{ color: "var(--text-muted)" }}>{business?.name || "Workspace"}</p>
-                </div>
-              </div>
-              <motion.button
-                type="button"
-                onClick={() => {
-                  toggleSidebarPinned();
-                  if (isSidebarPinned) setIsHoverPreview(false);
-                }}
-                className="absolute right-4 top-1 hidden rounded-xl p-2 text-[color:var(--text-muted)] lg:flex"
-                whileHover={{ scale: 1.06 }}
-                aria-label={isSidebarPinned ? "Unpin sidebar" : "Pin sidebar"}
-              >
-                <Pin size={17} className={isSidebarPinned ? "rotate-45" : ""} />
-              </motion.button>
-              <button type="button" onClick={closeSidebar} className="mt-4 rounded-lg border px-3 py-1.5 text-xs lg:hidden" style={{ borderColor: "var(--panel-border)", color: "var(--text-muted)" }}>
-                Close menu
-              </button>
+      {isSidebarOpen ? <button type="button" aria-label="Close navigation" onClick={closeSidebar} className="fixed inset-0 z-30 bg-black/60 lg:hidden" /> : null}
+      <aside
+        id="workspace-navigation"
+        aria-label="Workspace navigation"
+        className={`workspace-sidebar ${sidebarCollapsed ? "is-collapsed" : ""} ${isSidebarOpen ? "is-open" : ""}`}
+      >
+        <div className="sidebar-header">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-sm font-bold">B</div>
+            <div className="sidebar-expanded-only min-w-0 flex-1">
+              <p className="text-base font-bold tracking-tight">BillStack</p>
+              <p className="truncate text-xs" style={{ color: "var(--text-muted)" }}>{business?.name || "Workspace"}</p>
             </div>
-
-            <nav className="no-scrollbar flex-1 space-y-4 overflow-y-auto px-4 pb-6">
-              {moduleStatus === "loading" ? (
-                <div className="space-y-2 px-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--text-muted)" }}>Loading workspace</p>
-                  {[1, 2, 3, 4].map((item) => <div key={item} className="h-9 rounded-xl bg-slate-500/10" />)}
-                </div>
-              ) : null}
-              {moduleStatus === "error" ? (
-                <div className="rounded-xl border p-3 text-xs" style={{ borderColor: "var(--panel-border)", color: "var(--text-muted)" }}>
-                  Workspace modules could not be loaded. Refresh to retry.
-                </div>
-              ) : null}
-              {groupedItems.map((group) => (
-                <div key={group.key} className="space-y-1">
-                  <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--text-muted)" }}>
-                    {group.label}
-                  </p>
-                  {group.items.map((item) => {
-                    const Icon = item.icon;
-                    const active = isRouteActive(item, location.pathname);
-
-                    return (
-                      <NavLink
-                        key={item.label}
-                        to={item.to}
-                        end={item.end}
-                        onClick={closeSidebar}
-                        className="group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition hover:bg-slate-500/[.08] hover:text-[color:var(--text-primary)]"
-                        style={active ? activeStyle : inactiveStyle}
-                        aria-current={active ? "page" : undefined}
-                      >
-                        <span className="flex min-w-0 items-center gap-3">
-                          <Icon size={17} strokeWidth={1.8} className="shrink-0" />
-                          <span className="truncate">{labelFor(item)}</span>
-                        </span>
-                        <ChevronRight size={15} className={active ? "opacity-75" : "opacity-35 transition group-hover:opacity-60"} />
-                      </NavLink>
-                    );
-                  })}
-                </div>
-              ))}
-            </nav>
-
-            <div className="mx-4 rounded-xl border border-white/10 bg-white/5 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-brand-200">
-                {business?.deploymentMode === "SELF_HOSTED" ? "Self-hosted" : "Current plan"}
-              </p>
-              <p className="mt-1 text-sm font-semibold text-white">
-                {business?.deploymentMode === "SELF_HOSTED" ? "Licensed workspace" : business?.plan?.name || "Free"}
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                {business?.deploymentMode === "SELF_HOSTED"
-                  ? "Module access is managed by your license and workspace settings."
-                  : "Manage your plan in Subscription."}
-              </p>
-              {business?.deploymentMode === "SELF_HOSTED" ? <p className="mt-3 text-[11px] text-slate-500">Powered by Nemnidhi Digital Solutions</p> : null}
+          </div>
+          <button type="button" onClick={toggleSidebarCollapsed}
+            className="sidebar-toggle hidden rounded-lg p-2 hover:bg-slate-500/10 lg:flex"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!sidebarCollapsed} aria-controls="workspace-navigation">
+            {sidebarCollapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}
+          </button>
+          <button type="button" onClick={closeSidebar} aria-label="Close navigation" className="rounded-lg p-2 lg:hidden"><X size={19} /></button>
+        </div>
+        <nav className="sidebar-nav no-scrollbar" aria-label="Main navigation" onScroll={() => setTooltip(null)}>
+          {moduleStatus === "loading" ? <div role="status" aria-label="Loading workspace" className="space-y-2">
+            <p className="sidebar-expanded-only text-xs" style={{ color: "var(--text-muted)" }}>Loading workspace</p>
+            {[1, 2, 3, 4].map((item) => <div key={item} className="h-9 rounded-xl bg-slate-500/10" />)}
+          </div> : null}
+          {moduleStatus === "error" ? <p role="status" className="sidebar-expanded-only text-xs" style={{ color: "var(--text-muted)" }}>Workspace modules could not be loaded. Refresh to retry.</p> : null}
+          {groupedItems.map((group) => (
+            <div key={group.key} className="sidebar-group">
+              <p className="sidebar-expanded-only px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--text-muted)" }}>{group.label}</p>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const active = isRouteActive(item, location.pathname);
+                const label = labelFor(item);
+                return <NavLink key={item.to} to={item.to} end={item.end}
+                  onClick={() => { closeSidebar(); setTooltip(null); }}
+                  onMouseEnter={(event) => showTooltip(event, label)} onMouseLeave={() => setTooltip(null)}
+                  onFocus={(event) => showTooltip(event, label)} onBlur={() => setTooltip(null)}
+                  onKeyDown={(event) => { if (event.key === "Escape") setTooltip(null); }}
+                  aria-label={label} aria-describedby={tooltip?.label === label ? "sidebar-tooltip" : undefined}
+                  aria-current={active ? "page" : undefined}
+                  className="sidebar-link group hover:bg-slate-500/[.08]"
+                  style={active ? { ...activeStyle, boxShadow: "none" } : inactiveStyle}>
+                  <Icon size={19} strokeWidth={1.8} className="shrink-0" />
+                  <span className="sidebar-expanded-only min-w-0 flex-1 truncate">{label}</span>
+                  <ChevronRight size={15} className="sidebar-expanded-only shrink-0 opacity-40" />
+                </NavLink>;
+              })}
             </div>
-          </motion.aside>
-        ) : null}
-      </AnimatePresence>
+          ))}
+        </nav>
+        <div className="sidebar-expanded-only mx-4 mt-3 rounded-xl border p-4" style={{ borderColor: "var(--panel-border)" }}>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: "var(--accent)" }}>{isLicensedWorkspace ? "Self-hosted" : "Current plan"}</p>
+          <p className="mt-1 text-sm font-semibold">{isLicensedWorkspace ? "Licensed workspace" : business?.plan?.name || "Free"}</p>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{isLicensedWorkspace ? "Module access is managed by your license and workspace settings." : "Manage your plan in Subscription."}</p>
+          {isLicensedWorkspace ? <p className="mt-3 text-[11px]" style={{ color: "var(--text-muted)" }}>Powered by Nemnidhi Digital Solutions</p> : null}
+        </div>
+      </aside>
+      {tooltip ? createPortal(<div id="sidebar-tooltip" role="tooltip" className="sidebar-tooltip" style={{ left: tooltip.left, top: tooltip.top }}>{tooltip.label}</div>, document.body) : null}
     </>
   );
 };

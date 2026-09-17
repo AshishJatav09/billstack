@@ -68,6 +68,43 @@ body {
   display: none;
 }
 
+/* Desktop width participates in flex layout; mobile keeps a full drawer. */
+.workspace-sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: min(280px, 88vw);
+  padding: 20px 0;
+  overflow: hidden;
+  background: var(--theme-surface-strong);
+  color: var(--text-primary);
+  border-right: 1px solid var(--panel-border);
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition: transform 180ms ease, visibility 180ms;
+}
+.workspace-sidebar.is-open { transform: translateX(0); visibility: visible; }
+.sidebar-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 16px; margin-bottom: 24px; flex-shrink: 0; }
+.sidebar-nav { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 0 12px; overscroll-behavior: contain; }
+.sidebar-group { margin-bottom: 16px; }
+.sidebar-link { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 9px 12px; margin-bottom: 2px; border-radius: 10px; font-size: 14px; font-weight: 500; }
+.sidebar-link:focus-visible, .sidebar-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sidebar-tooltip { position: fixed; z-index: 100; transform: translateY(-50%); pointer-events: none; padding: 7px 10px; border-radius: 8px; background: var(--text-primary); color: var(--theme-surface-strong); font-size: 12px; white-space: nowrap; }
+@media (min-width: 1024px) {
+  .workspace-sidebar { position: relative; inset: auto; height: 100dvh; width: 280px; flex-shrink: 0; transform: none; visibility: visible; transition: width 180ms ease; }
+  .workspace-sidebar.is-collapsed { width: 64px; }
+  .is-collapsed .sidebar-expanded-only { display: none; }
+  .is-collapsed .sidebar-header { flex-direction: column; padding: 0; gap: 10px; margin-bottom: 16px; }
+  .is-collapsed .sidebar-nav { padding: 0 10px; }
+  .is-collapsed .sidebar-group { margin-bottom: 8px; }
+  .is-collapsed .sidebar-link { width: 44px; height: 40px; justify-content: center; padding: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-sidebar { transition: none; }
+}
+
 * {
   scrollbar-width: none;
   -ms-overflow-style: none;
