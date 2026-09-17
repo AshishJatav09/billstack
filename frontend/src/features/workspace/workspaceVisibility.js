@@ -44,6 +44,7 @@ export const NAV_GROUPS = [
 ];
 
 const REAL_ESTATE_CLIENT_HIDDEN_NAV_MODULES = new Set([
+  "projects_tasks",
   "products_services",
   "inventory",
   "suppliers",
@@ -61,6 +62,7 @@ const REAL_ESTATE_CLIENT_HIDDEN_NAV_MODULES = new Set([
 ]);
 
 const REAL_ESTATE_CLIENT_HIDDEN_DASHBOARD_MODULES = new Set([
+  "projects_tasks",
   "products_services",
   "inventory",
   "suppliers",

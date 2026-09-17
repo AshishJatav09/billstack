@@ -1,419 +1,166 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import {
-  AlertTriangle,
-  ArrowRight,
-  BadgeIndianRupee,
-  Box,
-  CalendarClock,
-  CheckCircle2,
-  CircleAlert,
-  ClipboardList,
-  Clock3,
-  FilePlus2,
-  ListChecks,
-  PackagePlus,
-  ReceiptText,
-  RefreshCw,
-  UsersRound,
-} from "lucide-react";
+import { ArrowRight, BadgeIndianRupee, Box, CalendarClock, CheckCircle2, CircleAlert, ClipboardList, Clock3, FilePlus2, ListChecks, PackagePlus, ReceiptText, RefreshCw, UsersRound, WalletCards } from "lucide-react";
 import { ErrorState, LoadingState } from "../../../components/ui/PageState";
 import { dashboardSummaryRequest, getBusinessModulesRequest } from "../../auth/api";
 import { useAuth } from "../../auth/useAuth";
-import { isActiveModule, isRealEstateSelfHostedWorkspace, isSelfHostedWorkspace, productLabelForWorkspace, shouldShowDashboardSurface, visibleModuleKeys } from "../../workspace/workspaceVisibility";
+import { ROUTE_MODULES, isActiveModule, isRealEstateSelfHostedWorkspace, isSelfHostedWorkspace, productLabelForWorkspace, shouldShowDashboardSurface } from "../../workspace/workspaceVisibility";
+import "./dashboard-home.css";
 
-const formatMoney = (value) =>
-  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(value || 0));
-
-const formatDate = (value) =>
-  value ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
-
-const dateKey = (value) => (value ? new Date(value).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) : "");
-const isOverdue = (dueDate) => dateKey(new Date()) > dateKey(dueDate);
-
-const badgeTone = (status) =>
-  status === "paid"
-    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
-    : status === "partial"
-      ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
-      : status === "cancelled"
-        ? "bg-slate-500/10 text-slate-500"
-        : "bg-rose-500/10 text-rose-600 dark:text-rose-300";
-
-const canRoleUse = (user, roles) => !roles?.length || roles.includes(user?.role);
+const money = (value) => value == null || !Number.isFinite(Number(value)) ? "—" :
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(value));
+const date = (value) => !value || Number.isNaN(new Date(value).getTime()) ? "—" :
+  new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+const badgeTone = (status) => ({ paid: "bg-emerald-500/10 text-emerald-600", partial: "bg-amber-500/10 text-amber-700", unpaid: "bg-rose-500/10 text-rose-600" }[status] || "bg-slate-500/10 text-slate-500");
+const Card = ({ title, description, action, children, className = "" }) => (
+  <section className={`dashboard-card ${className}`} aria-label={title}>
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0"><h3 className="text-sm font-semibold">{title}</h3>{description ? <p className="dashboard-muted mt-1 text-xs">{description}</p> : null}</div>
+      {action}
+    </div>
+    {children}
+  </section>
+);
 
 const DashboardHomePage = () => {
   const [data, setData] = useState(null);
   const [moduleData, setModuleData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const navigate = useNavigate();
   const { business, user } = useAuth();
-
   useEffect(() => {
-    const load = async () => {
-      try {
-        const [summary, modules] = await Promise.all([dashboardSummaryRequest(), getBusinessModulesRequest()]);
-        setData(summary);
-        setModuleData(modules);
-      } catch (loadError) {
-        setError(loadError.response?.data?.message || "Unable to load dashboard");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
+    let current = true;
+    Promise.all([dashboardSummaryRequest(), getBusinessModulesRequest()])
+      .then(([summary, modules]) => { if (current) { setData(summary); setModuleData(modules); } })
+      .catch((err) => { if (current) setError(err.response?.data?.message || "Unable to load dashboard"); });
+    return () => { current = false; };
   }, []);
-
-  const alerts = useMemo(
-    () =>
-      !data
-        ? []
-        : [
-            data.metrics.overdueInvoices > 0 && {
-              tone: "rose",
-              icon: Clock3,
-              title: `${data.metrics.overdueInvoices} overdue invoice${data.metrics.overdueInvoices === 1 ? "" : "s"}`,
-              detail: `${formatMoney(data.metrics.unpaidAmount)} remains outstanding`,
-              action: "Review sales",
-              to: "/dashboard/invoices",
-            },
-            isActiveModule(moduleData, "inventory") && data.metrics.lowStockProducts > 0 && {
-              tone: "amber",
-              icon: Box,
-              title: `${data.metrics.lowStockProducts} low-stock item${data.metrics.lowStockProducts === 1 ? "" : "s"}`,
-              detail: "Review inventory before the next sale",
-              action: "View inventory",
-              to: "/dashboard/products",
-            },
-            business?.subscription &&
-              !business.subscription.isAccessible && {
-                tone: "rose",
-                icon: CircleAlert,
-                title: "Subscription access needs attention",
-                detail: "Some workspace features may be restricted",
-                action: "Open subscription",
-              to: isSelfHostedWorkspace(moduleData, business) ? "/dashboard/settings" : "/dashboard/subscription",
-            },
-          ].filter(Boolean),
-    [data, business, moduleData]
-  );
-
-  if (isLoading) {
-    return <LoadingState title="Loading your business snapshot" description="Preparing sales, collections, and operational alerts." />;
-  }
-
-  if (error) {
-    return <ErrorState title="Unable to load dashboard" description={error} />;
-  }
+  if (error) return <ErrorState title="Unable to load dashboard" description={error} />;
+  if (!data) return <LoadingState title="Loading your business snapshot" description="Preparing sales, collections, and business activity." />;
 
   const metrics = data.metrics;
-  const activeModules = visibleModuleKeys(moduleData);
-  const showModule = (moduleKey) => (!moduleKey || activeModules.has(moduleKey)) && shouldShowDashboardSurface(moduleKey, moduleData, business);
+  const selfHosted = isSelfHostedWorkspace(moduleData, business);
+  const realEstate = isRealEstateSelfHostedWorkspace(moduleData, business);
+  const showModule = (key) => isActiveModule(moduleData, key) && shouldShowDashboardSurface(key, moduleData, business);
+  const canOpen = (to) => {
+    const path = to.split("?")[0];
+    const route = Object.keys(ROUTE_MODULES).find((base) => path === base || path.startsWith(`${base}/`));
+    return showModule(ROUTE_MODULES[route]) && !(selfHosted && path === "/dashboard/subscription");
+  };
+  const link = (label, to) => canOpen(to) ? <button type="button" onClick={() => navigate(to)} className="dashboard-text-action">{label}<ArrowRight size={14} /></button> : null;
   const quickActions = [
-    { label: "Create invoice", detail: "Start a sale", icon: FilePlus2, to: "/dashboard/invoices?action=create", moduleKey: "invoices", primary: true },
-    { label: "Create quotation", detail: "Draft an estimate", icon: BadgeIndianRupee, to: "/dashboard/quotes", moduleKey: "quotations" },
-    { label: isRealEstateSelfHostedWorkspace(moduleData, business) ? "Add client" : "Add customer", detail: "New contact", icon: UsersRound, to: "/dashboard/customers", moduleKey: "customers" },
-    { label: `Add ${productLabelForWorkspace(moduleData).replace("Products / ", "").replace("Products & ", "").toLowerCase()}`, detail: productLabelForWorkspace(moduleData), icon: PackagePlus, to: "/dashboard/products", moduleKey: "products_services" },
-    { label: "Record expense", detail: "Track operating spend", icon: ReceiptText, to: "/dashboard/expenses", moduleKey: "expenses", roles: ["owner", "admin", "accountant"] },
-    { label: "New production job", detail: "Plan stock output", icon: ClipboardList, to: "/dashboard/production-jobs", moduleKey: "production_job_work" },
-  ].filter((action) => showModule(action.moduleKey) && canRoleUse(user, action.roles));
-  const checklist = data.onboardingChecklist || [];
-  const completedChecklist = checklist.filter((item) => item.complete).length;
-  const remainingChecklist = checklist.length - completedChecklist;
-  const paidExpenses = Number(metrics.paidExpenses ?? metrics.monthlyPaidExpenses ?? 0);
-  const netAfterExpenses = Number.isFinite(Number(metrics.netOperatingDifference))
-    ? Number(metrics.netOperatingDifference)
-    : Number(metrics.totalSales || 0) - paidExpenses;
+    { label: "Create invoice", icon: FilePlus2, to: "/dashboard/invoices?action=create", moduleKey: "invoices", primary: true },
+    { label: "Create quotation", icon: BadgeIndianRupee, to: "/dashboard/quotes", moduleKey: "quotations" },
+    { label: realEstate ? "Add client" : "Add customer", icon: UsersRound, to: "/dashboard/customers", moduleKey: "customers" },
+    { label: `Add ${productLabelForWorkspace(moduleData).replace("Products / ", "").replace("Products & ", "").toLowerCase()}`, icon: PackagePlus, to: "/dashboard/products", moduleKey: "products_services" },
+    { label: "Record expense", icon: ReceiptText, to: "/dashboard/expenses", moduleKey: "expenses", roles: ["owner", "admin", "accountant"] },
+    { label: "New production job", icon: ClipboardList, to: "/dashboard/production-jobs", moduleKey: "production_job_work" },
+  ].filter((item) => showModule(item.moduleKey) && (!item.roles || item.roles.includes(user?.role)));
+  const paidExpenses = metrics.paidExpenses ?? metrics.monthlyPaidExpenses;
   const kpis = [
-    {
-      label: "Total sales",
-      value: formatMoney(metrics.totalSales),
-      detail: `${metrics.totalInvoices} issued invoice${metrics.totalInvoices === 1 ? "" : "s"}`,
-      tone: "text-brand-600 dark:text-brand-300",
-    },
-    { label: "Payment collected", value: formatMoney(metrics.paidAmount), detail: "Recorded received payments", tone: "text-emerald-600 dark:text-emerald-300" },
-    { label: "Net after expenses", value: formatMoney(netAfterExpenses), detail: `${formatMoney(paidExpenses)} paid expenses cut`, tone: "text-slate-900 dark:text-slate-100" },
-    { label: "Receivables", value: formatMoney(metrics.unpaidAmount), detail: "Awaiting collection", tone: "text-amber-600 dark:text-amber-300" },
-    {
-      label: "Overdue amount",
-      value: formatMoney(
-        data.recentInvoices
-          .filter((invoice) => invoice.status !== "cancelled" && invoice.balanceDue > 0 && isOverdue(invoice.dueDate))
-          .reduce((sum, invoice) => sum + invoice.balanceDue, 0)
-      ),
-      detail: `${metrics.overdueInvoices} past due`,
-      tone: "text-rose-600 dark:text-rose-300",
-    },
+    { label: "Total sales", value: metrics.totalSales, detail: `${metrics.totalInvoices} issued invoices`, icon: BadgeIndianRupee, tone: "text-brand-600" },
+    { label: "Payment collected", value: metrics.paidAmount, detail: "Payments applied to invoices", icon: WalletCards, tone: "text-emerald-600" },
+    { label: "Net after expenses", value: metrics.netOperatingDifference, detail: `${money(paidExpenses)} paid expenses deducted`, icon: ReceiptText },
+    { label: "Receivables", value: metrics.unpaidAmount, detail: "Awaiting collection", icon: Clock3, tone: "text-amber-600" },
+    { label: "Overdue amount", value: metrics.overdueAmount, detail: `${metrics.overdueInvoices} invoices past due`, icon: CircleAlert, tone: metrics.overdueInvoices > 0 ? "text-rose-600" : "" },
   ];
-  const workflowMetrics = data.workflowMetrics || metrics.workflowMetrics || {};
-  const workflowStats = [
-    { label: "Active orders", value: workflowMetrics.activeOrders || 0, detail: `${workflowMetrics.processingOrders || 0} in processing`, icon: ClipboardList, to: "/dashboard/orders", moduleKey: "order_management" },
-    { label: "Overdue tasks", value: workflowMetrics.overdueTasks || 0, detail: "Past due and not completed", icon: ListChecks, to: "/dashboard/tasks", moduleKey: "projects_tasks" },
-    { label: "Monthly billing due", value: workflowMetrics.recurringDueSoon || 0, detail: "Due within 7 days", icon: RefreshCw, to: "/dashboard/recurring-billing", moduleKey: "recurring_billing" },
-    { label: "Production jobs", value: workflowMetrics.openProductionJobs || 0, detail: "Open job-work items", icon: ClipboardList, to: "/dashboard/production-jobs", moduleKey: "production_job_work" },
-    { label: "Expiring batches", value: workflowMetrics.expiringBatches || 0, detail: "Within 30 days", icon: Box, to: "/dashboard/batches", moduleKey: "batch_expiry" },
-    { label: "Pending dispatches", value: workflowMetrics.pendingDispatches || 0, detail: "Not delivered yet", icon: PackagePlus, to: "/dashboard/dispatches", moduleKey: "dispatch_fulfilment" },
-    { label: "Approvals", value: workflowMetrics.pendingApprovals || 0, detail: "Waiting for decision", icon: FilePlus2, to: "/dashboard/approvals", moduleKey: "documents_approvals" },
-  ].filter((item) => showModule(item.moduleKey));
+  const workflow = data.workflowMetrics || metrics;
+  const operations = [
+    { label: realEstate ? "Monthly billing" : "Recurring billing", value: workflow.recurringDueSoon, detail: "Due now or within 7 days", icon: RefreshCw, to: "/dashboard/recurring-billing", moduleKey: "recurring_billing" },
+    { label: "Active orders", value: workflow.activeOrders, detail: `${workflow.processingOrders || 0} in processing`, icon: ClipboardList, to: "/dashboard/orders", moduleKey: "order_management" },
+    { label: "Overdue tasks", value: workflow.overdueTasks, detail: "Past due and not completed", icon: ListChecks, to: "/dashboard/tasks", moduleKey: "projects_tasks" },
+    { label: realEstate ? "Site visits" : "Appointments", value: workflow.upcomingAppointments, detail: "Scheduled in the next 7 days", icon: CalendarClock, to: "/dashboard/appointments", moduleKey: "appointments_scheduling" },
+    { label: "Production jobs", value: workflow.openProductionJobs, detail: "Open job-work items", icon: ClipboardList, to: "/dashboard/production-jobs", moduleKey: "production_job_work" },
+    { label: "Expiring batches", value: workflow.expiringBatches, detail: "Within 30 days", icon: Box, to: "/dashboard/batches", moduleKey: "batch_expiry" },
+    { label: "Pending dispatches", value: workflow.pendingDispatches, detail: "Not delivered yet", icon: PackagePlus, to: "/dashboard/dispatches", moduleKey: "dispatch_fulfilment" },
+    { label: "Approvals", value: workflow.pendingApprovals, detail: "Awaiting a decision", icon: FilePlus2, to: "/dashboard/approvals", moduleKey: "documents_approvals" },
+  ].filter((item) => showModule(item.moduleKey) && item.value != null);
+  const checklist = (data.onboardingChecklist || []).filter((item) => !item.complete && item.to && canOpen(item.to));
+  const showGettingStarted = metrics.totalInvoices === 0 && checklist.length > 0;
+  const alerts = [
+    showModule("invoices") && metrics.overdueInvoices > 0 && { title: `${metrics.overdueInvoices} overdue invoices`, detail: `${money(metrics.overdueAmount)} awaiting collection`, to: "/dashboard/invoices", action: "Review invoices", icon: Clock3 },
+    showModule("recurring_billing") && workflow.recurringDueSoon > 0 && { title: `${workflow.recurringDueSoon} ${realEstate ? "monthly bills" : "recurring bills"} due`, detail: "Due now or within 7 days", to: "/dashboard/recurring-billing", action: "Review billing", icon: RefreshCw },
+    showModule("inventory") && showModule("products_services") && metrics.lowStockProducts > 0 && { title: `${metrics.lowStockProducts} low-stock items`, detail: "Review stock before the next sale", to: "/dashboard/products", action: "View inventory", icon: Box },
+    !selfHosted && business?.subscription && !business.subscription.isAccessible && { title: "Subscription access needs attention", detail: "Some workspace features may be restricted", to: "/dashboard/subscription", action: "Open subscription", icon: CircleAlert },
+  ].filter(Boolean);
+  const recentInvoices = (data.recentInvoices || []).slice(0, 5);
+  const chart = data.revenueChart || [];
+  const hasSalesHistory = chart.some((item) => Number(item.revenue) > 0);
+  // Both amounts refer to the same issued-invoice population, not unapplied receipts.
+  const collectionRatio = metrics.totalSales > 0 && metrics.paidAmount >= 0 && metrics.paidAmount <= metrics.totalSales
+    ? metrics.paidAmount / metrics.totalSales : null;
 
-  return (
-    <div className="mx-auto max-w-[1500px] space-y-6 pb-6">
-      <section
-        className="flex flex-col gap-5 rounded-2xl border p-5 sm:p-7 lg:flex-row lg:items-end lg:justify-between"
-        style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}
-      >
-        <div>
-          <p className="text-sm font-medium text-brand-600 dark:text-brand-300">
-            {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Good day, {user?.name?.split(" ")[0] || "there"}.</h2>
-          <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>
-            Here is the financial pulse for{" "}
-            <span className="font-medium" style={{ color: "var(--text-primary)" }}>
-              {business?.name || "your business"}
-            </span>
-            .
-          </p>
-        </div>
-      </section>
-
-      {quickActions.length ? (
-        <section aria-labelledby="dashboard-quick-actions" className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-          <h3 id="dashboard-quick-actions" className="shrink-0 text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Quick actions</h3>
-          <div className="grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            {quickActions.map((action) => {
-              const Icon = action.icon;
-              return (
-                <button
-                  key={action.label}
-                  type="button"
-                  onClick={() => navigate(action.to)}
-                  className={`inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-left text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${action.primary ? "border-brand-600 bg-brand-600 text-white hover:bg-brand-700" : "hover:bg-slate-500/5"}`}
-                  style={!action.primary ? { borderColor: "var(--panel-border)", background: "var(--panel-bg)", color: "var(--text-primary)" } : undefined}
-                >
-                  <Icon size={16} className="shrink-0" />
-                  <span>{action.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {kpis.map((item) => (
-          <div key={item.label} className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
-            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>
-              {item.label}
-            </p>
-            <p className={`mt-3 text-2xl font-semibold tracking-tight ${item.tone}`}>{item.value}</p>
-            <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
-              {item.detail}
-            </p>
-          </div>
-        ))}
-      </section>
-
-      {workflowStats.length ? <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {workflowStats.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.label}
-              type="button"
-              onClick={() => navigate(item.to)}
-              className="rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm"
-              style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="rounded-xl bg-brand-500/10 p-2 text-brand-600 dark:text-brand-200">
-                  <Icon size={17} />
-                </span>
-                <ArrowRight size={15} style={{ color: "var(--text-muted)" }} />
-              </div>
-              <p className="mt-4 text-sm font-medium" style={{ color: "var(--text-muted)" }}>
-                {item.label}
-              </p>
-              <p className="mt-1 text-2xl font-semibold tracking-tight">{item.value}</p>
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                {item.detail}
-              </p>
-            </button>
-          );
-        })}
-      </section> : null}
-
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(290px,0.8fr)]">
-        <div className="rounded-2xl border p-5 sm:p-6" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="font-semibold">Sales trend</h3>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-                Issued invoice value across the last 12 months
-              </p>
-            </div>
-            <span className="rounded-lg bg-brand-500/10 px-2.5 py-1 text-xs font-medium text-brand-600 dark:text-brand-200">Monthly</span>
-          </div>
-          <div className="mt-5 h-64 sm:h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data.revenueChart} margin={{ top: 8, right: 4, left: -12, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="salesFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.28} />
-                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0.01} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} stroke="rgba(100,116,139,.16)" />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
-                <YAxis tickFormatter={(value) => `${Math.round(value / 1000)}k`} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
-                <Tooltip formatter={(value) => formatMoney(value)} />
-                <Area type="monotone" dataKey="revenue" stroke="#2563eb" strokeWidth={2.4} fill="url(#salesFill)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border p-5 sm:p-6" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
-          <h3 className="font-semibold">Collection snapshot</h3>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            Receivables requiring follow-up
-          </p>
-          <div className="mt-6 space-y-5">
-            <div>
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span style={{ color: "var(--text-muted)" }}>Collected</span>
-                <strong>{formatMoney(metrics.paidAmount)}</strong>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700/60">
-                <div className="h-full rounded-full bg-emerald-500" style={{ width: `${metrics.totalSales ? Math.min(100, (metrics.paidAmount / metrics.totalSales) * 100) : 0}%` }} />
-              </div>
-            </div>
-            <div>
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span style={{ color: "var(--text-muted)" }}>Receivables</span>
-                <strong>{formatMoney(metrics.unpaidAmount)}</strong>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700/60">
-                <div className="h-full rounded-full bg-amber-500" style={{ width: `${metrics.totalSales ? Math.min(100, (metrics.unpaidAmount / metrics.totalSales) * 100) : 0}%` }} />
-              </div>
-            </div>
-            <div className="rounded-xl border border-rose-500/15 bg-rose-500/5 p-3">
-              <p className="text-xs font-medium text-rose-600 dark:text-rose-300">Overdue attention</p>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-                {metrics.overdueInvoices ? `${metrics.overdueInvoices} invoices are past their due date.` : "No overdue invoices right now."}
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(290px,0.8fr)]">
-        <div className="rounded-2xl border p-5 sm:p-6" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold">Recent transactions</h3>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-                Latest invoices in this business
-              </p>
-            </div>
-            <button onClick={() => navigate("/dashboard/invoices")} className="hidden items-center gap-1 text-sm font-medium text-brand-600 sm:flex">
-              View sales <ArrowRight size={15} />
-            </button>
-          </div>
-          <div className="mt-5 grid gap-3">
-            {data.recentInvoices.map((invoice) => (
-              <div key={invoice._id} className="grid gap-3 rounded-xl border p-4 text-sm sm:grid-cols-[1fr_1fr_auto] sm:items-center" style={{ borderColor: "var(--panel-border)", background: "var(--theme-surface-soft)" }}>
-                <div className="min-w-0">
-                  <p className="truncate font-semibold">{invoice.invoiceNumber}</p>
-                  <p className="mt-1 truncate" style={{ color: "var(--text-muted)" }}>{invoice.customerId?.name || invoice.customerDetails?.name || "Customer"}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  <div><p className="text-xs" style={{ color: "var(--text-muted)" }}>Amount</p><p className="font-semibold">{formatMoney(invoice.grandTotal)}</p></div>
-                  <div><p className="text-xs" style={{ color: "var(--text-muted)" }}>Due</p><p>{formatDate(invoice.dueDate)}</p></div>
-                  <div><p className="text-xs" style={{ color: "var(--text-muted)" }}>Status</p><span className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${badgeTone(invoice.paymentStatus)}`}>{invoice.paymentStatus}</span></div>
-                </div>
-                <button onClick={() => navigate("/dashboard/invoices")} className="justify-self-start text-xs font-semibold text-brand-600 sm:justify-self-end">Open</button>
-              </div>
-            ))}
-            {!data.recentInvoices.length ? <p className="rounded-xl border border-dashed p-8 text-center text-sm" style={{ borderColor: "var(--panel-border)", color: "var(--text-muted)" }}>No invoices yet. Create your first invoice to begin.</p> : null}
-          </div>
-        </div>
-
-        <div className="space-y-4">
-
-          {checklist.length ? (
-            <div className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="font-semibold">Setup checklist</h3>
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                    {remainingChecklist ? `${remainingChecklist} step${remainingChecklist === 1 ? "" : "s"} left to complete your workspace.` : "Your core workspace setup is complete."}
-                  </p>
-                </div>
-                <span className="rounded-full bg-brand-500/10 px-2 py-1 text-xs font-semibold text-brand-600 dark:text-brand-200">
-                  {completedChecklist}/{checklist.length}
-                </span>
-              </div>
-              <div className="mt-4 space-y-2">
-                {checklist.map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    disabled={item.complete || !item.to}
-                    onClick={() => item.to && navigate(item.to)}
-                    className="flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-sm transition hover:bg-slate-500/5 disabled:cursor-default disabled:hover:bg-transparent"
-                    style={{ borderColor: "var(--panel-border)" }}
-                  >
-                    <span className="flex items-center gap-2">
-                      <CheckCircle2 size={16} className={item.complete ? "text-emerald-500" : "text-slate-300"} />
-                      <span style={{ color: item.complete ? "var(--text-muted)" : "var(--text-primary)" }}>{item.label}</span>
-                    </span>
-                    {!item.complete && item.to ? <ArrowRight size={14} className="text-brand-600" /> : null}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}>
-            <div className="flex items-center gap-2">
-              <AlertTriangle size={17} className="text-amber-500" />
-              <h3 className="font-semibold">Operational alerts</h3>
-            </div>
-            <div className="mt-4 space-y-3">
-              {alerts.length ? (
-                alerts.map((alert) => {
-                  const Icon = alert.icon;
-                  return (
-                    <button
-                      key={alert.title}
-                      onClick={() => navigate(alert.to)}
-                      className={`w-full rounded-xl border p-3 text-left ${alert.tone === "rose" ? "border-rose-500/15 bg-rose-500/5" : "border-amber-500/15 bg-amber-500/5"}`}
-                    >
-                      <div className="flex gap-3">
-                        <Icon size={17} className={alert.tone === "rose" ? "text-rose-500" : "text-amber-500"} />
-                        <div>
-                          <p className="text-sm font-medium">{alert.title}</p>
-                          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                            {alert.detail}
-                          </p>
-                          <p className="mt-2 text-xs font-semibold text-brand-600">{alert.action}</p>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })
-              ) : (
-                <p className="rounded-xl bg-emerald-500/5 p-3 text-sm text-emerald-700 dark:text-emerald-300">Everything looks in order. There are no urgent operational alerts.</p>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
+  return <div className="dashboard-home mx-auto max-w-[1500px] space-y-4 pb-4">
+    <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div><h2 className="text-2xl font-semibold tracking-tight">Good day, {user?.name?.split(" ")[0] || "there"}.</h2>
+        <p className="dashboard-muted mt-1 text-sm">Here's the financial pulse for <span className="font-medium text-[color:var(--text-primary)]">{business?.name || "your business"}</span>.</p></div>
+      <p className="dashboard-muted text-xs">{new Date().toLocaleDateString("en-IN", {weekday:"long",day:"numeric",month:"long",timeZone:"Asia/Kolkata"})}</p>
+    </header>
+    {quickActions.length ? <section aria-labelledby="dashboard-quick-actions" className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+      <h3 id="dashboard-quick-actions" className="dashboard-muted text-xs font-semibold">Quick actions</h3>
+      <div className="grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap">{quickActions.map(({label,icon:Icon,to,primary}) =>
+        <button key={label} type="button" onClick={() => navigate(to)} className={`dashboard-action ${primary ? "bg-brand-600 text-white hover:bg-brand-700" : "dashboard-secondary"}`}><Icon size={16} className="shrink-0"/><span>{label}</span></button>)}</div>
+    </section> : null}
+    <section aria-label="Financial summary" className="dashboard-kpis">
+      {kpis.map(({label,value,detail,icon:Icon,tone}) => <article key={label} className="dashboard-card">
+        <div className="flex items-center justify-between gap-2"><h3 className="dashboard-muted text-xs font-medium">{label}</h3><Icon size={16} className="dashboard-muted shrink-0 opacity-60"/></div>
+        <p className={`mt-3 text-2xl font-semibold tracking-tight tabular-nums ${tone || ""}`}>{money(value)}</p><p className="dashboard-muted mt-2 text-[11px]">{detail}</p>
+      </article>)}
+    </section>
+    <div className="dashboard-columns">
+      <Card title="Financial overview" description="Issued sales · last 12 months" action={<span className="dashboard-muted text-xs">Monthly</span>}>
+        {hasSalesHistory ? <div className="mt-4 h-44 sm:h-48"><ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={chart} margin={{top:8,right:8,left:0,bottom:0}}>
+            <defs><linearGradient id="dashboardSalesFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2563eb" stopOpacity={0.14}/><stop offset="100%" stopColor="#2563eb" stopOpacity={0}/></linearGradient></defs>
+            <CartesianGrid vertical={false} stroke="rgba(100,116,139,.12)"/>
+            <XAxis dataKey="month" tickLine={false} axisLine={false} minTickGap={24} tick={{fontSize:10,fill:"#64748b"}}/>
+            <YAxis width={64} tickFormatter={(value) => new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",notation:"compact",maximumFractionDigits:1}).format(value)} tickLine={false} axisLine={false} tick={{fontSize:10,fill:"#64748b"}}/>
+            <Tooltip formatter={(value) => [money(value),"Issued sales"]} contentStyle={{background:"var(--theme-surface-strong)",border:"1px solid var(--panel-border)",borderRadius:10,color:"var(--text-primary)",fontSize:12}}/>
+            <Area name="Issued sales" type="monotone" dataKey="revenue" stroke="#2563eb" strokeWidth={2} fill="url(#dashboardSalesFill)" isAnimationActive={false} />
+          </AreaChart>
+        </ResponsiveContainer></div> : <div className="dashboard-empty"><p className="font-medium">No sales in this period</p><p className="dashboard-muted mt-1">Issued invoices will appear in your monthly overview.</p></div>}
+      </Card>
+      <Card title="Collection health" description="Balances across issued invoices">
+        <dl className="mt-4 space-y-3 text-sm">
+          {[["Receivables",metrics.unpaidAmount,"text-amber-600"],["Overdue",metrics.overdueAmount,metrics.overdueInvoices > 0 ? "text-rose-600" : ""],["Collected",metrics.paidAmount,"text-emerald-600"]].map(([label,value,tone]) =>
+            <div key={label} className="flex items-center justify-between gap-3"><dt className="dashboard-muted">{label}</dt><dd className={`font-semibold tabular-nums ${tone}`}>{money(value)}</dd></div>)}
+        </dl>
+        {collectionRatio != null ? <div className="mt-4">
+          <div className="mb-2 flex justify-between text-xs dashboard-muted"><span>Issued sales collected</span><span>{Math.round(collectionRatio * 100)}%</span></div>
+          <div role="progressbar" aria-label="Issued sales collected" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(collectionRatio*100)} className="h-1.5 overflow-hidden rounded-full bg-slate-500/10"><div className="h-full rounded-full bg-emerald-500" style={{width:`${collectionRatio*100}%`}}/></div>
+        </div> : <p className="dashboard-muted mt-4 text-xs">Collection progress appears once sales are issued.</p>}
+        <div className="mt-4 border-t pt-3 text-xs" style={{borderColor:"var(--panel-border)"}}>{metrics.overdueInvoices > 0 ? link("Review receivables","/dashboard/invoices") : <span className="dashboard-muted">No overdue invoices. You're all caught up.</span>}</div>
+      </Card>
     </div>
-  );
+    <div className="dashboard-columns">
+      <Card title="Recent invoices" description="Latest five invoices" action={link("View all","/dashboard/invoices")}>
+        {recentInvoices.length ? <div className="mt-4">
+          <div className="dashboard-invoice-head dashboard-muted"><span>Invoice / {realEstate ? "Client" : "Customer"}</span><span>Amount</span><span>Due</span><span>Status</span><span/></div>
+          {recentInvoices.map((invoice) => <div key={invoice._id} className="dashboard-invoice-row">
+            <div className="min-w-0"><p className="truncate font-semibold">{invoice.invoiceNumber || "Draft"}</p><p className="dashboard-muted mt-0.5 truncate text-xs">{invoice.customerId?.name || invoice.customerDetails?.name || "Customer"}</p></div>
+            <p className="font-medium tabular-nums">{money(invoice.grandTotal)}</p><p className="dashboard-muted text-xs">{date(invoice.dueDate)}</p>
+            <span className={`justify-self-start rounded-full px-2 py-1 text-[10px] font-medium capitalize ${badgeTone(invoice.status === "cancelled" ? "cancelled" : invoice.paymentStatus)}`}>{invoice.status === "cancelled" ? "cancelled" : invoice.paymentStatus || "Unknown"}</span>
+            {link("Open",`/dashboard/invoices/${invoice._id}`)}
+          </div>)}
+        </div> : <div className="dashboard-empty"><p className="font-medium">No invoices yet</p><p className="dashboard-muted mt-1">Create your first invoice to start tracking sales.</p><div className="mt-3">{link("Create invoice","/dashboard/invoices?action=create")}</div></div>}
+      </Card>
+      <div className="min-w-0 space-y-4">
+        <Card title="Action required">
+          {alerts.length ? <div className="mt-3 divide-y divide-[color:var(--panel-border)]">{alerts.map(({title,detail,to,action,icon:Icon}) =>
+            <div key={title} className="py-3 first:pt-0 last:pb-0"><div className="flex items-start gap-2"><Icon size={15} className="mt-0.5 shrink-0 text-amber-600"/><div className="min-w-0"><p className="text-xs font-semibold">{title}</p><p className="dashboard-muted mt-1 text-xs">{detail}</p><div className="mt-2">{link(action,to)}</div></div></div></div>)}</div> :
+            <div className="mt-3 flex items-center gap-2 text-xs dashboard-muted"><CheckCircle2 size={16} className="shrink-0 text-emerald-600"/>You're all caught up. No action needed.</div>}
+        </Card>
+        {operations.length ? <Card title="Business activity"><div className="mt-3 divide-y divide-[color:var(--panel-border)]">
+          {operations.map(({label,value,detail,icon:Icon,to}) => <button key={label} type="button" onClick={() => navigate(to)} className="dashboard-operation">
+            <Icon size={16} className="shrink-0 text-brand-600"/><span className="min-w-0 flex-1"><span className="block text-xs font-medium">{label}</span><span className="dashboard-muted mt-0.5 block text-[11px]">{detail}</span></span><strong className="text-lg tabular-nums">{value}</strong><ArrowRight size={13} className="dashboard-muted shrink-0"/>
+          </button>)}
+        </div></Card> : null}
+        {showGettingStarted ? <Card title="Getting started" description="A few steps to start your workspace"><div className="mt-3 space-y-2">
+          {checklist.map((item) => <div key={item.key}>{link(realEstate && item.key === "customer" ? "Add first client" : item.label,item.to)}</div>)}
+        </div></Card> : null}
+      </div>
+    </div>
+  </div>;
 };
-
 export default DashboardHomePage;

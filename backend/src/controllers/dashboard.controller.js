@@ -241,6 +241,9 @@ const getDashboardSummary = asyncHandler(async (req, res) => {
     unpaidAmount: activeInvoices.reduce((sum, invoice) => sum + Number(invoice.balanceDue || 0), 0),
     totalInvoices: activeInvoices.length,
     overdueInvoices: activeInvoices.filter((invoice) => invoice.balanceDue > 0 && isOverdueByBusinessDate(invoice.dueDate)).length,
+    overdueAmount: activeInvoices
+      .filter((invoice) => invoice.balanceDue > 0 && isOverdueByBusinessDate(invoice.dueDate))
+      .reduce((sum, invoice) => sum + Number(invoice.balanceDue || 0), 0),
   }];
   const statusMap = new Map();
   derivedInvoices.forEach((invoice) => { const current = statusMap.get(invoice.paymentStatus) || { count: 0, amount: 0 }; current.count += 1; current.amount += Number(invoice.grandTotal || 0); statusMap.set(invoice.paymentStatus, current); });
@@ -269,6 +272,7 @@ const getDashboardSummary = asyncHandler(async (req, res) => {
         paidAmount: invoiceTotals[0]?.paidAmount || 0,
         unpaidAmount: invoiceTotals[0]?.unpaidAmount || 0,
         overdueInvoices: invoiceTotals[0]?.overdueInvoices || 0,
+        overdueAmount: invoiceTotals[0]?.overdueAmount || 0,
         totalInvoices: invoiceTotals[0]?.totalInvoices || 0,
         lowStockProducts: lowStockProducts.length,
         outOfStockProducts: outOfStockProducts.length,

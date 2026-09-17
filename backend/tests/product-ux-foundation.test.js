@@ -61,7 +61,7 @@ test("sidebar and dashboard fail closed instead of flashing every module", () =>
   assert.match(sidebar, /moduleStatus !== "success" && moduleKey\) return false/);
   assert.match(sidebar, /NAV_GROUPS/);
   assert.match(dashboard, /getBusinessModulesRequest/);
-  assert.match(dashboard, /workflowStats[\s\S]*\.filter\(\(item\) => showModule\(item\.moduleKey\)\)/);
+  assert.match(dashboard, /operations[\s\S]*\.filter\(\(item\) => showModule\(item\.moduleKey\)/);
   assert.doesNotMatch(dashboard, /Record payment[\s\S]*Coming soon/);
 });
 
@@ -134,7 +134,7 @@ test("Real Estate SELF_HOSTED workspace hides irrelevant operational modules fro
   assert.match(sidebar, /shouldShowWorkspaceNavigation/);
   assert.match(dashboard, /shouldShowDashboardSurface/);
   assert.doesNotMatch(dashboard, /New site visit/);
-  assert.match(dashboard, /Monthly billing due/);
+  assert.match(dashboard, /Monthly billing/);
 });
 
 test("SELF_HOSTED configured businesses bypass generic SaaS onboarding from auth routing", () => {
@@ -331,12 +331,13 @@ test("dashboard recent transactions use derived payment state and avoid forced t
   assert.match(dashboardController, /netOperatingDifference: \(invoiceTotals\[0\]\?\.totalSales \|\| 0\) - \(monthlyExpensesRaw\[0\]\?\.paidExpenses \|\| 0\)/);
   assert.match(dashboardPage, /Payment collected|Amount collected|Collection snapshot/);
   assert.match(dashboardPage, /Net after expenses/);
-  assert.match(dashboardPage, /paidExpenses \|\| metrics\.monthlyPaidExpenses/);
+  assert.match(dashboardPage, /metrics\.paidExpenses \?\? metrics\.monthlyPaidExpenses/);
+  assert.match(dashboardPage, /metrics\.overdueAmount/);
   assert.doesNotMatch(dashboardPage, /min-w-\[640px\]/);
   assert.match(layout, /h-screen overflow-hidden/);
   assert.match(layout, /overflow-y-auto overflow-x-hidden/);
-  assert.match(sidebar, /lg:h-screen/);
-  assert.match(sidebar, /no-scrollbar flex-1/);
+  assert.match(sidebar, /workspace-sidebar/);
+  assert.match(sidebar, /sidebar-nav no-scrollbar/);
   assert.match(styles, /\*\::-webkit-scrollbar/);
 });
 
@@ -362,7 +363,7 @@ test("dashboard actions render the relevant invoice flow and invoice editor avoi
   assert.match(invoicePage, /scrollIntoView/);
   assert.match(invoicePage, /Select a service or type a manual item/);
   assert.doesNotMatch(invoicePage, /min-w-\[960px\]/);
-  assert.doesNotMatch(dashboardPage, /Site visits/);
+  assert.match(dashboardPage, /moduleKey: "appointments_scheduling"/);
   assert.match(styles, /\.bg-brand-600[\s\S]*color: #ffffff !important/);
   assert.match(styles, /:root\[data-theme="light"\] \.text-white\.bg-brand-600/);
   assert.doesNotMatch(invoicePage, /No contact details recorded/);
