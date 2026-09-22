@@ -14,7 +14,7 @@ export default function GstLocationPreview({ form, setForm, customers, lineItems
     let active = true;
     setPreview(null); setError("");
     if (!business?.gstConfiguration?.enabled || !form.customerId || !lineItems?.length || lineItems.some(line => !line.productId && !line.productName)) return;
-    const timer = setTimeout(() => previewInvoiceTaxRequest(JSON.parse(payloadKey)).then(data => { if (active) setPreview(data?.gstSnapshot); }).catch(err => { if (active) setError(err.response?.data?.message || "GST preview unavailable"); }), 350);
+    const timer = setTimeout(() => previewInvoiceTaxRequest(JSON.parse(payloadKey)).then(data => { if (active) setPreview(data?.gstSnapshot); }).catch(err => { if (!active || err.response?.status === 404) return; setError(err.response?.data?.message || "GST preview unavailable"); }), 350);
     return () => { active = false; clearTimeout(timer); };
   }, [payloadKey, business?.gstConfiguration?.enabled]);
   if (!business?.gstConfiguration?.enabled) return null;

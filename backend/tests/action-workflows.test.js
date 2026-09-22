@@ -62,6 +62,8 @@ test("shared actions, retry recovery, copy, modal errors and discoverable scroll
  const workflowService=read("..\/..\/backend\/src\/services\/workflow.service.js");
  assert.match(workflowService,/profile\.status !== "CANCELLED"/);
  assert.match(workflowService,/profile\.generatedInvoices\?\.length/);
+ assert.doesNotMatch(read("features/auth/api.js"),/workflows\/recurring[\s\S]{0,160}Cache-Control/);
+ assert.match(read("features/dashboard/pages/InvoicesPage.jsx"),/response\?\.status === 404/);
  assert.match(read("features/dashboard/pages/CustomersPage.jsx"),/GSTIN/);
  const paymentModal=read("features/dashboard/pages/CustomersPage.jsx").split("const PaymentModal =")[1].split("const AllocationModal =")[0];
  assert.match(paymentModal,/id="customer-payment-editor"/);

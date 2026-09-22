@@ -114,7 +114,7 @@ const InvoicesPage = () => {
     let cancelled = false;
     setGstPreview(null); setGstPreviewError("");
     if (!form.customerId || !showEditor) return;
-    const timer = setTimeout(() => previewInvoiceTaxRequest({ ...form, lineItems: form.lineItems.map(item => ({ ...item, productId: item.productId || undefined })) }).then(data => { if (!cancelled) setGstPreview(data?.gstSnapshot || null); }).catch(error => { if (!cancelled) setGstPreviewError(error.response?.data?.message || "GST preview unavailable"); }), 350);
+    const timer = setTimeout(() => previewInvoiceTaxRequest({ ...form, lineItems: form.lineItems.map(item => ({ ...item, productId: item.productId || undefined })) }).then(data => { if (!cancelled) setGstPreview(data?.gstSnapshot || null); }).catch(error => { if (cancelled || error.response?.status === 404) return; setGstPreviewError(error.response?.data?.message || "GST preview unavailable"); }), 350);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [form, showEditor]);
   const totals = useMemo(() => {

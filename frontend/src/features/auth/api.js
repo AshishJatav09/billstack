@@ -538,7 +538,7 @@ export const updateTaskRequest = async (taskId, payload) => {
 };
 
 export const listRecurringProfilesRequest = async (params) => {
-  const response = await api.get("/workflows/recurring", { params: { ...(params || {}), _ts: Date.now() }, headers: { "Cache-Control": "no-cache" } });
+  const response = await api.get("/workflows/recurring", { params: { ...(params || {}), _ts: Date.now() } });
   return response.data.data;
 };
 

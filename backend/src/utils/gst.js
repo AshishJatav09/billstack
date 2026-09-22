@@ -34,7 +34,7 @@ const buildGstSnapshot = ({ business, counterparty, lineItems, products = [], pl
   const supplierStateCode = configuration.stateCode;
   const pos = policy.normalizeCode(placeOfSupplyCode || counterparty.placeOfSupplyCode || counterparty.stateCode || (policy.validGstin(counterparty.gstNumber) ? String(counterparty.gstNumber).slice(0, 2) : ""));
   if (!validateStateCode(pos)) throw new AppError("Place of Supply is required. Select a valid state before issuing.", 400);
-  if (counterparty.gstNumber && !validateGstin(counterparty.gstNumber)) throw new AppError("Invalid customer GSTIN", 400);
+  if (counterparty.gstNumber && !validateGstin(counterparty.gstNumber)) throw new AppError("Customer GSTIN is invalid. Correct it in the customer profile, or clear it if the customer is not GST registered.", 400);
   const productMap = new Map(products.map((product) => [product._id.toString(), product]));
   const summary = { cgst: 0, sgst: 0, utgst: 0, igst: 0, taxableValue: 0, totalTax: 0, hsnSacSummary: {} };
   const lines = lineItems.map((line) => {
