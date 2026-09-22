@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, BellRing, CheckCircle2, CircleAlert, Download, FileCheck2, Mail, MessageCircle, QrCode, ShieldCheck, Trash2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { EmptyState, ErrorState, LoadingState } from "../../../components/ui/PageState";
+import { authStore } from "../../../store/authStore";
 import { uiStore } from "../../../store/uiStore";
+import { isRealEstateSelfHostedWorkspace } from "../../workspace/workspaceVisibility";
 import {
   cancelInvoiceRequest,
   checkEInvoiceReadinessRequest,
@@ -31,6 +33,7 @@ const templateCategoryLabel = (value) => ({ INVOICE_CREATED: "Invoice Created", 
 const InvoiceDetailPage = () => {
   const { invoiceId } = useParams();
   const navigate = useNavigate();
+  const { business: workspaceBusiness } = authStore();
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -51,10 +54,14 @@ const InvoiceDetailPage = () => {
     try {
       const data = await getInvoiceRequest(invoiceId);
       setInvoice(data);
-      try {
-        setEInvoice(await getEInvoiceDetailsRequest(invoiceId));
-      } catch {
-        setEInvoice(data.eInvoice || null);
+      if (data.gstSnapshot) {
+        try {
+          setEInvoice(await getEInvoiceDetailsRequest(invoiceId));
+        } catch {
+          setEInvoice(data.eInvoice || null);
+        }
+      } else {
+        setEInvoice(null);
       }
       try {
         const [deliveryRows, reminderRows, allocationRows, communicationData, templateRows] = await Promise.all([
@@ -196,6 +203,7 @@ const InvoiceDetailPage = () => {
   const [paymentLabel, paymentClass] = status(invoice);
   const customer = invoice.customerId || invoice.customerDetails || {};
   const business = invoice.businessDetails || {};
+  const isRealEstateSelfHosted = isRealEstateSelfHostedWorkspace(null, workspaceBusiness);
 
   return <div className="mx-auto max-w-[1500px] space-y-6 pb-8">
     <div className="flex flex-wrap items-center justify-between gap-4">
@@ -230,7 +238,7 @@ const InvoiceDetailPage = () => {
         <section className="rounded-2xl border p-5 sm:p-6" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><h3 className="text-lg font-semibold">Activity</h3><div className="mt-4"><Timeline invoice={invoice} /></div></section>
       </main>
       <aside className="space-y-6">
-        <GstEInvoicePanel invoice={invoice} eInvoice={eInvoice || invoice.eInvoice} result={eInvoiceResult} active={active} onCheck={checkReadiness} onPrepare={preparePayload} />
+        {invoice.gstSnapshot ? <GstEInvoicePanel invoice={invoice} eInvoice={eInvoice || invoice.eInvoice} result={eInvoiceResult} active={active} onCheck={checkReadiness} onPrepare={preparePayload} showEInvoiceActions={!isRealEstateSelfHosted} /> : null}
         <CommunicationPanel deliveries={deliveries} reminders={reminders} templates={templates} form={communicationForm} setForm={setCommunicationForm} providerStatus={providerStatus} active={active} onSend={sendViaChannel} onSchedule={scheduleReminder} />
         <PaymentSummary invoice={invoice} paymentLabel={paymentLabel} paymentClass={paymentClass} />
         <PaymentAllocations invoice={invoice} rows={allocations} />
@@ -259,13 +267,13 @@ const PaymentAllocations = ({ invoice, rows }) => {
   return <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><h3 className="text-lg font-semibold">Payment allocation history</h3>{enriched.length ? <div className="mt-4 space-y-3">{enriched.map((row) => <div key={row.allocationId || row._id} className="rounded-xl border p-3 text-sm" style={{ borderColor: "var(--panel-border)" }}><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{money(row.allocatedAmount)}</p><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{date(row.payment?.paymentDate || row.createdAt)} · {row.payment?.paymentMethod || "Method not captured"}</p></div><span className={`rounded-full px-2 py-1 text-xs ${row.reversal ? "bg-rose-500/10 text-rose-700" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"}`}>{row.reversal ? "Reversed" : "Active"}</span></div><dl className="mt-3 grid gap-2 text-xs"><AmountRow label="Reference" value={row.payment?.referenceNumber || row.paymentId || "—"} /><AmountRow label="Direction" value={row.payment?.direction || "RECEIVED"} /><AmountRow label="Payment status" value={row.payment?.status || "POSTED"} /><AmountRow label="Remaining after allocation" value={money(row.remainingAfter)} /></dl></div>)}</div> : <EmptyState title="No payment allocations yet" description="Payments allocated through the payment workflow will appear here with date, method, reference, and remaining balance." />}</section>;
 };
 
-const GstEInvoicePanel = ({ invoice, eInvoice, result, active, onCheck, onPrepare }) => {
+const GstEInvoicePanel = ({ invoice, eInvoice, result, active, onCheck, onPrepare, showEInvoiceActions }) => {
   const breakup = invoice.gstBreakup || {};
   const snapshot = invoice.gstSnapshot || {};
   const firstLine = snapshot.lines?.[0] || {};
   const statusLabel = eInvoice?.eInvoiceStatus || eInvoice?.status || (invoice.gstSnapshot ? "READY" : "NOT_REQUIRED");
   const errors = result?.readiness?.errors || [];
-  return <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-brand-600">GST & e-invoice</p><h3 className="mt-1 text-lg font-semibold">Compliance snapshot</h3></div><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusLabel === "READY" || statusLabel === "GENERATED" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : statusLabel === "FAILED" ? "bg-rose-500/10 text-rose-700 dark:text-rose-300" : "bg-slate-500/10 text-slate-600 dark:text-slate-300"}`}>{statusLabel}</span></div>{invoice.gstSnapshot ? <div className="mt-4 space-y-2 text-sm"><AmountRow label="Taxable value" value={money(breakup.taxableValue || snapshot.taxableValue)} /><AmountRow label="CGST" value={money(breakup.cgst || snapshot.cgst)} /><AmountRow label="SGST" value={money(breakup.sgst || snapshot.sgst)} /><AmountRow label="IGST" value={money(breakup.igst || snapshot.igst)} /><AmountRow label="HSN/SAC" value={firstLine.hsnSac || Object.keys(breakup.hsnSacSummary || {})[0] || "Not captured"} /><AmountRow label="GST rate" value={firstLine.rate !== undefined ? `${firstLine.rate}%` : "Mixed"} /><AmountRow label="Supply" value={snapshot.supplierStateCode && snapshot.placeOfSupplyCode && snapshot.supplierStateCode === snapshot.placeOfSupplyCode ? "Intra-state" : "Inter-state"} /><AmountRow label="Place of supply" value={snapshot.placeOfSupplyCode || "Not captured"} /></div> : <p className="mt-4 rounded-xl bg-slate-500/10 p-3 text-sm" style={{ color: "var(--text-muted)" }}>This is a legacy or non-GST invoice. No GST snapshot is available.</p>}{eInvoice?.irn ? <div className="mt-4 rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-200"><p className="flex items-center gap-2 font-medium"><ShieldCheck size={16} /> IRN available</p><p className="mt-1 break-all">{eInvoice.irn}</p>{eInvoice.acknowledgementNumber ? <p className="mt-1">Ack: {eInvoice.acknowledgementNumber}</p> : null}</div> : <p className="mt-4 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">Government IRP submission is not configured. BillStack can validate readiness and prepare the payload only.</p>}{errors.length ? <div className="mt-4 space-y-2">{errors.map((error) => <p key={error.code + error.message} className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-200">{error.code}: {error.message}</p>)}</div> : result?.readiness?.readiness === "READY" ? <p className="mt-4 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300"><CheckCircle2 size={15} /> Readiness validation passed.</p> : null}<div className="mt-5 grid gap-2"><button type="button" onClick={onCheck} disabled={active === "echeck"} className="inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium" style={{ borderColor: "var(--panel-border)" }}><FileCheck2 size={16} /> {active === "echeck" ? "Checking..." : "Check readiness"}</button><button type="button" onClick={onPrepare} disabled={active === "epayload" || !invoice.gstSnapshot} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><QrCode size={16} /> {active === "epayload" ? "Preparing..." : "Prepare e-invoice"}</button></div></section>;
+  return <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-brand-600">{showEInvoiceActions ? "GST & e-invoice" : "GST details"}</p><h3 className="mt-1 text-lg font-semibold">Tax snapshot</h3></div>{showEInvoiceActions ? <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusLabel === "READY" || statusLabel === "GENERATED" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : statusLabel === "FAILED" ? "bg-rose-500/10 text-rose-700 dark:text-rose-300" : "bg-slate-500/10 text-slate-600 dark:text-slate-300"}`}>{statusLabel}</span> : null}</div><div className="mt-4 space-y-2 text-sm"><AmountRow label="Taxable value" value={money(breakup.taxableValue || snapshot.taxableValue)} /><AmountRow label="CGST" value={money(breakup.cgst || snapshot.cgst)} /><AmountRow label="SGST" value={money(breakup.sgst || snapshot.sgst)} /><AmountRow label="IGST" value={money(breakup.igst || snapshot.igst)} /><AmountRow label="HSN/SAC" value={firstLine.hsnSac || Object.keys(breakup.hsnSacSummary || {})[0] || "Not captured"} /><AmountRow label="GST rate" value={firstLine.rate !== undefined ? `${firstLine.rate}%` : "Mixed"} /><AmountRow label="Supply" value={snapshot.supplierStateCode && snapshot.placeOfSupplyCode && snapshot.supplierStateCode === snapshot.placeOfSupplyCode ? "Intra-state" : "Inter-state"} /><AmountRow label="Place of supply" value={snapshot.placeOfSupplyCode || "Not captured"} /></div>{showEInvoiceActions ? <>{eInvoice?.irn ? <div className="mt-4 rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-200"><p className="flex items-center gap-2 font-medium"><ShieldCheck size={16} /> IRN available</p><p className="mt-1 break-all">{eInvoice.irn}</p>{eInvoice.acknowledgementNumber ? <p className="mt-1">Ack: {eInvoice.acknowledgementNumber}</p> : null}</div> : <p className="mt-4 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">Government IRP submission is not configured. BillStack can validate readiness and prepare the payload only.</p>}{errors.length ? <div className="mt-4 space-y-2">{errors.map((error) => <p key={error.code + error.message} className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-200">{error.code}: {error.message}</p>)}</div> : result?.readiness?.readiness === "READY" ? <p className="mt-4 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300"><CheckCircle2 size={15} /> Readiness validation passed.</p> : null}<div className="mt-5 grid gap-2"><button type="button" onClick={onCheck} disabled={active === "echeck"} className="inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium" style={{ borderColor: "var(--panel-border)" }}><FileCheck2 size={16} /> {active === "echeck" ? "Checking..." : "Check readiness"}</button><button type="button" onClick={onPrepare} disabled={active === "epayload"} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><QrCode size={16} /> {active === "epayload" ? "Preparing..." : "Prepare e-invoice"}</button></div></> : null}</section>;
 };
 
 const CommunicationPanel = ({ deliveries, reminders, templates, form, setForm, providerStatus, active, onSend, onSchedule }) => {
