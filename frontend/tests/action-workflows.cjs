@@ -36,6 +36,8 @@ const base=process.env.BILLSTACK_QA_URL || "http://localhost:5173";
    else if(p.endsWith("/expenses/summary"))data={totalExpenses:0,paid:0,unpaid:0,gstRecorded:0,byCategory:[]};
    else if(p==="/api/expenses")data={items:[],pagination:{page:1,totalPages:1,total:0}};
    else if(p==="/api/workflows/recurring"&&method==="POST") { const body=route.request().postDataJSON(); const row={_id:"recurring-1",...body,status:"DRAFT",grandTotal:10000,nextBillingDate:body.startDate,customerId:client}; recurringRows.unshift(row); data=row; }
+   else if(p.endsWith("/status")&&p.includes("/api/workflows/recurring/")&&method==="POST") { const row=recurringRows.find(item=>p.includes(item._id)); row.status=route.request().postDataJSON().status; data=row; }
+   else if(p.includes("/api/workflows/recurring/")&&method==="DELETE") { const index=recurringRows.findIndex(item=>p.includes(item._id)); const [removed]=recurringRows.splice(index,1); data={id:removed._id}; }
    else if(p==="/api/workflows/recurring") { recurringListCalls++; const snapshot=recurringRows.slice(); if(recurringListCalls===1) await new Promise(resolve=>setTimeout(resolve,700)); data=snapshot; }
    else if(p.endsWith("/reports/summary")){
     const size=Number(url.searchParams.get("pendingSize")||10),page=Number(url.searchParams.get("pendingPage")||1);
@@ -112,6 +114,15 @@ const base=process.env.BILLSTACK_QA_URL || "http://localhost:5173";
   assert.equal(await page.getByText("Test Client monthly billing",{exact:true}).count(),1,"saved monthly billing must survive stale list responses");
   const search=page.getByRole("textbox",{name:"Search Monthly Billing",exact:true});
   assert.equal(await search.evaluate(el=>parseFloat(getComputedStyle(el).paddingLeft)>=36),true,"search text must clear its icon");
+  const recurringCard=page.getByText("Test Client monthly billing",{exact:true}).locator('xpath=ancestor::div[contains(@class,"rounded-2xl")][1]');
+  await recurringCard.getByRole("button",{name:"Cancel",exact:true}).click();
+  await page.getByText("Test Client monthly billing",{exact:true}).waitFor();
+  await recurringCard.getByRole("button",{name:"Delete",exact:true}).click();
+  const deleteDialog=page.getByRole("dialog",{name:"Delete monthly billing?"});
+  await deleteDialog.getByRole("button",{name:"Delete",exact:true}).click();
+  await page.getByText("No monthly billing yet",{exact:true}).waitFor();
+  await page.reload();
+  await page.getByText("No monthly billing yet",{exact:true}).waitFor();
   }
   for(const path of ["","invoices","customers","quotes","expenses","reports","recurring-billing","settings"]){
    await page.goto(base+"/dashboard/"+path);await page.waitForTimeout(400);

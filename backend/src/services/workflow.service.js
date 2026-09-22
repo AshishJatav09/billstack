@@ -628,6 +628,16 @@ const setRecurringStatus = async ({ businessId, userId, id, status, req }) => {
   return profile;
 };
 
+const deleteRecurringProfile = async ({ businessId, id, req }) => {
+  const profile = await RecurringBillingProfile.findOne({ _id: id, businessId });
+  if (!profile) throw new AppError("Recurring profile not found", 404);
+  if (profile.status !== "CANCELLED") throw new AppError("Cancel this monthly billing profile before deleting it", 400);
+  if (profile.generatedInvoices?.length) throw new AppError("This profile has generated invoices and must be retained for history", 400);
+  await RecurringBillingProfile.deleteOne({ _id: profile._id, businessId });
+  await writeAuditLog({ req, businessId, action: "RECURRING_DELETED", entityType: "RecurringBillingProfile", entityId: profile._id });
+  return { id: profile._id };
+};
+
 const generateRecurringInvoice = async ({ businessId, userId, id, runDate = new Date(), req }) => {
   const session = await mongoose.startSession();
   try {
@@ -815,6 +825,7 @@ module.exports = {
   createProject,
   createRecurringProfile,
   createTask,
+  deleteRecurringProfile,
   convertOrderToInvoice,
   generateRecurringInvoice,
   getOrder,

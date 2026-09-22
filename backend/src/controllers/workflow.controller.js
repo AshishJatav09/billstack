@@ -21,10 +21,11 @@ const listTasks = asyncHandler(async (req, res) => ok(res, "Tasks fetched", awai
 const updateTask = asyncHandler(async (req, res) => ok(res, "Task updated", await service.updateTask({ businessId: req.tenant.businessId, userId: req.user._id, id: req.params.taskId, payload: req.body })));
 
 const createRecurring = asyncHandler(async (req, res) => ok(res, "Recurring profile created", await service.createRecurringProfile({ businessId: req.tenant.businessId, userId: req.user._id, payload: req.body }), 201));
-const listRecurring = asyncHandler(async (req, res) => ok(res, "Recurring profiles fetched", await service.listRecurringProfiles({ businessId: req.tenant.businessId, query: req.query })));
+const listRecurring = asyncHandler(async (req, res) => { res.set("Cache-Control", "no-store, no-cache, must-revalidate, private"); return ok(res, "Recurring profiles fetched", await service.listRecurringProfiles({ businessId: req.tenant.businessId, query: req.query })); });
 const getRecurring = asyncHandler(async (req, res) => ok(res, "Recurring profile fetched", await service.getRecurringProfile({ businessId: req.tenant.businessId, id: req.params.profileId })));
 const setRecurringStatus = asyncHandler(async (req, res) => ok(res, "Recurring status updated", await service.setRecurringStatus({ businessId: req.tenant.businessId, userId: req.user._id, id: req.params.profileId, status: req.body.status, req })));
 const generateRecurring = asyncHandler(async (req, res) => ok(res, "Recurring invoice generated", await service.generateRecurringInvoice({ businessId: req.tenant.businessId, userId: req.user._id, id: req.params.profileId, req }), 201));
+const deleteRecurring = asyncHandler(async (req, res) => ok(res, "Recurring profile deleted", await service.deleteRecurringProfile({ businessId: req.tenant.businessId, id: req.params.profileId, req })));
 
 const createAppointment = asyncHandler(async (req, res) => ok(res, "Appointment created", await service.createAppointment({ businessId: req.tenant.businessId, userId: req.user._id, payload: req.body, req }), 201));
 const listAppointments = asyncHandler(async (req, res) => ok(res, "Appointments fetched", await service.listAppointments({ businessId: req.tenant.businessId, query: req.query })));
@@ -37,6 +38,7 @@ module.exports = {
   createProject,
   createRecurring,
   createTask,
+  deleteRecurring,
   convertOrderToInvoice,
   generateRecurring,
   getOrder,

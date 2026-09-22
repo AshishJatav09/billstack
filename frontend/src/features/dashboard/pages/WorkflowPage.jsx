@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Trash2,
   XCircle,
 } from "lucide-react";
 import { authStore } from "../../../store/authStore";
@@ -26,6 +27,7 @@ import {
   createProjectRequest,
   createRecurringProfileRequest,
   createTaskRequest,
+  deleteRecurringProfileRequest,
   generateRecurringInvoiceRequest,
   getBusinessModulesRequest,
   listAppointmentsRequest,
@@ -129,6 +131,7 @@ const WorkflowPage = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [form, setForm] = useState({});
+  const [pendingDelete, setPendingDelete] = useState(null);
   const loadSequenceRef = useRef(0);
 
   const currentTab = visibleTabs.find((tab) => tab.key === activeTab) || tabs.find((tab) => tab.key === activeTab) || tabs[0];
@@ -311,8 +314,10 @@ const WorkflowPage = () => {
       await fn();
       setSuccess(message);
       await loadData();
+      return true;
     } catch (err) {
       setError(err?.response?.data?.message || "Action could not be completed.");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -424,6 +429,7 @@ const WorkflowPage = () => {
               {item.status === "PAUSED" ? <button className="btn-secondary" onClick={() => action(() => updateRecurringStatusRequest(item._id, "ACTIVE"), "Recurring profile resumed.")}><PlayCircle size={15} /> Resume</button> : null}
               {item.status === "ACTIVE" ? <button className="btn-primary" onClick={() => action(() => generateRecurringInvoiceRequest(item._id), "Recurring invoice generated.")}>Generate now</button> : null}
               {["DRAFT", "ACTIVE", "PAUSED"].includes(item.status) ? <button className="btn-secondary text-rose-600" onClick={() => action(() => updateRecurringStatusRequest(item._id, "CANCELLED"), "Recurring profile cancelled.")}>Cancel</button> : null}
+              {item.status === "CANCELLED" ? <button className="btn-secondary text-rose-600" onClick={() => setPendingDelete(item)}><Trash2 size={15} /> Delete</button> : null}
             </div>
           </div>
         </div>
@@ -657,6 +663,7 @@ const WorkflowPage = () => {
           <Link to="/dashboard" className="inline-flex text-sm font-semibold text-brand-600 hover:text-brand-700">Back to dashboard</Link>
         </div>
       </div>
+      {pendingDelete ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"><div role="dialog" aria-modal="true" aria-labelledby="delete-recurring-title" className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"><h2 id="delete-recurring-title" className="text-lg font-bold text-slate-950">Delete monthly billing?</h2><p className="mt-2 text-sm text-slate-600">{pendingDelete.name} will be permanently removed. Generated invoices, if any, prevent deletion.</p><div className="mt-5 flex justify-end gap-2"><button type="button" className="btn-secondary" onClick={() => setPendingDelete(null)}>Keep it</button><button type="button" disabled={saving} className="btn-primary bg-rose-600" onClick={() => action(() => deleteRecurringProfileRequest(pendingDelete._id), "Monthly billing deleted.").then((deleted) => { if (deleted) setPendingDelete(null); })}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 size={15} />} Delete</button></div></div></div> : null}
     </div>
   );
 };

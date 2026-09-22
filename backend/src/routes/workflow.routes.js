@@ -33,6 +33,7 @@ router.post("/recurring", requireModule("recurring_billing"), requireFeature("re
 router.get("/recurring/:profileId", validateObjectIdParam("profileId"), requireModule("recurring_billing"), requireFeature("recurringBilling"), controller.getRecurring);
 router.post("/recurring/:profileId/status", validateObjectIdParam("profileId"), requireModule("recurring_billing"), requireFeature("recurringBilling"), permit("owner", "admin", "accountant"), controller.setRecurringStatus);
 router.post("/recurring/:profileId/generate", validateObjectIdParam("profileId"), requireModule("recurring_billing"), requireFeature("recurringBilling"), permit("owner", "admin", "accountant"), controller.generateRecurring);
+router.delete("/recurring/:profileId", validateObjectIdParam("profileId"), requireModule("recurring_billing"), requireFeature("recurringBilling"), permit("owner", "admin", "accountant"), controller.deleteRecurring);
 
 router.get("/appointments", requireModule("appointments_scheduling"), requireFeature("appointmentsScheduling"), controller.listAppointments);
 router.post("/appointments", requireModule("appointments_scheduling"), requireFeature("appointmentsScheduling"), permit("owner", "admin", "staff"), controller.createAppointment);

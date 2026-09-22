@@ -538,7 +538,7 @@ export const updateTaskRequest = async (taskId, payload) => {
 };
 
 export const listRecurringProfilesRequest = async (params) => {
-  const response = await api.get("/workflows/recurring", { params });
+  const response = await api.get("/workflows/recurring", { params: { ...(params || {}), _ts: Date.now() }, headers: { "Cache-Control": "no-cache" } });
   return response.data.data;
 };
 
@@ -554,6 +554,11 @@ export const updateRecurringStatusRequest = async (profileId, status) => {
 
 export const generateRecurringInvoiceRequest = async (profileId) => {
   const response = await api.post(`/workflows/recurring/${profileId}/generate`);
+  return response.data.data;
+};
+
+export const deleteRecurringProfileRequest = async (profileId) => {
+  const response = await api.delete(`/workflows/recurring/${profileId}`);
   return response.data.data;
 };
 
