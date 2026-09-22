@@ -3,9 +3,9 @@ const assert = require("node:assert/strict");
 const { normalizeBusinessGst } = require("../../shared/gst-policy.cjs");
 const { buildTaxDocument } = require("../src/utils/tax-document");
 const business = { gstConfiguration: { enabled: true, gstin: "23CGZPB7175E1Z5", stateCode: "23", state: "Madhya Pradesh" }, defaultTaxSettings: { taxMode: "exclusive" } };
-test("GSTIN and business state cannot contradict each other", () => {
+test("GSTIN prefix normalizes stale business state metadata", () => {
   assert.equal(normalizeBusinessGst(business.gstConfiguration).stateCode, "23");
-  assert.throws(() => normalizeBusinessGst({ ...business.gstConfiguration, stateCode: "27", state: "Maharashtra" }), /GSTIN belongs to Madhya Pradesh/);
+  assert.deepEqual(normalizeBusinessGst({ ...business.gstConfiguration, stateCode: "27", state: "Maharashtra" }), business.gstConfiguration);
   assert.equal(normalizeBusinessGst({ enabled: true, gstin: "27ABCDE1234F1Z5" }).state, "Maharashtra");
 });
 for (const [pos, rate, cgst, sgst, igst] of [["23",18,900,900,0],["27",18,0,0,1800],["23",5,250,250,0],["24",5,0,0,500]]) test(`GST ${pos} at ${rate}%`, () => {

@@ -9,6 +9,7 @@ const { getDerivedInvoiceRows } = require("../services/financial-read.service");
 const asyncHandler = require("../utils/asyncHandler");
 const AppError = require("../utils/appError");
 const { isOverdueByBusinessDate } = require("../utils/business-date");
+const { normalizeCode, states, validGstin, validState } = require("../../../shared/gst-policy.cjs");
 const { listCustomerLedger } = require("../services/payment.service");
 const {
   buildCustomerStatement,
@@ -23,6 +24,15 @@ const {
 } = require("../utils/queryFeatures");
 
 const customerSortFields = ["name", "email", "phone", "createdAt", "updatedAt"];
+
+const normalizeCustomerGst = (body) => {
+  const gstNumber = String(body.gstNumber || "").trim().toUpperCase();
+  if (gstNumber && !validGstin(gstNumber)) throw new AppError("Enter a valid 15-character customer GSTIN, or leave it blank for a non-GST customer.", 400);
+  const suppliedState = String(body.stateCode || body.placeOfSupplyCode || "").trim();
+  const stateCode = gstNumber ? gstNumber.slice(0, 2) : suppliedState ? normalizeCode(suppliedState) : "";
+  if (stateCode && !validState(stateCode)) throw new AppError("Select a valid customer state.", 400);
+  return { gstNumber, stateCode, placeOfSupplyCode: stateCode, state: stateCode ? states[stateCode] : "" };
+};
 
 const listCustomers = asyncHandler(async (req, res) => {
   const { page, limit, skip } = buildPagination(req.query);
@@ -83,6 +93,7 @@ const getCustomerById = asyncHandler(async (req, res) => {
 });
 
 const createCustomer = asyncHandler(async (req, res) => {
+  const gst = normalizeCustomerGst(req.body);
   const customer = await Customer.create({
     businessId: req.tenant.businessId,
     name: req.body.name.trim(),
@@ -90,9 +101,9 @@ const createCustomer = asyncHandler(async (req, res) => {
     email: req.body.email?.trim().toLowerCase() || "",
     billingAddress: req.body.billingAddress?.trim() || "",
     shippingAddress: req.body.shippingAddress?.trim() || "",
-    gstNumber: req.body.gstNumber?.trim().toUpperCase() || "",
-    stateCode: req.body.stateCode?.trim() || "",
-    placeOfSupplyCode: req.body.placeOfSupplyCode?.trim() || req.body.stateCode?.trim() || "",
+    gstNumber: gst.gstNumber,
+    stateCode: gst.stateCode,
+    placeOfSupplyCode: gst.placeOfSupplyCode,
     notes: req.body.notes?.trim() || "",
     invoiceHistory: Array.isArray(req.body.invoiceHistory) ? req.body.invoiceHistory : [],
   });
@@ -113,14 +124,15 @@ const updateCustomer = asyncHandler(async (req, res) => {
     throw new AppError("Customer not found", 404);
   }
 
+  const gst = normalizeCustomerGst(req.body);
   customer.name = req.body.name?.trim() || customer.name;
   customer.phone = req.body.phone?.trim() || "";
   customer.email = req.body.email?.trim().toLowerCase() || "";
   customer.billingAddress = req.body.billingAddress?.trim() || "";
   customer.shippingAddress = req.body.shippingAddress?.trim() || "";
-  customer.gstNumber = req.body.gstNumber?.trim().toUpperCase() || "";
-  customer.stateCode = req.body.stateCode?.trim() || "";
-  customer.placeOfSupplyCode = req.body.placeOfSupplyCode?.trim() || req.body.stateCode?.trim() || "";
+  customer.gstNumber = gst.gstNumber;
+  customer.stateCode = gst.stateCode;
+  customer.placeOfSupplyCode = gst.placeOfSupplyCode;
   customer.notes = req.body.notes?.trim() || "";
 
   if (Array.isArray(req.body.invoiceHistory)) {
