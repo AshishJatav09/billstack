@@ -24,19 +24,25 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --app-bg:
-    radial-gradient(circle at top, rgba(56, 189, 248, 0.18), transparent 25%),
-    linear-gradient(180deg, #020617 0%, #0f172a 55%, #111827 100%);
+    radial-gradient(circle at top, rgba(56, 189, 248, 0.14), transparent 30%),
+    linear-gradient(180deg, #111827 0%, #172033 52%, #1e293b 100%);
   --text-primary: #f8fafc;
-  --text-muted: #94a3b8;
-  --panel-bg: rgba(15, 23, 42, 0.72);
-  --panel-border: rgba(255, 255, 255, 0.1);
-  --accent: #38bdf8;
-  --theme-surface-strong: #020617;
-  --theme-surface-soft: rgba(15, 23, 42, 0.72);
-  --theme-surface-input: #020617;
-  --theme-border-soft: rgba(255, 255, 255, 0.1);
+  --text-muted: #a8b4c7;
+  --panel-bg: rgba(30, 41, 59, 0.86);
+  --panel-border: rgba(226, 232, 240, 0.14);
+  --accent: #60a5fa;
+  --theme-surface-strong: #1e293b;
+  --theme-surface-soft: rgba(30, 41, 59, 0.84);
+  --theme-surface-input: #162033;
+  --theme-border-soft: rgba(226, 232, 240, 0.14);
   --theme-text-strong: #f8fafc;
-  --theme-text-soft: #94a3b8;
+  --theme-text-soft: #a8b4c7;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+  background: var(--app-bg);
 }
 
 body {
@@ -52,6 +58,7 @@ body {
 
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
 }
 
@@ -109,6 +116,47 @@ body {
 * { scrollbar-width: thin; scrollbar-color: #94a3b8 transparent; }
 button:not(:disabled) { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
+
+.dashboard-content > * { width: 100%; min-width: 0; }
+.dashboard-shell input,
+.dashboard-shell select,
+.dashboard-shell textarea,
+.dashboard-shell button { max-width: 100%; }
+.dashboard-shell img,
+.dashboard-shell svg { flex-shrink: 0; }
+
+/* Older workspace screens used fixed light utility colors. Keep them aligned with
+   the app-selected theme while those screens are progressively consolidated. */
+:root[data-theme="dark"] .dashboard-shell [class~="bg-white"],
+:root[data-theme="dark"] .dashboard-shell [class*="bg-white/"] {
+  background-color: var(--theme-surface-soft) !important;
+}
+
+:root[data-theme="dark"] .dashboard-shell [class~="bg-slate-50"] {
+  background-color: var(--theme-surface-input) !important;
+}
+
+:root[data-theme="dark"] .dashboard-shell [class~="border-slate-200"] {
+  border-color: var(--panel-border) !important;
+}
+
+:root[data-theme="dark"] .dashboard-shell [class~="text-slate-950"],
+:root[data-theme="dark"] .dashboard-shell [class~="text-slate-900"] {
+  color: var(--text-primary) !important;
+}
+
+:root[data-theme="dark"] .dashboard-shell [class~="text-slate-600"],
+:root[data-theme="dark"] .dashboard-shell [class~="text-slate-500"] {
+  color: var(--text-muted) !important;
+}
+
+@media (max-width: 639px) {
+  .dashboard-content .rounded-3xl,
+  .dashboard-content .rounded-\[2rem\] { border-radius: 1rem; }
+  .dashboard-content table { font-size: 0.8125rem; }
+  .dashboard-content th,
+  .dashboard-content td { white-space: normal; }
+}
 
 .field,
 .input {

@@ -7,7 +7,7 @@ const AuthLayout = () => {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-8">
-      <div className="grid w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-panel lg:grid-cols-[0.95fr_1.05fr]">
+      <div className="grid w-full max-w-4xl overflow-hidden rounded-3xl shadow-panel lg:grid-cols-[0.95fr_1.05fr]" style={{ background: "var(--theme-surface-strong)" }}>
         <section className="hidden bg-slate-900 p-10 text-white lg:flex lg:flex-col lg:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.3em] text-brand-300">BillStack</p>
