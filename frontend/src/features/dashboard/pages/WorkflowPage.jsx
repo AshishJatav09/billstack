@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   CalendarClock,
@@ -129,11 +129,13 @@ const WorkflowPage = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [form, setForm] = useState({});
+  const loadSequenceRef = useRef(0);
 
   const currentTab = visibleTabs.find((tab) => tab.key === activeTab) || tabs.find((tab) => tab.key === activeTab) || tabs[0];
   const isRealEstateClient = isRealEstateSelfHostedWorkspace(moduleData, business);
 
   const loadData = async () => {
+    const loadSequence = ++loadSequenceRef.current;
     setLoading(true);
     setError("");
     try {
@@ -160,12 +162,14 @@ const WorkflowPage = () => {
         approvals: listApprovalDocumentsRequest,
       }[activeTab];
       const response = await request(query ? { search: query } : undefined);
+      if (loadSequence !== loadSequenceRef.current) return;
       setData(Array.isArray(response) ? response : response?.items || []);
     } catch (err) {
+      if (loadSequence !== loadSequenceRef.current) return;
       setError(err?.response?.data?.message || "Unable to load this workflow module.");
       setData([]);
     } finally {
-      setLoading(false);
+      if (loadSequence === loadSequenceRef.current) setLoading(false);
     }
   };
 
@@ -231,14 +235,16 @@ const WorkflowPage = () => {
         await createTaskRequest({ title: form.title, projectId: form.projectId || firstProject || undefined, assignedTo: form.assignedTo || firstUser || undefined, dueDate: form.dueDate || undefined });
       }
       if (activeTab === "recurring") {
-        await createRecurringProfileRequest({
+        const selectedCustomer = customers.find((customer) => String(customer._id || customer.id) === String(form.customerId || firstCustomer));
+        const createdProfile = await createRecurringProfileRequest({
           placeOfSupplyCode: form.placeOfSupplyCode,
           customerId: form.customerId || firstCustomer,
-          name: form.name,
+          name: form.name?.trim() || `${selectedCustomer?.name || "Client"} monthly billing`,
           frequency: form.frequency || "MONTHLY",
           startDate: form.startDate || new Date().toISOString().slice(0, 10),
           lineItems: [{ productId: form.productId || firstProduct, quantity: Number(form.quantity || 1), rate: Number(form.rate || 0) }],
         });
+        setData((current) => [{ ...createdProfile, customerId: selectedCustomer || createdProfile.customerId }, ...current.filter((item) => item._id !== createdProfile._id)]);
       }
       if (activeTab === "appointments") {
         await createAppointmentRequest({
@@ -558,12 +564,12 @@ const WorkflowPage = () => {
       {success ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">{success}</div> : null}
 
       <div className="grid gap-5 xl:grid-cols-[380px_1fr]">
-        <form onSubmit={submit} className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <form onSubmit={submit} className="h-fit rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center gap-2">
             <Plus size={18} className="text-brand-600" />
             <h2 className="text-lg font-bold text-slate-950">Create {currentTab.key === "recurring" ? "Monthly Billing" : currentTab.label}</h2>
           </div>
-          <div className="mt-5 space-y-3">
+          <div className="mt-3 space-y-2">
             {["orders", "recurring", "appointments", "dispatches"].includes(activeTab) ? (
               <select className="input" value={form.customerId || ""} onChange={(e) => setForm({ ...form, customerId: e.target.value })}>
                 <option value="">Select customer</option>
@@ -571,7 +577,7 @@ const WorkflowPage = () => {
               </select>
             ) : null}
             {["projects", "recurring", "batches", "approvals"].includes(activeTab) ? (
-              <input className="input" placeholder={activeTab === "projects" ? "Project name" : activeTab === "recurring" ? "Profile name / description" : activeTab === "batches" ? "Batch number" : "Document title"} value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              <input className="input" placeholder={activeTab === "projects" ? "Project name" : activeTab === "recurring" ? "Profile name (optional)" : activeTab === "batches" ? "Batch number" : "Document title"} value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} required={activeTab !== "recurring"} />
             ) : null}
             {["tasks", "appointments", "production"].includes(activeTab) ? (
               <input className="input" placeholder={activeTab === "tasks" ? "Task title" : activeTab === "appointments" ? "Site visit title" : "Production job title"} value={form.title || ""} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
@@ -640,9 +646,9 @@ const WorkflowPage = () => {
           <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
             <div className="relative min-w-0">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input className="input w-full pl-10" placeholder={`Search ${currentTab.label.toLowerCase()}`} value={query} onChange={(e) => setQuery(e.target.value)} />
+              <input aria-label={`Search ${currentTab.label}`} className="input w-full" style={{ paddingLeft: "2.5rem" }} placeholder={`Search ${currentTab.label.toLowerCase()}`} value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
-            <span className="text-sm font-medium text-slate-500">{filtered.length} records</span>
+            <span className="whitespace-nowrap text-sm font-medium text-slate-500">{filtered.length} records</span>
           </div>
           <div className="grid gap-4">{renderRows()}</div>
           {activeTab === "orders" ? <p className="text-xs text-slate-500">Order invoices are created through the existing BillStack invoice engine. Stock remains governed by invoice/inventory behavior.</p> : null}

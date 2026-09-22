@@ -55,6 +55,8 @@ test("shared actions, retry recovery, copy, modal errors and discoverable scroll
  assert.match(read("features/dashboard/pages/InvoicesPage.jsx"),/issuePaymentDetails.current.amount, issuePaymentDetails.current.fields/);
  assert.match(read("features/dashboard/pages/InvoicesPage.jsx"),/event.target\?\.closest\?\./);
  assert.match(read("features/dashboard/pages/WorkflowPage.jsx"),/First billing date/);
+ assert.match(read("features/dashboard/pages/WorkflowPage.jsx"),/loadSequenceRef/);
+ assert.match(read("features/dashboard/pages/WorkflowPage.jsx"),/monthly billing/);
  assert.match(read("features/dashboard/pages/CustomersPage.jsx"),/GSTIN/);
  const paymentModal=read("features/dashboard/pages/CustomersPage.jsx").split("const PaymentModal =")[1].split("const AllocationModal =")[0];
  assert.match(paymentModal,/id="customer-payment-editor"/);

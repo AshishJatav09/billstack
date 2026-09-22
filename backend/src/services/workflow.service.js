@@ -419,7 +419,7 @@ const createProject = async ({ businessId, userId, payload }) => {
       [project] = await Project.create([{
         businessId,
         projectNumber: nextNumber({ business, field: "projectNumbering", prefix: "PRJ", format: "PRJ-{YYYY}-{0001}" }),
-        name: payload.name,
+        name: String(payload.name || `${customer.name} monthly billing`).trim(),
         customerId: payload.customerId || null,
         description: payload.description || "",
         projectType: payload.projectType || "",

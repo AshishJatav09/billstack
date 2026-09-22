@@ -7,7 +7,8 @@ const base=process.env.BILLSTACK_QA_URL || "http://localhost:5173";
  const browser=await chromium.launch({channel:"msedge",headless:true,args:["--disable-features=LocalNetworkAccessChecks"]});
  for(const mode of ["SELF_HOSTED","SAAS"]){
   const context=await browser.newContext({viewport:{width:1366,height:768}});
-  let creates=0, allocationFail=true, paymentCalls=0;
+  let creates=0, allocationFail=true, paymentCalls=0, recurringListCalls=0;
+  const recurringRows=[];
   const paymentKeys=[];
   const client={_id:"client",name:"Test Client",email:"test@example.com"};
   const product={_id:"service",name:"Office service",sellingPrice:10000,taxRate:18,status:"active"};
@@ -34,6 +35,8 @@ const base=process.env.BILLSTACK_QA_URL || "http://localhost:5173";
    else if(p.endsWith("/expenses/categories"))data=["Miscellaneous"];
    else if(p.endsWith("/expenses/summary"))data={totalExpenses:0,paid:0,unpaid:0,gstRecorded:0,byCategory:[]};
    else if(p==="/api/expenses")data={items:[],pagination:{page:1,totalPages:1,total:0}};
+   else if(p==="/api/workflows/recurring"&&method==="POST") { const body=route.request().postDataJSON(); const row={_id:"recurring-1",...body,status:"DRAFT",grandTotal:10000,nextBillingDate:body.startDate,customerId:client}; recurringRows.unshift(row); data=row; }
+   else if(p==="/api/workflows/recurring") { recurringListCalls++; const snapshot=recurringRows.slice(); if(recurringListCalls===1) await new Promise(resolve=>setTimeout(resolve,700)); data=snapshot; }
    else if(p.endsWith("/reports/summary")){
     const size=Number(url.searchParams.get("pendingSize")||10),page=Number(url.searchParams.get("pendingPage")||1);
     data={monthlySales:[],collectionSummary:{totalSales:11800,paidAmount:4000,unpaidAmount:7800},customerWiseSales:[{_id:"client",customerName:"Test Client",totalSales:11800,paidAmount:4000,balanceDue:7800}],pendingPayment:Array.from({length:Math.min(size,3000-(page-1)*size)},(_,i)=>({_id:"pending-"+((page-1)*size+i),invoiceNumber:"INV-"+((page-1)*size+i),customerName:client.name,grandTotal:11800,balanceDue:7800,paymentStatus:"partial"})),pagination:{pending:{page,limit:size,total:3000,totalPages:Math.ceil(3000/size)},customers:{page:1,limit:10,total:1,totalPages:1}},productWiseSales:[],purchaseReport:[],taxReport:{},profitReport:{},expenseReport:{}};
@@ -51,8 +54,7 @@ const base=process.env.BILLSTACK_QA_URL || "http://localhost:5173";
    await page.locator(".dashboard-action").filter({hasText:label}).click();
    const form=page.locator(selector);await form.waitFor();
    await page.waitForFunction(()=>!new URLSearchParams(location.search).has("action"));
-   await page.waitForTimeout(150);
-   assert.equal(await form.evaluate(el=>el.contains(document.activeElement)),true);
+   await page.waitForFunction(selector=>{const form=document.querySelector(selector);return form?.contains(document.activeElement)},selector);
    if(routeName==="customers"||routeName==="expenses"){
     await form.getByRole("button",{name:"Cancel",exact:true}).click();
     assert.equal(await form.count(),0);
@@ -96,6 +98,21 @@ const base=process.env.BILLSTACK_QA_URL || "http://localhost:5173";
   await page.getByRole("button",{name:"Receive payment",exact:true}).click();
   await page.locator("#customer-payment-editor").waitFor();
   await page.locator("#customer-payment-editor").getByRole("button",{name:"Cancel",exact:true}).click();
+  if(mode==="SELF_HOSTED"){
+  recurringListCalls=0;
+  await page.goto(base+"/dashboard/recurring-billing");
+  await page.getByRole("heading",{name:/Monthly Billing|Recurring Billing/,exact:true}).first().waitFor();
+  const recurringForm=page.locator('form').filter({has:page.getByRole("button",{name:"Save",exact:true})});
+  await recurringForm.locator('select').first().selectOption("client");
+  await recurringForm.locator('select').nth(1).selectOption("service");
+  await recurringForm.getByLabel("Rate",{exact:true}).fill("10000");
+  await recurringForm.getByRole("button",{name:"Save",exact:true}).click();
+  await page.getByText("Test Client monthly billing",{exact:true}).waitFor();
+  await page.waitForTimeout(900);
+  assert.equal(await page.getByText("Test Client monthly billing",{exact:true}).count(),1,"saved monthly billing must survive stale list responses");
+  const search=page.getByRole("textbox",{name:"Search Monthly Billing",exact:true});
+  assert.equal(await search.evaluate(el=>parseFloat(getComputedStyle(el).paddingLeft)>=36),true,"search text must clear its icon");
+  }
   for(const path of ["","invoices","customers","quotes","expenses","reports","recurring-billing","settings"]){
    await page.goto(base+"/dashboard/"+path);await page.waitForTimeout(400);
    if(path==="settings") {
