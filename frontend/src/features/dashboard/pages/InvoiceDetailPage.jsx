@@ -1,23 +1,26 @@
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BellRing, CheckCircle2, CircleAlert, Download, FileCheck2, Mail, MessageCircle, QrCode, ShieldCheck, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, BellRing, CheckCircle2, CircleAlert, Download, FileCheck2, LoaderCircle, Mail, MessageCircle, QrCode, ReceiptIndianRupee, RotateCcw, ShieldCheck, Trash2, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { EmptyState, ErrorState, LoadingState } from "../../../components/ui/PageState";
 import { authStore } from "../../../store/authStore";
 import { uiStore } from "../../../store/uiStore";
 import { isRealEstateSelfHostedWorkspace } from "../../workspace/workspaceVisibility";
 import {
+  allocatePaymentRequest,
   cancelInvoiceRequest,
   checkEInvoiceReadinessRequest,
   communicationDeliveriesRequest,
   communicationScheduledRequest,
   communicationSummaryRequest,
   communicationTemplatesRequest,
+  createPaymentRequest,
   downloadInvoicePdfRequest,
   emailInvoiceRequest,
   getEInvoiceDetailsRequest,
   getInvoiceRequest,
   listInvoiceAllocationsRequest,
   prepareEInvoicePayloadRequest,
+  reversePaymentAllocationRequest,
   scheduleInvoiceReminderRequest,
   sendInvoiceCommunicationRequest,
 } from "../../auth/api";
@@ -25,6 +28,8 @@ import {
 const money = (value) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(value || 0));
 const date = (value) => value ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const timestamp = (value) => value ? new Date(value).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+const today = () => new Date().toISOString().slice(0, 10);
+const newPaymentForm = (amount = "") => ({ amount: String(amount || ""), paymentDate: today(), paymentMethod: "BANK_TRANSFER", referenceNumber: "", notes: "", idempotencyKey: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}` });
 const dateKey = (value) => (value ? new Date(value).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) : "");
 const isOverdue = (dueDate) => dateKey(new Date()) > dateKey(dueDate);
 const status = (invoice) => invoice.status === "cancelled" ? ["Cancelled", "bg-slate-500/10 text-slate-700 dark:text-slate-200"] : invoice.paymentStatus === "paid" ? ["Paid", "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"] : invoice.paymentStatus === "partial" ? ["Partially paid", "bg-amber-500/10 text-amber-700 dark:text-amber-300"] : Number(invoice.balanceDue || 0) > 0 && isOverdue(invoice.dueDate) ? ["Overdue", "bg-rose-500/10 text-rose-700 dark:text-rose-300"] : ["Pending", "bg-brand-500/10 text-brand-700 dark:text-brand-200"];
@@ -33,7 +38,7 @@ const templateCategoryLabel = (value) => ({ INVOICE_CREATED: "Invoice Created", 
 const InvoiceDetailPage = () => {
   const { invoiceId } = useParams();
   const navigate = useNavigate();
-  const { business: workspaceBusiness } = authStore();
+  const { business: workspaceBusiness, user } = authStore();
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -47,6 +52,10 @@ const InvoiceDetailPage = () => {
   const [providerStatus, setProviderStatus] = useState(null);
   const [templates, setTemplates] = useState([]);
   const [communicationForm, setCommunicationForm] = useState({ channel: "EMAIL", category: "INVOICE_CREATED", templateId: "" });
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [paymentForm, setPaymentForm] = useState(newPaymentForm);
+  const [paymentError, setPaymentError] = useState("");
+  const [reversing, setReversing] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -197,6 +206,58 @@ const InvoiceDetailPage = () => {
     }
   };
 
+  const openPayment = () => {
+    setPaymentError("");
+    setPaymentForm(newPaymentForm(invoice.balanceDue));
+    setPaymentOpen(true);
+  };
+
+  const recordPayment = async (event) => {
+    event.preventDefault();
+    const amount = Number(paymentForm.amount);
+    const balance = Number(invoice.balanceDue || 0);
+    if (!Number.isFinite(amount) || amount <= 0) return setPaymentError("Enter an amount greater than zero.");
+    if (amount > balance) return setPaymentError(`Payment cannot exceed the remaining balance of ${money(balance)}.`);
+    try {
+      setActive("payment");
+      setPaymentError("");
+      const payment = await createPaymentRequest({ ...paymentForm, amount, direction: "RECEIVED", currency: "INR", customerId: invoice.customerId?._id || invoice.customerId });
+      await allocatePaymentRequest(payment._id, { invoiceId: invoice._id, allocatedAmount: amount });
+      setPaymentOpen(false);
+      uiStore.getState().pushToast({ tone: "success", message: `${money(amount)} received and applied to ${invoice.invoiceNumber}.` });
+      await load();
+    } catch (err) {
+      setPaymentError(err.response?.data?.message || err.message || "Unable to record payment.");
+    } finally {
+      setActive("");
+    }
+  };
+
+  const reversePayment = async (row) => {
+    const reason = window.prompt("Reason for reversing this payment:");
+    if (!reason?.trim()) return;
+    try {
+      setReversing(row.allocationId);
+      await reversePaymentAllocationRequest(row.allocationId, { amount: row.allocatedAmount, reason: reason.trim() });
+      uiStore.getState().pushToast({ tone: "success", message: "Payment reversed and invoice balance restored." });
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.message || "Unable to reverse payment.");
+    } finally {
+      setReversing(null);
+    }
+  };
+
+  const downloadReceipt = (row) => {
+    const receipt = `PAYMENT RECEIPT\n\nInvoice: ${invoice.invoiceNumber}\nCustomer: ${invoice.customerId?.name || invoice.customerDetails?.name || "Customer"}\nPayment date: ${date(row.payment?.paymentDate || row.createdAt)}\nAmount received: ${money(row.allocatedAmount)}\nMethod: ${row.payment?.paymentMethod || "Not captured"}\nReference: ${row.payment?.referenceNumber || "—"}\nStatus: ${row.reversal ? "REVERSED" : "RECEIVED"}\n`;
+    const url = URL.createObjectURL(new Blob([receipt], { type: "text/plain;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${invoice.invoiceNumber}-payment-receipt.txt`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   if (loading) return <LoadingState title="Loading invoice" description="Fetching invoice details for this business." />;
   if (!invoice) return <ErrorState title="Invoice unavailable" description={error || "The requested invoice could not be found."} />;
 
@@ -205,6 +266,7 @@ const InvoiceDetailPage = () => {
   const business = invoice.businessDetails || {};
   const isRealEstateSelfHosted = isRealEstateSelfHostedWorkspace(null, workspaceBusiness);
   const hasNotesOrTerms = Boolean(invoice.notes || invoice.termsAndConditions);
+  const canManagePayments = ["owner", "admin", "accountant"].includes(user?.role);
 
   return <div className="mx-auto max-w-[1500px] space-y-6 pb-8">
     <div className="flex flex-wrap items-center justify-between gap-4">
@@ -241,32 +303,28 @@ const InvoiceDetailPage = () => {
       <aside className={isRealEstateSelfHosted ? "columns-1 md:columns-2 xl:columns-3 [column-gap:1.5rem]" : "space-y-6"}>
         {invoice.gstSnapshot ? <div className={isRealEstateSelfHosted ? "mb-6 break-inside-avoid" : ""}><GstEInvoicePanel invoice={invoice} eInvoice={eInvoice || invoice.eInvoice} result={eInvoiceResult} active={active} onCheck={checkReadiness} onPrepare={preparePayload} showEInvoiceActions={!isRealEstateSelfHosted} /></div> : null}
         {!isRealEstateSelfHosted ? <CommunicationPanel deliveries={deliveries} reminders={reminders} templates={templates} form={communicationForm} setForm={setCommunicationForm} providerStatus={providerStatus} active={active} onSend={sendViaChannel} onSchedule={scheduleReminder} /> : null}
-        <div className={isRealEstateSelfHosted ? "mb-6 break-inside-avoid" : ""}><PaymentSummary invoice={invoice} paymentLabel={paymentLabel} paymentClass={paymentClass} /></div>
-        {(!isRealEstateSelfHosted || allocations.length) ? <div className={isRealEstateSelfHosted ? "mb-6 break-inside-avoid" : ""}><PaymentAllocations invoice={invoice} rows={allocations} /></div> : null}
+        <div className={isRealEstateSelfHosted ? "mb-6 break-inside-avoid" : ""}><PaymentSummary invoice={invoice} paymentLabel={paymentLabel} paymentClass={paymentClass} canRecord={canManagePayments && invoice.status !== "cancelled" && Number(invoice.balanceDue || 0) > 0} onRecord={openPayment} /></div>
+        {(!isRealEstateSelfHosted || allocations.length) ? <div className={isRealEstateSelfHosted ? "mb-6 break-inside-avoid" : ""}><PaymentAllocations invoice={invoice} rows={allocations} canReverse={canManagePayments} reversing={reversing} onReverse={reversePayment} onReceipt={downloadReceipt} /></div> : null}
         <div className={isRealEstateSelfHosted ? "mb-6 break-inside-avoid" : ""}><section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><h3 className="text-lg font-semibold">Document details</h3><dl className="mt-4 space-y-3 text-sm"><AmountRow label="Created" value={timestamp(invoice.createdAt)} /><AmountRow label="Last updated" value={timestamp(invoice.updatedAt)} /></dl></section></div>
         {invoice.status !== "cancelled" ? <div className={isRealEstateSelfHosted ? "mb-6 break-inside-avoid" : ""}><section className="rounded-2xl border border-rose-500/30 p-5"><h3 className="text-lg font-semibold text-rose-600">Invoice actions</h3><p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>Cancellation is consequential and reverses the invoice stock impact.</p><button onClick={() => setShowCancel(true)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/40 px-4 py-2.5 text-sm font-medium text-rose-600"><Trash2 size={16} /> Cancel invoice</button></section></div> : null}
       </aside>
     </div>
 
     {showCancel ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"><div className="w-full max-w-md rounded-2xl border p-6 shadow-2xl" style={{ borderColor: "var(--panel-border)", background: "var(--theme-surface-strong)" }}><CircleAlert className="text-rose-600" /><h3 className="mt-4 text-lg font-semibold">Cancel this invoice?</h3><p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>Invoice <strong>{invoice.invoiceNumber}</strong> will be cancelled and its stock impact reversed. This cannot be undone.</p><div className="mt-6 flex justify-end gap-3"><button onClick={() => setShowCancel(false)} disabled={active === "cancel"} className="rounded-xl border px-4 py-2.5 text-sm" style={{ borderColor: "var(--panel-border)" }}>Keep invoice</button><button onClick={cancel} disabled={active === "cancel"} className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{active === "cancel" ? "Cancelling..." : "Cancel invoice"}</button></div></div></div> : null}
+    {paymentOpen ? <PaymentModal invoice={invoice} form={paymentForm} setForm={setPaymentForm} error={paymentError} saving={active === "payment"} onClose={() => !active && setPaymentOpen(false)} onSubmit={recordPayment} /> : null}
   </div>;
 };
 
 const Party = ({ title, party, link }) => <div><p className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>{title}</p>{link ? <button onClick={link} className="mt-2 text-left text-lg font-semibold text-brand-600 hover:underline">{party.name || "Customer"}</button> : <p className="mt-2 text-lg font-semibold">{party.name || "Business"}</p>}<div className="mt-2 space-y-1 text-sm" style={{ color: "var(--text-muted)" }}>{party.email ? <p>{party.email}</p> : null}{party.phone ? <p>{party.phone}</p> : null}{party.address || party.billingAddress ? <p>{party.address || party.billingAddress}</p> : null}{party.gstNumber ? <p>GST: {party.gstNumber}</p> : null}</div></div>;
 const AmountRow = ({ label, value }) => <div className="flex items-center justify-between gap-4"><span style={{ color: "var(--text-muted)" }}>{label}</span><span className="text-right font-medium">{value}</span></div>;
 
-const PaymentSummary = ({ invoice, paymentLabel, paymentClass }) => <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><p className="text-sm font-medium text-brand-600">Payment</p><h3 className="mt-1 text-lg font-semibold">Payment summary</h3><div className="mt-5 space-y-3"><AmountRow label="Amount paid" value={money(invoice.amountPaid)} /><AmountRow label="Balance due" value={money(invoice.balanceDue)} /><AmountRow label="Status" value={<span className={`rounded-full px-2.5 py-1 text-xs font-medium ${paymentClass}`}>{paymentLabel}</span>} /></div>{invoice.financialRead?.reconciliation?.status === "MISMATCH" ? <p className="mt-5 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">Payment history needs review because the allocated amount does not match the invoice balance.</p> : null}</section>;
+const PaymentSummary = ({ invoice, paymentLabel, paymentClass, canRecord, onRecord }) => <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><p className="text-sm font-medium text-brand-600">Payment</p><h3 className="mt-1 text-lg font-semibold">Payment summary</h3><div className="mt-5 space-y-3"><AmountRow label="Invoice total" value={money(invoice.grandTotal)} /><AmountRow label="Amount received" value={money(invoice.amountPaid)} /><AmountRow label="Balance due" value={money(invoice.balanceDue)} /><AmountRow label="Status" value={<span className={`rounded-full px-2.5 py-1 text-xs font-medium ${paymentClass}`}>{paymentLabel}</span>} /></div>{canRecord ? <button type="button" onClick={onRecord} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white"><ReceiptIndianRupee size={16} /> Pay remaining {money(invoice.balanceDue)}</button> : null}{invoice.financialRead?.reconciliation?.status === "MISMATCH" ? <p className="mt-5 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">Payment history needs review because the allocated amount does not match the invoice balance.</p> : null}</section>;
 
-const PaymentAllocations = ({ invoice, rows }) => {
-  const enriched = useMemo(() => {
-    let running = 0;
-    return (rows || []).map((row) => {
-      running += Number(row.allocatedAmount || 0);
-      return { ...row, remainingAfter: Math.max(Number(invoice.grandTotal || 0) - running, 0) };
-    });
-  }, [invoice.grandTotal, rows]);
-  return <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><h3 className="text-lg font-semibold">Payment allocation history</h3>{enriched.length ? <div className="mt-4 space-y-3">{enriched.map((row) => <div key={row.allocationId || row._id} className="rounded-xl border p-3 text-sm" style={{ borderColor: "var(--panel-border)" }}><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{money(row.allocatedAmount)}</p><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{date(row.payment?.paymentDate || row.createdAt)} · {row.payment?.paymentMethod || "Method not captured"}</p></div><span className={`rounded-full px-2 py-1 text-xs ${row.reversal ? "bg-rose-500/10 text-rose-700" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"}`}>{row.reversal ? "Reversed" : "Active"}</span></div><dl className="mt-3 grid gap-2 text-xs"><AmountRow label="Reference" value={row.payment?.referenceNumber || row.paymentId || "—"} /><AmountRow label="Direction" value={row.payment?.direction || "RECEIVED"} /><AmountRow label="Payment status" value={row.payment?.status || "POSTED"} /><AmountRow label="Remaining after allocation" value={money(row.remainingAfter)} /></dl></div>)}</div> : <EmptyState title="No payment allocations yet" description="Payments allocated through the payment workflow will appear here with date, method, reference, and remaining balance." />}</section>;
+const PaymentAllocations = ({ rows, canReverse, reversing, onReverse, onReceipt }) => {
+  return <section className="rounded-2xl border p-5" style={{ borderColor: "var(--panel-border)", background: "var(--panel-bg)" }}><h3 className="text-lg font-semibold">Payment history</h3><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>Every instalment remains recorded with its date, mode and reference.</p>{rows.length ? <div className="mt-4 space-y-3">{rows.map((row) => <div key={row.allocationId || row._id} className="rounded-xl border p-3 text-sm" style={{ borderColor: "var(--panel-border)" }}><div className="flex items-start justify-between gap-3"><div><p className={`font-semibold ${row.reversal ? "line-through opacity-60" : ""}`}>{money(row.allocatedAmount)}</p><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{date(row.payment?.paymentDate || row.createdAt)} · {row.payment?.paymentMethod || "Method not captured"}</p></div><span className={`rounded-full px-2 py-1 text-xs ${row.reversal ? "bg-rose-500/10 text-rose-700" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"}`}>{row.reversal ? "Reversed" : "Received"}</span></div><dl className="mt-3 grid gap-2 text-xs"><AmountRow label="Reference" value={row.payment?.referenceNumber || "—"} />{row.reversal ? <><AmountRow label="Reversed on" value={date(row.reversal.createdAt)} /><AmountRow label="Reason" value={row.reversal.reason} /></> : null}</dl><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => onReceipt(row)} className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium" style={{ borderColor: "var(--panel-border)" }}><Download size={13} /> Receipt</button>{canReverse && !row.reversal ? <button type="button" disabled={reversing === row.allocationId} onClick={() => onReverse(row)} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/30 px-2.5 py-1.5 text-xs font-medium text-rose-600 disabled:opacity-50">{reversing === row.allocationId ? <LoaderCircle size={13} className="animate-spin" /> : <RotateCcw size={13} />} Reverse</button> : null}</div></div>)}</div> : <EmptyState title="No payments recorded" description="Use Record payment to add the first receipt against this invoice." />}</section>;
 };
+
+const PaymentModal = ({ invoice, form, setForm, error, saving, onClose, onSubmit }) => <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"><form onSubmit={onSubmit} className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border p-5 shadow-2xl sm:p-6" style={{ borderColor: "var(--panel-border)", background: "var(--theme-surface-strong)" }}><div className="flex items-start justify-between gap-3"><div><h3 className="text-lg font-semibold">Record payment</h3><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>Add an instalment to {invoice.invoiceNumber}. Invoice total stays unchanged.</p></div><button type="button" onClick={onClose} disabled={saving} className="rounded-lg p-2 hover:bg-slate-500/10"><X size={18} /></button></div><div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-slate-500/[.06] p-3 text-sm"><div><p className="text-xs" style={{ color: "var(--text-muted)" }}>Total</p><p className="mt-1 font-semibold">{money(invoice.grandTotal)}</p></div><div><p className="text-xs" style={{ color: "var(--text-muted)" }}>Received</p><p className="mt-1 font-semibold text-emerald-600">{money(invoice.amountPaid)}</p></div><div><p className="text-xs" style={{ color: "var(--text-muted)" }}>Due</p><p className="mt-1 font-semibold text-amber-600">{money(invoice.balanceDue)}</p></div></div>{error ? <p className="mt-4 rounded-xl bg-rose-500/10 p-3 text-sm text-rose-600">{error}</p> : null}<div className="mt-5 grid gap-4 sm:grid-cols-2"><label><span className="mb-2 flex items-center justify-between gap-2 text-sm font-medium"><span>Amount received</span><button type="button" onClick={() => setForm((value) => ({ ...value, amount: String(invoice.balanceDue) }))} className="text-xs font-semibold text-brand-600">Full balance</button></span><input type="number" min="0.01" max={invoice.balanceDue} step="0.01" required value={form.amount} onChange={(event) => setForm((value) => ({ ...value, amount: event.target.value }))} className="field" /></label><label><span className="mb-2 block text-sm font-medium">Payment date</span><input type="date" required value={form.paymentDate} onChange={(event) => setForm((value) => ({ ...value, paymentDate: event.target.value }))} className="field" /></label><label><span className="mb-2 block text-sm font-medium">Payment mode</span><select value={form.paymentMethod} onChange={(event) => setForm((value) => ({ ...value, paymentMethod: event.target.value }))} className="field"><option value="BANK_TRANSFER">Bank transfer</option><option value="UPI">UPI</option><option value="CASH">Cash</option><option value="CHEQUE">Cheque</option><option value="CARD">Card</option><option value="OTHER">Other</option></select></label><label><span className="mb-2 block text-sm font-medium">Reference</span><input value={form.referenceNumber} onChange={(event) => setForm((value) => ({ ...value, referenceNumber: event.target.value }))} placeholder="UTR / cheque / transaction ID" className="field" /></label><label className="sm:col-span-2"><span className="mb-2 block text-sm font-medium">Notes</span><textarea rows="3" value={form.notes} onChange={(event) => setForm((value) => ({ ...value, notes: event.target.value }))} placeholder="Optional payment note" className="field" /></label></div><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={onClose} disabled={saving} className="rounded-xl border px-4 py-2.5 text-sm" style={{ borderColor: "var(--panel-border)" }}>Cancel</button><button disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{saving ? <LoaderCircle size={16} className="animate-spin" /> : <ReceiptIndianRupee size={16} />}{saving ? "Recording..." : "Record payment"}</button></div></form></div>;
 
 const GstEInvoicePanel = ({ invoice, eInvoice, result, active, onCheck, onPrepare, showEInvoiceActions }) => {
   const breakup = invoice.gstBreakup || {};

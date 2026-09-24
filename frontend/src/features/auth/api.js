@@ -183,6 +183,11 @@ export const allocatePaymentRequest = async (paymentId, payload) => {
   return response.data.data;
 };
 
+export const reversePaymentAllocationRequest = async (allocationId, payload) => {
+  const response = await api.post(`/payments/allocations/${allocationId}/reverse`, payload);
+  return response.data.data;
+};
+
 export const listProductsRequest = async (params) => {
   const response = await api.get("/products", { params });
   return response.data.data;

@@ -141,10 +141,10 @@ const listAllocations = async ({ businessId, sourceType, sourceDocumentId }) => 
     : await Purchase.findOne({ _id: sourceDocumentId, businessId }).select("supplierId");
   if (!document) throw new AppError(`${isInvoice ? "Invoice" : "Purchase"} not found`, 404);
   const rows = await PaymentAllocation.find({ businessId, [isInvoice ? "invoiceId" : "purchaseId"]: sourceDocumentId }).sort("-createdAt").populate("paymentId", "amount paymentDate paymentMethod referenceNumber status direction customerId supplierId");
-  const reversals = await PaymentAllocationReversal.find({ businessId, allocationId: { $in: rows.map((row) => row._id) } }).select("allocationId");
-  const reversed = new Set(reversals.map((row) => row.allocationId.toString()));
+  const reversals = await PaymentAllocationReversal.find({ businessId, allocationId: { $in: rows.map((row) => row._id) } }).sort("createdAt");
+  const reversalByAllocation = new Map(reversals.map((row) => [row.allocationId.toString(), row]));
   return rows.filter((row) => {
-    if (!row.paymentId || row.paymentId.status !== "POSTED" || reversed.has(row._id.toString())) return false;
+    if (!row.paymentId || row.paymentId.status !== "POSTED") return false;
     validateAllocationCounterparty({ sourceType, document, payment: row.paymentId });
     return true;
   }).map((row) => ({
@@ -153,6 +153,11 @@ const listAllocations = async ({ businessId, sourceType, sourceDocumentId }) => 
     allocatedAmount: row.allocatedAmount,
     createdAt: row.createdAt,
     payment: { amount: row.paymentId.amount, paymentDate: row.paymentId.paymentDate, paymentMethod: row.paymentId.paymentMethod, referenceNumber: row.paymentId.referenceNumber, direction: row.paymentId.direction, status: row.paymentId.status },
+    reversal: reversalByAllocation.has(row._id.toString()) ? {
+      amount: reversalByAllocation.get(row._id.toString()).amount,
+      reason: reversalByAllocation.get(row._id.toString()).reason,
+      createdAt: reversalByAllocation.get(row._id.toString()).createdAt,
+    } : null,
   }));
 };
 const reverseAllocation = async ({ businessId, userId, allocationId, amount, reason }) => {
@@ -166,8 +171,17 @@ const reverseAllocation = async ({ businessId, userId, allocationId, amount, rea
     const requested = validateReversalRequest({ allocationAmount: allocation.allocatedAmount, alreadyReversed: Boolean(prior), requestedAmount: amount });
     [reversal] = await PaymentAllocationReversal.create([{ businessId, allocationId, amount: requested, reason, createdBy: userId }], { session });
     if (allocation.invoiceId) {
-      const invoice = await Invoice.findOne({ _id: allocation.invoiceId, businessId }).select("customerId").session(session);
-      if (invoice) await createCustomerLedgerEntryOnce({ businessId, customerId: invoice.customerId, eventType: "REVERSAL", amount: requested, direction: "DEBIT", invoiceId: invoice._id, reversalId: reversal._id, sourceKey: `PAYMENT_ALLOCATION_REVERSAL:${reversal._id}`, notes: reason, createdBy: userId }, { session });
+      const invoice = await Invoice.findOne({ _id: allocation.invoiceId, businessId }).session(session);
+      if (invoice) {
+        const paidMinor = await netDocumentAllocations({ businessId, documentKey: "invoiceId", documentId: invoice._id, session });
+        const totalMinor = toMinorUnits(invoice.grandTotal, "Invoice total amount", { allowZero: true });
+        const balanceMinor = Math.max(totalMinor - paidMinor, 0);
+        invoice.amountPaid = fromMinorUnits(Math.min(paidMinor, totalMinor));
+        invoice.balanceDue = fromMinorUnits(balanceMinor);
+        invoice.paymentStatus = balanceMinor === 0 ? "paid" : paidMinor > 0 ? "partial" : "unpaid";
+        await invoice.save({ session });
+        await createCustomerLedgerEntryOnce({ businessId, customerId: invoice.customerId, eventType: "REVERSAL", amount: requested, direction: "DEBIT", invoiceId: invoice._id, reversalId: reversal._id, sourceKey: `PAYMENT_ALLOCATION_REVERSAL:${reversal._id}`, notes: reason, createdBy: userId }, { session });
+      }
     } else if (allocation.purchaseId) {
       const purchase = await Purchase.findOne({ _id: allocation.purchaseId, businessId }).select("supplierId").session(session);
       if (purchase) await createSupplierLedgerEntryOnce({ businessId, supplierId: purchase.supplierId, eventType: "REVERSAL", amount: requested, direction: "DEBIT", purchaseId: purchase._id, reversalId: reversal._id, sourceKey: `PAYMENT_ALLOCATION_REVERSAL:${reversal._id}`, notes: reason, createdBy: userId }, { session });
