@@ -119,43 +119,27 @@ button:disabled { cursor: not-allowed; }
 
 /* Compact client-facing authentication shell, isolated from dashboard remaps. */
 :root[data-theme] .auth-page {
-  background: #f3f6fa !important;
+  background: #f3f6fa;
 }
 :root[data-theme="dark"] .auth-page {
-  background: #111827 !important;
+  background: #111827;
 }
 :root[data-theme] .auth-card {
-  border-color: #dce3ec !important;
-  background: #ffffff !important;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12) !important;
+  border-color: #dce3ec;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
 }
 :root[data-theme="dark"] .auth-card {
-  border-color: #334155 !important;
-  background: #1e293b !important;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28) !important;
-}
-.client-logo-crop {
-  position: relative;
-  display: block;
-  width: 250px;
-  height: 96px;
-  max-width: 100%;
-  overflow: hidden;
-}
-.client-logo-crop img {
-  position: absolute;
-  top: -89px;
-  left: 0;
-  width: 360px;
-  max-width: none;
-  height: 360px;
+  border-color: #334155;
+  background: #1e293b;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
 }
 :root[data-theme] .auth-primary {
-  background: #1677ff !important;
-  color: #ffffff !important;
+  background: #1677ff;
+  color: #ffffff;
   box-shadow: 0 10px 24px rgba(22, 119, 255, 0.2);
 }
-:root[data-theme] .auth-primary:hover { background: #0868e8 !important; }
+:root[data-theme] .auth-primary:hover { background: #0868e8; }
 
 .dashboard-content > * { width: 100%; min-width: 0; }
 .dashboard-shell input,

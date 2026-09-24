@@ -68,7 +68,8 @@ const RegisterPage = () => {
       title="Create account"
       subtitle="Set up your business workspace in a few details."
     >
-      <div className="mb-4">
+      <div className="mb-4 grid gap-4 sm:grid-cols-2">
+        <FormField label="Full name" name="name" placeholder="Aarav Sharma" value={form.name} onChange={handleChange} error={errors.name} autoComplete="name" required />
         <FormField label="Business name" name="businessName" placeholder="Your business name" value={form.businessName} onChange={handleChange} error={errors.businessName} autoComplete="organization" required />
       </div>
       {googleClientId ? (
@@ -77,15 +78,14 @@ const RegisterPage = () => {
           <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-wide text-slate-400"><span className="h-px flex-1 bg-slate-200" />or create with email<span className="h-px flex-1 bg-slate-200" /></div>
         </>
       ) : null}
-      <form className="space-y-4" onSubmit={handleSubmit}>
-        <FormField label="Full name" name="name" placeholder="Aarav Sharma" value={form.name} onChange={handleChange} error={errors.name} autoComplete="name" required />
+      <form className="grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit}>
         <FormField label="Work email" name="email" type="email" placeholder="you@business.com" value={form.email} onChange={handleChange} error={errors.email} autoComplete="email" required />
         <FormField label="Password" name="password" type="password" placeholder="Create a secure password" value={form.password} onChange={handleChange} error={errors.password} autoComplete="new-password" required />
-        {serverError ? <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">{serverError}</div> : null}
+        {serverError ? <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700 sm:col-span-2">{serverError}</div> : null}
         <button
           type="submit"
           disabled={isSubmitting}
-          className="auth-primary w-full rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70"
+          className="auth-primary w-full rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 sm:col-span-2"
         >
           {isSubmitting ? "Creating workspace..." : "Create account"}
         </button>
