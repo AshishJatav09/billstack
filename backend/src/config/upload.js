@@ -4,11 +4,13 @@ const crypto = require("crypto");
 const multer = require("multer");
 
 const logoUploadDirectory = path.join(process.cwd(), "uploads", "logos");
+const signatureUploadDirectory = path.join(process.cwd(), "uploads", "signatures");
 fs.mkdirSync(logoUploadDirectory, { recursive: true });
+fs.mkdirSync(signatureUploadDirectory, { recursive: true });
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, logoUploadDirectory);
+  destination: (_req, file, cb) => {
+    cb(null, file.fieldname === "signature" ? signatureUploadDirectory : logoUploadDirectory);
   },
   filename: (req, file, cb) => {
     const extension = path.extname(file.originalname).toLowerCase();
@@ -39,6 +41,11 @@ const fileFilter = (_req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
   const expectedMime = allowedImages.get(ext);
 
+  if (file.fieldname === "signature" && ![".jpg", ".jpeg", ".png"].includes(ext)) {
+    cb(new Error("Signature must be a JPG or PNG image"));
+    return;
+  }
+
   if (!expectedMime) {
     cb(new Error("Only JPG, PNG, WEBP and GIF image uploads are allowed"));
     return;
@@ -52,22 +59,31 @@ const fileFilter = (_req, file, cb) => {
   cb(null, true);
 };
 
-const validateUploadedLogo = (req, _res, next) => {
-  if (!req.file) {
+const validateUploadedBranding = (req, _res, next) => {
+  const files = req.files
+    ? Object.values(req.files).flat()
+    : req.file
+      ? [req.file]
+      : [];
+
+  if (!files.length) {
     next();
     return;
   }
 
-  fs.readFile(req.file.path, (readError, buffer) => {
-    if (readError || !isAllowedImageSignature(buffer, req.file.mimetype)) {
-      fs.unlink(req.file.path, () => {});
-      next(new Error("Uploaded logo content does not match an allowed image type"));
-      return;
+  Promise.all(files.map(async (file) => {
+    const buffer = await fs.promises.readFile(file.path);
+    if (!isAllowedImageSignature(buffer, file.mimetype)) {
+      throw new Error(`Uploaded ${file.fieldname} content does not match an allowed image type`);
     }
-
-    next();
-  });
+  }))
+    .then(() => next())
+    .catch((error) => {
+      Promise.allSettled(files.map((file) => fs.promises.unlink(file.path))).finally(() => next(error));
+    });
 };
+
+const validateUploadedLogo = validateUploadedBranding;
 
 const logoUpload = multer({
   storage,
@@ -80,6 +96,8 @@ const logoUpload = multer({
 module.exports = {
   isAllowedImageSignature,
   logoUploadDirectory,
+  signatureUploadDirectory,
   logoUpload,
+  validateUploadedBranding,
   validateUploadedLogo,
 };

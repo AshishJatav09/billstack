@@ -6,7 +6,7 @@ const morgan = require("morgan");
 const mongoSanitize = require("express-mongo-sanitize");
 
 const { buildCorsOptions } = require("./config/cors");
-const { logoUploadDirectory } = require("./config/upload");
+const { logoUploadDirectory, signatureUploadDirectory } = require("./config/upload");
 const { requestContext } = require("./middlewares/request-context.middleware");
 const { apiRateLimiter } = require("./middlewares/rate-limit.middleware");
 const { log } = require("./utils/logger");
@@ -92,6 +92,14 @@ app.use(
     setHeaders: (res) => {
       res.setHeader("X-Content-Type-Options", "nosniff");
     },
+  })
+);
+app.use(
+  "/uploads/signatures",
+  express.static(signatureUploadDirectory, {
+    immutable: true,
+    maxAge: "1d",
+    setHeaders: (res) => res.setHeader("X-Content-Type-Options", "nosniff"),
   })
 );
 app.use("/api", apiRateLimiter);

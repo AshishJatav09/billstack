@@ -24,6 +24,7 @@ const serializeBusinessWithPlan = (business, subscription = null) => {
     phone: business.phone,
     address: business.address,
     logoUrl: business.logoUrl,
+    signatureUrl: business.signatureUrl,
     gstTaxId: business.gstTaxId,
     bankDetails: business.bankDetails,
     invoiceTerms: business.invoiceTerms,

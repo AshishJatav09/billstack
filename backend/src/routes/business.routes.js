@@ -8,7 +8,7 @@ const {
   updateBusinessPlan,
   updateBusinessSetup,
 } = require("../controllers/business.controller");
-const { logoUpload, validateUploadedLogo } = require("../config/upload");
+const { logoUpload, validateUploadedBranding } = require("../config/upload");
 const authMiddleware = require("../middlewares/auth.middleware");
 const { permit } = require("../middlewares/role.middleware");
 const tenantMiddleware = require("../middlewares/tenant.middleware");
@@ -29,8 +29,11 @@ router.delete("/sample-data", permit("owner", "admin"), removeBusinessSampleData
 router.put(
   "/setup",
   permit("owner", "admin"),
-  logoUpload.single("logo"),
-  validateUploadedLogo,
+  logoUpload.fields([
+    { name: "logo", maxCount: 1 },
+    { name: "signature", maxCount: 1 },
+  ]),
+  validateUploadedBranding,
   validate(businessSetupValidator),
   updateBusinessSetup
 );

@@ -171,6 +171,10 @@ const businessSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    signatureUrl: {
+      type: String,
+      default: "",
+    },
     gstTaxId: {
       type: String,
       trim: true,

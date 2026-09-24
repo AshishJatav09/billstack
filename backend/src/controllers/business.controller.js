@@ -105,9 +105,10 @@ const updateBusinessSetup = asyncHandler(async (req, res) => {
   };
   business.onboardingCompleted = true;
 
-  if (req.file) {
-    business.logoUrl = `/uploads/logos/${req.file.filename}`;
-  }
+  const logo = req.files?.logo?.[0];
+  const signature = req.files?.signature?.[0];
+  if (logo) business.logoUrl = `/uploads/logos/${logo.filename}`;
+  if (signature) business.signatureUrl = `/uploads/signatures/${signature.filename}`;
 
   await business.save();
   await writeAuditLog({ req, action: "BUSINESS_SETTINGS_UPDATED", entityType: "BUSINESS", entityId: business._id, metadata: { gstEnabled, stateCode, changedFields: Object.keys(req.body || {}) } });

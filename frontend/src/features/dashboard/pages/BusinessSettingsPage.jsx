@@ -65,6 +65,7 @@ const BusinessSettingsPage = () => {
     allowNegativeStock: business?.inventorySettings?.allowNegativeStock || false,
   });
   const [logoFile, setLogoFile] = useState(null);
+  const [signatureFile, setSignatureFile] = useState(null);
   const [section, setSection] = useState("Business Profile");
   const [saved, setSaved] = useState(false);
   const saveLock = useRef(false);
@@ -91,6 +92,12 @@ const BusinessSettingsPage = () => {
     return "";
   }, [business?.logoUrl, logoFile]);
   useEffect(() => () => { if (logoFile && logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl); }, [logoFile, logoPreviewUrl]);
+  const signaturePreviewUrl = useMemo(() => {
+    if (signatureFile) return URL.createObjectURL(signatureFile);
+    if (business?.signatureUrl) return `${getApiOrigin()}${business.signatureUrl}`;
+    return "";
+  }, [business?.signatureUrl, signatureFile]);
+  useEffect(() => () => { if (signatureFile && signaturePreviewUrl) URL.revokeObjectURL(signaturePreviewUrl); }, [signatureFile, signaturePreviewUrl]);
 
   const refreshIntegrationData = async () => {
     try {
@@ -159,10 +166,12 @@ const BusinessSettingsPage = () => {
       Object.entries({ ...form, email: form.email.trim().toLowerCase(), billingEmail: form.billingEmail.trim().toLowerCase(), taxMode: "exclusive" }).forEach(([key, value]) => payload.append(key, value ?? ""));
 
       if (logoFile) payload.append("logo", logoFile);
+      if (signatureFile) payload.append("signature", signatureFile);
 
       const data = await updateBusinessSetupRequest(payload);
       updateBusiness(data);
       setLogoFile(null);
+      setSignatureFile(null);
       setSaved(true);
     } catch (error) {
       setFieldErrors(error.response?.data?.errors || {});
@@ -352,7 +361,28 @@ const BusinessSettingsPage = () => {
               <div><p className="text-sm font-medium">Tax calculation: Tax Exclusive</p><p className="mt-1 text-xs text-slate-500">GST is added to the entered rate. Each item uses its own GST rate.</p></div>
             </>}
             {section === "Invoice & Payment" && <label className="sm:col-span-2"><span className="mb-1 block text-sm">Invoice terms</span><textarea name="invoiceTerms" rows={3} value={form.invoiceTerms} onChange={handleChange} className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm" /></label>}
-            {section === "Branding" && <div className="sm:col-span-2"><p className="mb-3 text-sm font-medium">Business Logo</p>{logoPreviewUrl && <img src={logoPreviewUrl} alt="Business logo" className="mb-3 h-20 w-20 rounded-xl object-contain" />}<label className="inline-flex cursor-pointer rounded-xl border px-3 py-2 text-sm">Change logo<input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={event => { const file = event.target.files?.[0]; if (!file) return; if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type) || file.size > 2 * 1024 * 1024) { setSaveError("Choose JPG, PNG, WEBP or GIF up to 2 MB"); return; } setSaveError(""); setSaved(false); setLogoFile(file); }} /></label><p className="mt-2 text-xs text-slate-500">JPG, PNG, WEBP or GIF. Maximum 2 MB.</p></div>}
+            {section === "Branding" && <>
+              <BrandImageUpload
+                title="Business logo"
+                description="Shown with your business details when available."
+                previewUrl={logoPreviewUrl}
+                previewAlt="Business logo"
+                buttonLabel={logoPreviewUrl ? "Change logo" : "Upload logo"}
+                onFile={(file) => { setSaveError(""); setSaved(false); setLogoFile(file); }}
+                onError={setSaveError}
+              />
+              <BrandImageUpload
+                title="Authorised signature"
+                description="Printed at the bottom of client invoice PDFs. A transparent PNG works best."
+                previewUrl={signaturePreviewUrl}
+                previewAlt="Authorised signature"
+                buttonLabel={signaturePreviewUrl ? "Change signature" : "Upload signature"}
+                onFile={(file) => { setSaveError(""); setSaved(false); setSignatureFile(file); }}
+                onError={setSaveError}
+                contain
+                acceptedTypes={["image/jpeg", "image/png"]}
+              />
+            </>}
           </div>
           {saveError && <p role="alert" className="mt-4 text-sm text-rose-600">{saveError}</p>}
           {saved && <p role="status" className="mt-4 text-sm text-emerald-600">Saved successfully</p>}
@@ -491,6 +521,37 @@ const ProviderStatus = ({ label, configured }) => (
   <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[.03] px-3 py-2">
     <span>{label}</span>
     <span className={configured ? "text-emerald-300" : "text-amber-300"}>{configured ? "Configured" : "Not configured"}</span>
+  </div>
+);
+
+const BrandImageUpload = ({ title, description, previewUrl, previewAlt, buttonLabel, onFile, onError, contain = false, acceptedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"] }) => (
+  <div className="min-w-0 rounded-2xl border p-4">
+    <p className="text-sm font-semibold">{title}</p>
+    <p className="mt-1 text-xs text-slate-500">{description}</p>
+    <div className="mt-4 flex min-h-24 items-center justify-center rounded-xl border border-dashed bg-slate-50 p-3 dark:bg-slate-950/40">
+      {previewUrl
+        ? <img src={previewUrl} alt={previewAlt} className={`max-h-20 max-w-full ${contain ? "object-contain" : "rounded-lg object-contain"}`} />
+        : <span className="text-xs text-slate-400">No image uploaded</span>}
+    </div>
+    <label className="mt-3 inline-flex cursor-pointer rounded-xl border px-3 py-2 text-sm font-medium">
+      {buttonLabel}
+      <input
+        className="sr-only"
+        type="file"
+        accept={acceptedTypes.join(",")}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          if (!acceptedTypes.includes(file.type) || file.size > 2 * 1024 * 1024) {
+            onError(`Choose ${acceptedTypes.length === 2 ? "JPG or PNG" : "JPG, PNG, WEBP or GIF"} up to 2 MB`);
+            event.target.value = "";
+            return;
+          }
+          onFile(file);
+        }}
+      />
+    </label>
+    <p className="mt-2 text-xs text-slate-500">{acceptedTypes.length === 2 ? "JPG or PNG" : "JPG, PNG, WEBP or GIF"}. Maximum 2 MB.</p>
   </div>
 );
 
