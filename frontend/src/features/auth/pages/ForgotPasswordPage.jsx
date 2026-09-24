@@ -30,21 +30,22 @@ const ForgotPasswordPage = () => {
   return (
     <AuthCard
       title="Reset password"
-      subtitle="We will send a password reset link to your registered email."
+      subtitle="Enter your registered email and we’ll send you a reset link."
     >
       <form className="space-y-4" onSubmit={handleSubmit}>
         <Input
           label="Email"
           type="email"
-          placeholder="owner@billstack.app"
+          placeholder="you@business.com"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           error={error}
+          autoComplete="email"
           required
         />
-        {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
+        {message ? <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-700">{message}</p> : null}
         <button
-          className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-70"
+          className="auth-primary w-full rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:opacity-70"
           disabled={isSubmitting}
         >
           {isSubmitting ? "Sending..." : "Send reset link"}
@@ -53,7 +54,7 @@ const ForgotPasswordPage = () => {
       <p className="mt-4 text-sm text-slate-500">
         Remembered it?{" "}
         <Link to="/login" className="font-medium text-brand-700">
-          Back to login
+          Back to sign in
         </Link>
       </p>
     </AuthCard>

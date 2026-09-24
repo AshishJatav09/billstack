@@ -69,7 +69,7 @@ const RegisterPage = () => {
       subtitle="Set up your business workspace in a few details."
     >
       <div className="mb-4">
-        <FormField label="Business name" name="businessName" placeholder="Your business name" value={form.businessName} onChange={handleChange} error={errors.businessName} />
+        <FormField label="Business name" name="businessName" placeholder="Your business name" value={form.businessName} onChange={handleChange} error={errors.businessName} autoComplete="organization" required />
       </div>
       {googleClientId ? (
         <>
@@ -78,10 +78,10 @@ const RegisterPage = () => {
         </>
       ) : null}
       <form className="space-y-4" onSubmit={handleSubmit}>
-        <FormField label="Full name" name="name" placeholder="Aarav Sharma" value={form.name} onChange={handleChange} error={errors.name} />
-        <FormField label="Work email" name="email" type="email" placeholder="you@business.com" value={form.email} onChange={handleChange} error={errors.email} />
-        <FormField label="Password" name="password" type="password" placeholder="Create a secure password" value={form.password} onChange={handleChange} error={errors.password} />
-        {serverError ? <p className="text-sm text-rose-600">{serverError}</p> : null}
+        <FormField label="Full name" name="name" placeholder="Aarav Sharma" value={form.name} onChange={handleChange} error={errors.name} autoComplete="name" required />
+        <FormField label="Work email" name="email" type="email" placeholder="you@business.com" value={form.email} onChange={handleChange} error={errors.email} autoComplete="email" required />
+        <FormField label="Password" name="password" type="password" placeholder="Create a secure password" value={form.password} onChange={handleChange} error={errors.password} autoComplete="new-password" required />
+        {serverError ? <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">{serverError}</div> : null}
         <button
           type="submit"
           disabled={isSubmitting}

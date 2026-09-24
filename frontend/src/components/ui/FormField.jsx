@@ -9,6 +9,7 @@ const FormField = ({
   value,
   onChange,
   error,
+  ...inputProps
 }) => {
   const [showPassword, setShowPassword] = useState(false);
   const isPassword = type === "password";
@@ -24,6 +25,7 @@ const FormField = ({
           placeholder={placeholder}
           value={value}
           onChange={onChange}
+          {...inputProps}
           className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none transition ${
             isPassword ? "pr-12" : ""
           } ${

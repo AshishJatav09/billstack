@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { LoaderCircle } from "lucide-react";
 import AuthCard from "../../../components/ui/AuthCard";
 import FormField from "../../../components/ui/FormField";
 import GoogleAuthButton from "../components/GoogleAuthButton";
@@ -60,7 +61,7 @@ const LoginPage = () => {
   return (
     <AuthCard
       title="Sign in"
-      subtitle="Welcome back. Access your secure billing workspace."
+      subtitle="Welcome back. Sign in to continue to your workspace."
     >
       {googleClientId ? (
         <>
@@ -68,26 +69,22 @@ const LoginPage = () => {
           <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-wide text-slate-400"><span className="h-px flex-1 bg-slate-200" />or continue with email<span className="h-px flex-1 bg-slate-200" /></div>
         </>
       ) : null}
+      {serverError ? <div role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">{serverError}</div> : null}
       <form className="space-y-4" onSubmit={handleSubmit}>
-        <FormField label="Email" name="email" type="email" placeholder="you@business.com" value={form.email} onChange={handleChange} error={errors.email} />
-        <FormField label="Password" name="password" type="password" placeholder="Enter your password" value={form.password} onChange={handleChange} error={errors.password} />
-        {serverError ? <p className="text-sm text-rose-600">{serverError}</p> : null}
+        <FormField label="Email" name="email" type="email" placeholder="you@business.com" value={form.email} onChange={handleChange} error={errors.email} autoComplete="username" required />
+        <FormField label="Password" name="password" type="password" placeholder="Enter your password" value={form.password} onChange={handleChange} error={errors.password} autoComplete="current-password" required />
+        <div className="flex justify-end">
+          <Link to="/forgot-password" className="text-sm font-medium text-brand-700 dark:text-brand-300">Forgot password?</Link>
+        </div>
         <button
           type="submit"
           disabled={isSubmitting}
           className="auth-primary w-full rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {isSubmitting ? "Signing in..." : "Sign in"}
+          {isSubmitting ? <span className="inline-flex items-center justify-center gap-2"><LoaderCircle size={17} className="animate-spin" />Signing in...</span> : "Sign in"}
         </button>
       </form>
-      <div className="mt-4 flex items-center justify-between text-sm">
-        <Link to="/forgot-password" className="text-brand-700">
-          Forgot password?
-        </Link>
-        <Link to="/register" className="text-slate-500">
-          Create account
-        </Link>
-      </div>
+      <p className="mt-5 text-center text-sm text-slate-500 dark:text-slate-400">New here? <Link to="/register" className="font-medium text-brand-700 dark:text-brand-300">Create account</Link></p>
     </AuthCard>
   );
 };

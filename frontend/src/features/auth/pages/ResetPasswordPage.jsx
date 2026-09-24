@@ -39,7 +39,7 @@ const ResetPasswordPage = () => {
   };
 
   return (
-    <AuthCard title="Create new password" subtitle="Enter a new password for your BillStack account.">
+    <AuthCard title="Create new password" subtitle="Choose a secure password for your account.">
       {!token ? (
         <p className="text-sm text-rose-600">Password reset link is missing or invalid.</p>
       ) : (
@@ -52,6 +52,7 @@ const ResetPasswordPage = () => {
             onChange={(event) => setPassword(event.target.value)}
             required
             minLength={6}
+            autoComplete="new-password"
           />
           <Input
             label="Confirm password"
@@ -62,10 +63,11 @@ const ResetPasswordPage = () => {
             error={error}
             required
             minLength={6}
+            autoComplete="new-password"
           />
-          {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
+          {message ? <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-700">{message}</p> : null}
           <button
-            className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-70"
+            className="auth-primary w-full rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:opacity-70"
             disabled={isSubmitting}
           >
             {isSubmitting ? "Saving..." : "Reset password"}
