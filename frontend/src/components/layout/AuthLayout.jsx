@@ -21,8 +21,8 @@ const AuthLayout = () => {
               <span className="text-2xl font-bold text-slate-950 dark:text-white">BillStack</span>
             )}
           </Link>
-          <h1 className="mt-3 text-base font-semibold text-slate-900 dark:text-slate-100">{productName}</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Billing &amp; Business Management</p>
+          {!isSelfHosted ? <h1 className="mt-3 text-base font-semibold text-slate-900 dark:text-slate-100">{productName}</h1> : null}
+          <p className={`${isSelfHosted ? "mt-3" : "mt-1"} text-sm text-slate-500 dark:text-slate-400`}>Billing &amp; Business Management</p>
         </header>
 
         <Outlet />
