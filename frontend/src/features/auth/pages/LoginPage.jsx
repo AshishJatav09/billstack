@@ -60,7 +60,7 @@ const LoginPage = () => {
   return (
     <AuthCard
       title="Sign in"
-      subtitle="Access your BillStack workspace."
+      subtitle="Welcome back. Access your secure billing workspace."
     >
       {googleClientId ? (
         <>
@@ -69,7 +69,7 @@ const LoginPage = () => {
         </>
       ) : null}
       <form className="space-y-4" onSubmit={handleSubmit}>
-        <FormField label="Email" name="email" type="email" placeholder="founder@billstack.app" value={form.email} onChange={handleChange} error={errors.email} />
+        <FormField label="Email" name="email" type="email" placeholder="you@business.com" value={form.email} onChange={handleChange} error={errors.email} />
         <FormField label="Password" name="password" type="password" placeholder="Enter your password" value={form.password} onChange={handleChange} error={errors.password} />
         {serverError ? <p className="text-sm text-rose-600">{serverError}</p> : null}
         <button

@@ -152,11 +152,13 @@ const BusinessSettingsPage = () => {
     event.preventDefault();
     if (saveLock.current) return;
     const errors = {};
-    for (const name of ["email", "billingEmail"]) if (form[name] && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form[name].trim())) errors[name] = "Enter a valid email address";
-    if (form.bankIfscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.bankIfscCode.trim().toUpperCase())) errors.bankIfscCode = "Enter a valid 11-character IFSC";
-    if (form.bankUpiId && !/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/.test(form.bankUpiId.trim())) errors.bankUpiId = "Enter a valid UPI ID";
-    if (form.gstEnabled && (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(form.gstConfigurationGstin) || !gstStates[form.gstStateCode])) errors.gstConfigurationGstin = "Enter a valid GSTIN and state";
-    if (form.gstEnabled && form.gstConfigurationGstin.slice(0, 2) !== form.gstStateCode) errors.gstStateCode = `GSTIN belongs to ${gstStates[form.gstConfigurationGstin.slice(0, 2)]} (${form.gstConfigurationGstin.slice(0, 2)}), but the selected business state is ${form.gstState} (${form.gstStateCode}). Please correct the GST details.`;
+    if (section !== "Branding") {
+      for (const name of ["email", "billingEmail"]) if (form[name] && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form[name].trim())) errors[name] = "Enter a valid email address";
+      if (form.bankIfscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.bankIfscCode.trim().toUpperCase())) errors.bankIfscCode = "Enter a valid 11-character IFSC";
+      if (form.bankUpiId && !/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/.test(form.bankUpiId.trim())) errors.bankUpiId = "Enter a valid UPI ID";
+      if (form.gstEnabled && (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(form.gstConfigurationGstin) || !gstStates[form.gstStateCode])) errors.gstConfigurationGstin = "Enter a valid GSTIN and state";
+      if (form.gstEnabled && form.gstConfigurationGstin.slice(0, 2) !== form.gstStateCode) errors.gstStateCode = `GSTIN belongs to ${gstStates[form.gstConfigurationGstin.slice(0, 2)]} (${form.gstConfigurationGstin.slice(0, 2)}), but the selected business state is ${form.gstState} (${form.gstStateCode}). Please correct the GST details.`;
+    }
     if (Object.keys(errors).length) { setFieldErrors(errors); setSaveError(Object.values(errors)[0]); return; }
     saveLock.current = true;
     setIsSaving(true);
@@ -165,7 +167,11 @@ const BusinessSettingsPage = () => {
 
     try {
       const payload = new FormData();
-      Object.entries({ ...form, email: form.email.trim().toLowerCase(), billingEmail: form.billingEmail.trim().toLowerCase(), taxMode: "exclusive" }).forEach(([key, value]) => payload.append(key, value ?? ""));
+      if (section === "Branding") {
+        payload.append("updateScope", "branding");
+      } else {
+        Object.entries({ ...form, email: form.email.trim().toLowerCase(), billingEmail: form.billingEmail.trim().toLowerCase(), taxMode: "exclusive" }).forEach(([key, value]) => payload.append(key, value ?? ""));
+      }
 
       if (logoFile) payload.append("logo", logoFile);
       if (signatureFile) payload.append("signature", signatureFile);
@@ -348,7 +354,7 @@ const BusinessSettingsPage = () => {
     <div className="space-y-6">
       <header><h2 className="text-2xl font-semibold">Business Settings</h2><p className="mt-1 text-sm text-slate-500">Manage your company, GST, invoices and payment details.</p></header>
       <nav aria-label="Settings sections" className="flex flex-wrap gap-2">
-        {["Business Profile", "GST & Tax", "Invoice & Payment", "Branding", "Communications", ...(visibility.inventory ? ["Inventory"] : [])].map(label => <button key={label} type="button" onClick={() => setSection(label)} aria-pressed={section === label} className={section === label ? "rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white" : "rounded-xl border px-3 py-2 text-sm"}>{label}</button>)}
+        {["Business Profile", "GST & Tax", "Invoice & Payment", "Branding", "Communications", ...(visibility.inventory ? ["Inventory"] : [])].map(label => <button key={label} type="button" onClick={() => { setSection(label); setSaveError(""); setFieldErrors({}); setSaved(false); }} aria-pressed={section === label} className={section === label ? "rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white" : "rounded-xl border px-3 py-2 text-sm"}>{label}</button>)}
       </nav>
       <section className="mx-auto w-full max-w-5xl space-y-4">
         {section !== "Communications" && <form onSubmit={handleProfileSubmit} className="rounded-2xl border bg-white p-4 sm:p-6 dark:bg-slate-900">

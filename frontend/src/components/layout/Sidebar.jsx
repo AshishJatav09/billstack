@@ -226,7 +226,7 @@ const Sidebar = () => {
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: "var(--accent)" }}>{isLicensedWorkspace ? "Self-hosted" : "Current plan"}</p>
           <p className="mt-1 text-sm font-semibold">{isLicensedWorkspace ? "Licensed workspace" : business?.plan?.name || "Free"}</p>
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{isLicensedWorkspace ? "Module access is managed by your license and workspace settings." : "Manage your plan in Subscription."}</p>
-          {isLicensedWorkspace ? <p className="mt-3 text-[11px]" style={{ color: "var(--text-muted)" }}>Powered by Nemnidhi Digital Solutions</p> : null}
+          {isLicensedWorkspace ? <p className="mt-3 text-[11px] font-semibold tracking-[0.12em]" style={{ color: "var(--text-muted)" }}>NEMNIDHI</p> : null}
         </div>
       </aside>
       {tooltip ? createPortal(<div id="sidebar-tooltip" role="tooltip" className="sidebar-tooltip" style={{ left: tooltip.left, top: tooltip.top }}>{tooltip.label}</div>, document.body) : null}

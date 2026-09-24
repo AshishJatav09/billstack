@@ -8,13 +8,13 @@ const Input = ({ label, type = "text", placeholder, error, ...props }) => {
 
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-medium text-slate-700">{label}</span>
+      <span className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">{label}</span>
       <div className="relative">
         <input
           type={inputType}
           placeholder={placeholder}
           {...props}
-          className={`w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-brand-500 focus:bg-white ${
+          className={`w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:bg-white dark:border-slate-700 dark:bg-slate-950/60 dark:text-white dark:focus:border-brand-400 dark:focus:bg-slate-950 ${
             isPassword ? "pr-12" : ""
           }`}
         />

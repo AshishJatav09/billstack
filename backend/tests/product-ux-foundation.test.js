@@ -71,7 +71,7 @@ test("self-hosted attribution is present without exposing secrets", () => {
 
   assert.match(authLayout, /VITE_BILLSTACK_DEPLOYMENT_MODE/);
   assert.match(authLayout, /VITE_POWERED_BY_TEXT/);
-  assert.match(envTemplate, /VITE_POWERED_BY_TEXT=Powered by Nemnidhi Digital Solutions/);
+  assert.match(envTemplate, /VITE_POWERED_BY_TEXT=NEMNIDHI/);
   assert.doesNotMatch(envTemplate, /SECRET|PASSWORD|TOKEN/);
 });
 

@@ -66,10 +66,10 @@ const RegisterPage = () => {
   return (
     <AuthCard
       title="Create account"
-      subtitle="Create your BillStack workspace."
+      subtitle="Set up your business workspace in a few details."
     >
       <div className="mb-4">
-        <FormField label="Business name" name="businessName" placeholder="BillStack Labs" value={form.businessName} onChange={handleChange} error={errors.businessName} />
+        <FormField label="Business name" name="businessName" placeholder="Your business name" value={form.businessName} onChange={handleChange} error={errors.businessName} />
       </div>
       {googleClientId ? (
         <>
@@ -79,7 +79,7 @@ const RegisterPage = () => {
       ) : null}
       <form className="space-y-4" onSubmit={handleSubmit}>
         <FormField label="Full name" name="name" placeholder="Aarav Sharma" value={form.name} onChange={handleChange} error={errors.name} />
-        <FormField label="Work email" name="email" type="email" placeholder="team@billstack.app" value={form.email} onChange={handleChange} error={errors.email} />
+        <FormField label="Work email" name="email" type="email" placeholder="you@business.com" value={form.email} onChange={handleChange} error={errors.email} />
         <FormField label="Password" name="password" type="password" placeholder="Create a secure password" value={form.password} onChange={handleChange} error={errors.password} />
         {serverError ? <p className="text-sm text-rose-600">{serverError}</p> : null}
         <button

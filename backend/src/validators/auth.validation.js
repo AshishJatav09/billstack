@@ -82,6 +82,13 @@ const registerValidator = (body) => {
 const businessSetupValidator = (body) => {
   const errors = {};
 
+  if (body.updateScope === "branding") {
+    for (const field of ["removeLogo", "removeSignature"]) {
+      if (body[field] !== undefined && !["true", "false", true, false].includes(body[field])) errors[field] = `${field} must be true or false`;
+    }
+    return { valid: Object.keys(errors).length === 0, errors };
+  }
+
   if (!body.name || body.name.trim().length < 2) {
     errors.name = "Business name must be at least 2 characters";
   }

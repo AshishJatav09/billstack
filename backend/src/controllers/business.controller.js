@@ -43,6 +43,25 @@ const updateBusinessSetup = asyncHandler(async (req, res) => {
     throw new AppError("Business not found", 404);
   }
 
+  if (req.body.updateScope === "branding") {
+    const logo = req.files?.logo?.[0];
+    const signature = req.files?.signature?.[0];
+    const previousLogoUrl = business.logoUrl;
+    const previousSignatureUrl = business.signatureUrl;
+    const removeLogo = req.body.removeLogo === true || req.body.removeLogo === "true";
+    const removeSignature = req.body.removeSignature === true || req.body.removeSignature === "true";
+    if (removeLogo && !logo) business.logoUrl = "";
+    if (removeSignature && !signature) business.signatureUrl = "";
+    if (logo) business.logoUrl = `/uploads/logos/${logo.filename}`;
+    if (signature) business.signatureUrl = `/uploads/signatures/${signature.filename}`;
+    await business.save();
+    if ((removeLogo || logo) && previousLogoUrl && previousLogoUrl !== business.logoUrl) await removeStoredBrandAsset(previousLogoUrl);
+    if ((removeSignature || signature) && previousSignatureUrl && previousSignatureUrl !== business.signatureUrl) await removeStoredBrandAsset(previousSignatureUrl);
+    await writeAuditLog({ req, action: "BUSINESS_BRANDING_UPDATED", entityType: "BUSINESS", entityId: business._id, metadata: { logoUpdated: Boolean(logo || removeLogo), signatureUpdated: Boolean(signature || removeSignature) } });
+    const subscription = await ensureBusinessSubscription({ businessId: business._id, planCode: business.planCode });
+    return res.status(200).json({ message: "Business branding updated", data: serializeBusinessWithPlan(business, subscription) });
+  }
+
   business.name = req.body.name.trim();
   const lockedRealEstate = business.deploymentMode === "SELF_HOSTED" && business.businessProfile?.industryCode === "REAL_ESTATE";
   if (lockedRealEstate && req.body.industry !== undefined && req.body.industry.trim() !== business.industry) throw new AppError("Industry is fixed for this licensed workspace", 400);
