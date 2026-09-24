@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import AuthCard from "../../../components/ui/AuthCard";
 import Input from "../../../components/ui/Input";
+import LoadingIndicator from "../../../components/ui/LoadingIndicator";
 import { forgotPasswordRequest } from "../api";
 
 const ForgotPasswordPage = () => {
@@ -48,7 +49,7 @@ const ForgotPasswordPage = () => {
           className="auth-primary w-full rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:opacity-70"
           disabled={isSubmitting}
         >
-          {isSubmitting ? "Sending..." : "Send reset link"}
+          {isSubmitting ? <LoadingIndicator compact label="Sending..." className="text-white [&>svg]:text-white" /> : "Send reset link"}
         </button>
       </form>
       <p className="mt-4 text-sm text-slate-500">

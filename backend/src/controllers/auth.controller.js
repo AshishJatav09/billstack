@@ -139,7 +139,9 @@ const login = asyncHandler(async (req, res) => {
 
   // Account lockout check — runs before bcrypt to fail fast
   if (user.lockedUntil && user.lockedUntil > new Date()) {
+    const secondsLeft = Math.max(1, Math.ceil((user.lockedUntil - Date.now()) / 1000));
     const minutesLeft = Math.ceil((user.lockedUntil - Date.now()) / 60000);
+    res.set("Retry-After", String(secondsLeft));
     throw new AppError(
       `Account temporarily locked, try again in ${minutesLeft} minute(s)`,
       423
@@ -290,6 +292,8 @@ const resetPassword = asyncHandler(async (req, res) => {
   user.password = await hashPassword(req.body.password);
   user.passwordResetToken = "";
   user.passwordResetExpiresAt = null;
+  user.failedLoginAttempts = 0;
+  user.lockedUntil = null;
   await user.save();
 
   res.status(200).json({
