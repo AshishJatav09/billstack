@@ -73,7 +73,9 @@ const buildInvoicePdfDefinition = ({ invoice, business }) => {
   const taxRate = numeric(snapshot.taxRate ?? invoice.lineItems?.[0]?.taxRate);
   const taxRows = [...(cgst ? [["CGST", cgst]] : []), ...(sgst ? [["SGST", sgst]] : []), ...(igst ? [["IGST", igst]] : [])];
   const lineItems = invoice.lineItems || [];
-  const itemBottomSpace = lineItems.length > 0 && lineItems.length <= 4 ? Math.floor(180 / lineItems.length) : 7;
+  const paymentHistory = invoice.paymentHistory || [];
+  const activePayments = paymentHistory.filter((row) => !row.reversal);
+  const itemBottomSpace = lineItems.length > 0 && lineItems.length <= 4 ? Math.floor((paymentHistory.length ? 100 : 180) / lineItems.length) : 7;
   const items = lineItems.map((item, index) => {
     const discount = item.discountType === "amount" ? money(item.discountAmount ?? item.discount) : `${numeric(item.discountValue)}%`;
     const itemCell = (text = "", options = {}) => cell(text, { margin: [0, 0, 0, itemBottomSpace], ...options });
@@ -132,6 +134,29 @@ const buildInvoicePdfDefinition = ({ invoice, business }) => {
           ["HSN/SAC", "Taxable Value", "CGST Rate", "CGST Amount", "SGST/IGST Rate", "SGST/IGST Amount", "Total Tax"].map((text) => blueCell(text, { alignment: "center", fontSize: 7.5 })),
           [cell(compact(invoice.lineItems?.[0]?.hsnSacCode || invoice.lineItems?.[0]?.hsnSac), { alignment: "center" }), cell(money(taxableValue), { alignment: "right" }), cell(cgst ? `${taxRate / 2}%` : "", { alignment: "right" }), cell(cgst ? money(cgst) : "", { alignment: "right" }), cell((sgst || igst) ? `${igst ? taxRate : taxRate / 2}%` : "", { alignment: "right" }), cell((sgst || igst) ? money(igst || sgst) : "", { alignment: "right" }), cell(`₹ ${money(totalTax)}`, { alignment: "right" })],
           [cell("Total", { bold: true, alignment: "right" }), cell(money(taxableValue), { bold: true, alignment: "right" }), cell(""), cell(cgst ? money(cgst) : "", { bold: true, alignment: "right" }), cell(""), cell((sgst || igst) ? money(igst || sgst) : "", { bold: true, alignment: "right" }), cell(`₹ ${money(totalTax)}`, { bold: true, alignment: "right" })],
+        ] }, layout: borderLayout,
+      }] : []),
+      {
+        margin: [0, 8, 0, 0],
+        table: { widths: ["*", 105], body: [
+          [cell("Invoice total", { bold: true }), cell(`₹ ${money(invoice.grandTotal)}`, { bold: true, alignment: "right" })],
+          [cell("Amount received", { color: "#047857" }), cell(`₹ ${money(invoice.amountPaid)}`, { color: "#047857", bold: true, alignment: "right" })],
+          [blueCell("Balance due", { bold: true }), blueCell(`₹ ${money(invoice.balanceDue)}`, { bold: true, alignment: "right" })],
+          [cell("Payment status"), cell(compact(invoice.paymentStatus || "unpaid").replaceAll("_", " ").toUpperCase(), { bold: true, alignment: "right" })],
+        ] }, layout: borderLayout,
+      },
+      ...(paymentHistory.length ? [{
+        margin: [0, 8, 0, 0],
+        table: { headerRows: 1, widths: [72, 72, "*", 75, 58], body: [
+          ["Payment date", "Mode", "Reference", "Amount", "Status"].map((text) => blueCell(text, { bold: true, alignment: "center", fontSize: 8 })),
+          ...paymentHistory.map((row) => [
+            cell(formatDate(row.payment?.paymentDate || row.createdAt), { alignment: "center" }),
+            cell(compact(row.payment?.paymentMethod).replaceAll("_", " "), { alignment: "center" }),
+            cell(compact(row.payment?.referenceNumber) || "—"),
+            cell(`₹ ${money(row.allocatedAmount)}`, { alignment: "right" }),
+            cell(row.reversal ? "REVERSED" : "RECEIVED", { alignment: "center", color: row.reversal ? "#be123c" : "#047857" }),
+          ]),
+          ...(activePayments.length > 1 ? [[cell("Total received", { bold: true, colSpan: 3, alignment: "right" }), {}, {}, cell(`₹ ${money(invoice.amountPaid)}`, { bold: true, alignment: "right" }), cell("")]] : []),
         ] }, layout: borderLayout,
       }] : []),
       {

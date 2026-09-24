@@ -17,6 +17,7 @@ const { buildInvoiceNumber, buildInvoiceTotals } = require("../utils/invoice");
 const { buildGstSnapshot, validateGstin, validateStateCode } = require("../utils/gst");
 const { createCustomerLedgerEntryOnce } = require("../services/ledger.service");
 const { log } = require("../utils/logger");
+const paymentService = require("../services/payment.service");
   const { applyFinancialRead, applyFinancialReads, hasDocumentAllocations, hasMigratedFinancialState, documentUpdateDecision, legacyPaymentWriteDecision } = require("../services/financial-read.service");
 const {
   buildPaginatedResponse,
@@ -76,8 +77,13 @@ const getInvoiceForSharing = async ({ invoiceId, businessId }) => {
     throw new AppError("Invoice not found", 404);
   }
 
+  const [derivedInvoice, paymentHistory] = await Promise.all([
+    applyFinancialRead({ businessId, sourceType: "INVOICE", document: invoice }),
+    paymentService.listAllocations({ businessId, sourceType: "INVOICE", sourceDocumentId: invoiceId }),
+  ]);
+
   return {
-    invoice: await applyFinancialRead({ businessId, sourceType: "INVOICE", document: invoice }),
+    invoice: { ...derivedInvoice, paymentHistory },
     business,
   };
 };
@@ -668,7 +674,9 @@ const emailInvoicePdf = asyncHandler(async (req, res) => {
     html: `
       <p>Hello,</p>
       <p>Please find attached invoice <strong>${invoice.invoiceNumber}</strong>.</p>
-      <p>Total: ${invoice.grandTotal.toFixed(2)}</p>
+      <p>Invoice total: ${invoice.grandTotal.toFixed(2)}</p>
+      <p>Amount received: ${Number(invoice.amountPaid || 0).toFixed(2)}</p>
+      <p>Balance due: ${Number(invoice.balanceDue || 0).toFixed(2)}</p>
       <p>Payment status: ${invoice.paymentStatus}</p>
       <p>Regards,<br/>${business.name}</p>
     `,
