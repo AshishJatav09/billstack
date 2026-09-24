@@ -85,7 +85,7 @@ const RegisterPage = () => {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
+          className="auth-primary w-full rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70"
         >
           {isSubmitting ? "Creating workspace..." : "Create account"}
         </button>
