@@ -66,6 +66,8 @@ const BusinessSettingsPage = () => {
   });
   const [logoFile, setLogoFile] = useState(null);
   const [signatureFile, setSignatureFile] = useState(null);
+  const [removeLogo, setRemoveLogo] = useState(false);
+  const [removeSignature, setRemoveSignature] = useState(false);
   const [section, setSection] = useState("Business Profile");
   const [saved, setSaved] = useState(false);
   const saveLock = useRef(false);
@@ -88,15 +90,15 @@ const BusinessSettingsPage = () => {
 
   const logoPreviewUrl = useMemo(() => {
     if (logoFile) return URL.createObjectURL(logoFile);
-    if (business?.logoUrl) return `${getApiOrigin()}${business.logoUrl}`;
+    if (!removeLogo && business?.logoUrl) return `${getApiOrigin()}${business.logoUrl}`;
     return "";
-  }, [business?.logoUrl, logoFile]);
+  }, [business?.logoUrl, logoFile, removeLogo]);
   useEffect(() => () => { if (logoFile && logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl); }, [logoFile, logoPreviewUrl]);
   const signaturePreviewUrl = useMemo(() => {
     if (signatureFile) return URL.createObjectURL(signatureFile);
-    if (business?.signatureUrl) return `${getApiOrigin()}${business.signatureUrl}`;
+    if (!removeSignature && business?.signatureUrl) return `${getApiOrigin()}${business.signatureUrl}`;
     return "";
-  }, [business?.signatureUrl, signatureFile]);
+  }, [business?.signatureUrl, signatureFile, removeSignature]);
   useEffect(() => () => { if (signatureFile && signaturePreviewUrl) URL.revokeObjectURL(signaturePreviewUrl); }, [signatureFile, signaturePreviewUrl]);
 
   const refreshIntegrationData = async () => {
@@ -167,11 +169,15 @@ const BusinessSettingsPage = () => {
 
       if (logoFile) payload.append("logo", logoFile);
       if (signatureFile) payload.append("signature", signatureFile);
+      payload.append("removeLogo", removeLogo);
+      payload.append("removeSignature", removeSignature);
 
       const data = await updateBusinessSetupRequest(payload);
       updateBusiness(data);
       setLogoFile(null);
       setSignatureFile(null);
+      setRemoveLogo(false);
+      setRemoveSignature(false);
       setSaved(true);
     } catch (error) {
       setFieldErrors(error.response?.data?.errors || {});
@@ -368,7 +374,8 @@ const BusinessSettingsPage = () => {
                 previewUrl={logoPreviewUrl}
                 previewAlt="Business logo"
                 buttonLabel={logoPreviewUrl ? "Change logo" : "Upload logo"}
-                onFile={(file) => { setSaveError(""); setSaved(false); setLogoFile(file); }}
+                onFile={(file) => { setSaveError(""); setSaved(false); setRemoveLogo(false); setLogoFile(file); }}
+                onRemove={() => { setSaved(false); setLogoFile(null); setRemoveLogo(Boolean(business?.logoUrl)); }}
                 onError={setSaveError}
               />
               <BrandImageUpload
@@ -377,7 +384,8 @@ const BusinessSettingsPage = () => {
                 previewUrl={signaturePreviewUrl}
                 previewAlt="Authorised signature"
                 buttonLabel={signaturePreviewUrl ? "Change signature" : "Upload signature"}
-                onFile={(file) => { setSaveError(""); setSaved(false); setSignatureFile(file); }}
+                onFile={(file) => { setSaveError(""); setSaved(false); setRemoveSignature(false); setSignatureFile(file); }}
+                onRemove={() => { setSaved(false); setSignatureFile(null); setRemoveSignature(Boolean(business?.signatureUrl)); }}
                 onError={setSaveError}
                 contain
                 acceptedTypes={["image/jpeg", "image/png"]}
@@ -524,7 +532,7 @@ const ProviderStatus = ({ label, configured }) => (
   </div>
 );
 
-const BrandImageUpload = ({ title, description, previewUrl, previewAlt, buttonLabel, onFile, onError, contain = false, acceptedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"] }) => (
+const BrandImageUpload = ({ title, description, previewUrl, previewAlt, buttonLabel, onFile, onRemove, onError, contain = false, acceptedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"] }) => (
   <div className="min-w-0 rounded-2xl border p-4">
     <p className="text-sm font-semibold">{title}</p>
     <p className="mt-1 text-xs text-slate-500">{description}</p>
@@ -533,24 +541,27 @@ const BrandImageUpload = ({ title, description, previewUrl, previewAlt, buttonLa
         ? <img src={previewUrl} alt={previewAlt} className={`max-h-20 max-w-full ${contain ? "object-contain" : "rounded-lg object-contain"}`} />
         : <span className="text-xs text-slate-400">No image uploaded</span>}
     </div>
-    <label className="mt-3 inline-flex cursor-pointer rounded-xl border px-3 py-2 text-sm font-medium">
-      {buttonLabel}
-      <input
-        className="sr-only"
-        type="file"
-        accept={acceptedTypes.join(",")}
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (!file) return;
-          if (!acceptedTypes.includes(file.type) || file.size > 2 * 1024 * 1024) {
-            onError(`Choose ${acceptedTypes.length === 2 ? "JPG or PNG" : "JPG, PNG, WEBP or GIF"} up to 2 MB`);
-            event.target.value = "";
-            return;
-          }
-          onFile(file);
-        }}
-      />
-    </label>
+    <div className="mt-3 flex flex-wrap gap-2">
+      <label className="inline-flex cursor-pointer rounded-xl border px-3 py-2 text-sm font-medium">
+        {buttonLabel}
+        <input
+          className="sr-only"
+          type="file"
+          accept={acceptedTypes.join(",")}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            if (!acceptedTypes.includes(file.type) || file.size > 2 * 1024 * 1024) {
+              onError(`Choose ${acceptedTypes.length === 2 ? "JPG or PNG" : "JPG, PNG, WEBP or GIF"} up to 2 MB`);
+              event.target.value = "";
+              return;
+            }
+            onFile(file);
+          }}
+        />
+      </label>
+      {previewUrl ? <button type="button" onClick={onRemove} className="rounded-xl border border-rose-200 px-3 py-2 text-sm font-medium text-rose-600 dark:border-rose-900/70 dark:text-rose-300">Remove</button> : null}
+    </div>
     <p className="mt-2 text-xs text-slate-500">{acceptedTypes.length === 2 ? "JPG or PNG" : "JPG, PNG, WEBP or GIF"}. Maximum 2 MB.</p>
   </div>
 );

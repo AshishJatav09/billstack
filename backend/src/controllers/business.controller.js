@@ -7,6 +7,16 @@ const { normalizeBusinessGst } = require("../../../shared/gst-policy.cjs");
 const { writeAuditLog } = require("../services/audit.service");
 const { getPresetRecommendations } = require("../services/module.service");
 const { createSampleData, removeSampleData, recommendPlanForProfile } = require("../services/commercial-plan.service");
+const fs = require("fs");
+const path = require("path");
+
+const removeStoredBrandAsset = async (assetUrl) => {
+  if (!assetUrl) return;
+  const absolutePath = path.resolve(process.cwd(), String(assetUrl).replace(/^\/+/, ""));
+  const uploadRoot = path.resolve(process.cwd(), "uploads");
+  if (!absolutePath.startsWith(`${uploadRoot}${path.sep}`)) return;
+  await fs.promises.unlink(absolutePath).catch(() => {});
+};
 
 const getCurrentBusiness = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.tenant.businessId);
@@ -107,10 +117,18 @@ const updateBusinessSetup = asyncHandler(async (req, res) => {
 
   const logo = req.files?.logo?.[0];
   const signature = req.files?.signature?.[0];
+  const previousLogoUrl = business.logoUrl;
+  const previousSignatureUrl = business.signatureUrl;
+  const removeLogo = req.body.removeLogo === true || req.body.removeLogo === "true";
+  const removeSignature = req.body.removeSignature === true || req.body.removeSignature === "true";
+  if (removeLogo && !logo) business.logoUrl = "";
+  if (removeSignature && !signature) business.signatureUrl = "";
   if (logo) business.logoUrl = `/uploads/logos/${logo.filename}`;
   if (signature) business.signatureUrl = `/uploads/signatures/${signature.filename}`;
 
   await business.save();
+  if ((removeLogo || logo) && previousLogoUrl && previousLogoUrl !== business.logoUrl) await removeStoredBrandAsset(previousLogoUrl);
+  if ((removeSignature || signature) && previousSignatureUrl && previousSignatureUrl !== business.signatureUrl) await removeStoredBrandAsset(previousSignatureUrl);
   await writeAuditLog({ req, action: "BUSINESS_SETTINGS_UPDATED", entityType: "BUSINESS", entityId: business._id, metadata: { gstEnabled, stateCode, changedFields: Object.keys(req.body || {}) } });
 
   const subscription = await ensureBusinessSubscription({

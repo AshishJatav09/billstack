@@ -49,6 +49,7 @@ const amountInWords = (value) => {
 };
 
 const optionalLine = (label, value) => value ? { text: [{ text: `${label}: `, bold: true }, compact(value)], margin: [0, 1, 0, 1] } : null;
+const labelledLine = (label, value) => ({ text: [{ text: `${label}: `, bold: true }, compact(value)], margin: [0, 1, 0, 1] });
 const cell = (text = "", options = {}) => ({ text, ...options });
 const borderLayout = {
   hLineColor: () => "#111827", vLineColor: () => "#111827",
@@ -71,15 +72,18 @@ const buildInvoicePdfDefinition = ({ invoice, business }) => {
   const taxableValue = numeric(snapshot.taxableValue ?? invoice.subtotal) - numeric(invoice.totalDiscount);
   const taxRate = numeric(snapshot.taxRate ?? invoice.lineItems?.[0]?.taxRate);
   const taxRows = [...(cgst ? [["CGST", cgst]] : []), ...(sgst ? [["SGST", sgst]] : []), ...(igst ? [["IGST", igst]] : [])];
-  const items = (invoice.lineItems || []).map((item, index) => {
+  const lineItems = invoice.lineItems || [];
+  const itemBottomSpace = lineItems.length > 0 && lineItems.length <= 4 ? Math.floor(180 / lineItems.length) : 7;
+  const items = lineItems.map((item, index) => {
     const discount = item.discountType === "amount" ? money(item.discountAmount ?? item.discount) : `${numeric(item.discountValue)}%`;
+    const itemCell = (text = "", options = {}) => cell(text, { margin: [0, 0, 0, itemBottomSpace], ...options });
     return [
-      cell(String(index + 1), { alignment: "center" }),
-      { stack: [{ text: compact(item.productName), bold: true }, ...(compact(item.description) ? [{ text: compact(item.description), fontSize: 8, margin: [0, 3, 0, 0] }] : [])] },
-      cell(compact(item.hsnSacCode || item.hsnSac), { alignment: "center" }),
-      cell(money(item.rate), { alignment: "right" }),
-      cell(discount, { alignment: "right" }),
-      cell(money(item.itemTotal), { alignment: "right" }),
+      itemCell(String(index + 1), { alignment: "center" }),
+      { stack: [{ text: compact(item.productName), bold: true }, ...(compact(item.description) ? [{ text: compact(item.description), fontSize: 8, margin: [0, 3, 0, 0] }] : [])], margin: [0, 0, 0, itemBottomSpace] },
+      itemCell(compact(item.hsnSacCode || item.hsnSac), { alignment: "center" }),
+      itemCell(money(item.rate), { alignment: "right" }),
+      itemCell(discount, { alignment: "right" }),
+      itemCell(money(item.itemTotal), { alignment: "right" }),
     ];
   });
   const blueCell = (text, options = {}) => cell(text, { fillColor: "#d9effb", ...options });
@@ -111,7 +115,7 @@ const buildInvoicePdfDefinition = ({ invoice, business }) => {
         table: { widths: ["*"], body: [[{ stack: [
           { text: "BILL TO", fontSize: 9, margin: [0, 0, 0, 5] },
           ...(compact(customer.name) ? [{ text: compact(customer.name), bold: true, margin: [0, 0, 0, 4] }] : []),
-          optionalLine("Address", customer.address), optionalLine("GSTIN", customerGstin), optionalLine("Place of Supply", placeOfSupply), optionalLine("Mobile", customer.phone), optionalLine("Email", customer.email),
+          optionalLine("Address", customer.address), optionalLine("GSTIN", customerGstin), optionalLine("Place of Supply", placeOfSupply), labelledLine("Mobile", customer.phone), optionalLine("Email", customer.email),
         ].filter(Boolean), margin: [1, 2, 1, 6] }]] }, layout: borderLayout,
       },
       {
