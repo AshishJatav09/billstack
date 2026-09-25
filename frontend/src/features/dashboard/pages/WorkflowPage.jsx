@@ -194,15 +194,24 @@ const WorkflowPage = () => {
   }, [location.pathname, moduleData, navigate, visibleTabs]);
 
   useEffect(() => {
-    Promise.allSettled([listCustomersRequest(), listProductsRequest(), listProjectsRequest(), listTeamMembersRequest()])
-      .then(([customerResult, productResult, projectResult, teamResult]) => {
-        if (customerResult.status === "fulfilled") setCustomers(customerResult.value?.items || customerResult.value || []);
-        if (productResult.status === "fulfilled") setProducts(productResult.value?.items || productResult.value || []);
-        if (projectResult.status === "fulfilled") setProjects(projectResult.value?.items || projectResult.value || []);
-        if (teamResult.status === "fulfilled") setTeam(teamResult.value?.items || teamResult.value || []);
-      })
-      .catch(() => {});
-  }, []);
+    const requests = [];
+    const addRequest = (request, setter) => requests.push(
+      request().then((value) => setter(value?.items || value || []))
+    );
+
+    if (["orders", "projects", "recurring", "appointments", "dispatches"].includes(activeTab)) {
+      addRequest(listCustomersRequest, setCustomers);
+    }
+    if (["orders", "recurring", "production", "batches", "dispatches"].includes(activeTab)) {
+      addRequest(listProductsRequest, setProducts);
+    }
+    if (activeTab === "tasks") addRequest(listProjectsRequest, setProjects);
+    if (["projects", "tasks", "appointments", "approvals"].includes(activeTab)) {
+      addRequest(listTeamMembersRequest, setTeam);
+    }
+
+    Promise.allSettled(requests).catch(() => {});
+  }, [activeTab]);
 
   const filtered = useMemo(() => {
     if (!query) return data;
