@@ -29,6 +29,7 @@ router.post("/tasks", requireModule("projects_tasks"), requireFeature("projectsT
 router.put("/tasks/:taskId", validateObjectIdParam("taskId"), requireModule("projects_tasks"), requireFeature("projectsTasks"), permit("owner", "admin", "staff"), controller.updateTask);
 
 router.get("/recurring", requireModule("recurring_billing"), requireFeature("recurringBilling"), controller.listRecurring);
+router.post("/recurring/query", requireModule("recurring_billing"), requireFeature("recurringBilling"), controller.queryRecurring);
 router.post("/recurring", requireModule("recurring_billing"), requireFeature("recurringBilling"), permit("owner", "admin", "accountant"), controller.createRecurring);
 router.get("/recurring/:profileId", validateObjectIdParam("profileId"), requireModule("recurring_billing"), requireFeature("recurringBilling"), controller.getRecurring);
 router.post("/recurring/:profileId/status", validateObjectIdParam("profileId"), requireModule("recurring_billing"), requireFeature("recurringBilling"), permit("owner", "admin", "accountant"), controller.setRecurringStatus);

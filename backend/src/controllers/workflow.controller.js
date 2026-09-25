@@ -22,6 +22,7 @@ const updateTask = asyncHandler(async (req, res) => ok(res, "Task updated", awai
 
 const createRecurring = asyncHandler(async (req, res) => ok(res, "Recurring profile created", await service.createRecurringProfile({ businessId: req.tenant.businessId, userId: req.user._id, payload: req.body }), 201));
 const listRecurring = asyncHandler(async (req, res) => { res.set("Cache-Control", "no-store, no-cache, must-revalidate, private"); return ok(res, "Recurring profiles fetched", await service.listRecurringProfiles({ businessId: req.tenant.businessId, query: req.query })); });
+const queryRecurring = asyncHandler(async (req, res) => { res.set("Cache-Control", "no-store, no-cache, must-revalidate, private"); return ok(res, "Recurring profiles fetched", await service.listRecurringProfiles({ businessId: req.tenant.businessId, query: req.body || {} })); });
 const getRecurring = asyncHandler(async (req, res) => ok(res, "Recurring profile fetched", await service.getRecurringProfile({ businessId: req.tenant.businessId, id: req.params.profileId })));
 const setRecurringStatus = asyncHandler(async (req, res) => ok(res, "Recurring status updated", await service.setRecurringStatus({ businessId: req.tenant.businessId, userId: req.user._id, id: req.params.profileId, status: req.body.status, req })));
 const generateRecurring = asyncHandler(async (req, res) => ok(res, "Recurring invoice generated", await service.generateRecurringInvoice({ businessId: req.tenant.businessId, userId: req.user._id, id: req.params.profileId, req }), 201));
@@ -48,6 +49,7 @@ module.exports = {
   listOrders,
   listProjects,
   listRecurring,
+  queryRecurring,
   listTasks,
   setAppointmentStatus,
   setOrderStatus,
