@@ -543,8 +543,19 @@ export const updateTaskRequest = async (taskId, payload) => {
 };
 
 export const listRecurringProfilesRequest = async (params) => {
-  const response = await api.post("/workflows/recurring/query", params || {});
-  return response.data.data;
+  try {
+    const response = await api.post("/workflows/recurring/query", params || {});
+    return response.data.data;
+  } catch (error) {
+    const isMissingQueryRoute = error?.response?.status === 404
+      && String(error?.response?.data?.message || "").toLowerCase().includes("route not found");
+    if (!isMissingQueryRoute) throw error;
+
+    const response = await api.get("/workflows/recurring", {
+      params: { ...(params || {}), _ts: Date.now() },
+    });
+    return response.data.data;
+  }
 };
 
 export const createRecurringProfileRequest = async (payload) => {
