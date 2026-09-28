@@ -76,10 +76,12 @@ const InvoicesPage = () => {
   useCreateAction({
     ready: !isLoading, moduleKey: "invoices", focusSelector: '#invoice-editor select[name="customerId"]',
     onCreate: () => {
+      const handoffCustomerId = sessionStorage.getItem("billstack-invoice-handoff-customer") || "";
+      sessionStorage.removeItem("billstack-invoice-handoff-customer");
       pendingIssue.current = null;
       issuePaymentKey.current = makePaymentForm().idempotencyKey;
       setEditingId("");
-      setForm(makeForm());
+      setForm({ ...makeForm(), customerId: handoffCustomerId });
       setErrors({});
       setPostIssue(null);
       setShowEditor(true);
@@ -113,6 +115,10 @@ const InvoicesPage = () => {
   }, [openMenu]);
 
   const selectedCustomer = customers.find((customer) => customer._id === form.customerId);
+  useEffect(() => {
+    if (!selectedCustomer || form.placeOfSupplyCode) return;
+    setForm((current) => ({ ...current, placeOfSupplyCode: selectedCustomer.placeOfSupplyCode || selectedCustomer.stateCode || "" }));
+  }, [selectedCustomer, form.placeOfSupplyCode]);
   const [gstPreview, setGstPreview] = useState(null);
   const [gstPreviewError, setGstPreviewError] = useState("");
   useEffect(() => {

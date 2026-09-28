@@ -4,7 +4,9 @@ const mongoose = require("mongoose");
 const Business = require("../models/Business");
 const Customer = require("../models/Customer");
 const IntegrationCredential = require("../models/IntegrationCredential");
+const IntegrationCustomerMapping = require("../models/IntegrationCustomerMapping");
 const IntegrationEvent = require("../models/IntegrationEvent");
+const IntegrationHandoff = require("../models/IntegrationHandoff");
 const Invoice = require("../models/Invoice");
 const Product = require("../models/Product");
 const StockMovement = require("../models/StockMovement");
@@ -26,6 +28,124 @@ const stableStringify = (value) => {
   return JSON.stringify(value);
 };
 const hashValue = (value) => crypto.createHash("sha256").update(String(value)).digest("hex");
+const cleanText = (value, maxLength) => String(value || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, maxLength);
+const normalizeEmail = (value) => cleanText(value, 254).toLowerCase();
+const normalizePhone = (value) => cleanText(value, 32).replace(/\D/g, "");
+
+const normalizeCustomerSyncPayload = (payload = {}, credential) => {
+  const externalId = cleanText(payload.externalId, 160);
+  const source = cleanText(payload.source || credential.source || "API", 80).toUpperCase();
+  const name = cleanText(payload.name, 160);
+  const email = normalizeEmail(payload.email);
+  const phone = normalizePhone(payload.phone);
+  const gstNumber = cleanText(payload.gstNumber || payload.gstin, 15).replace(/\s/g, "").toUpperCase();
+  const stateCode = cleanText(payload.stateCode, 2).padStart(payload.stateCode ? 2 : 0, "0");
+  const placeOfSupplyCode = cleanText(payload.placeOfSupplyCode, 2).padStart(payload.placeOfSupplyCode ? 2 : 0, "0");
+  if (!externalId || !/^[A-Za-z0-9._:@/-]+$/.test(externalId)) throw new AppError("A valid externalId is required", 400);
+  if (!source || !/^[A-Z0-9_-]+$/.test(source)) throw new AppError("A valid source is required", 400);
+  if (!name) throw new AppError("Customer name is required", 400);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new AppError("Invalid customer email", 400);
+  if (phone && (phone.length < 7 || phone.length > 15)) throw new AppError("Invalid customer phone", 400);
+  if (gstNumber && !validateGstin(gstNumber)) throw new AppError("Invalid customer GSTIN", 400);
+  if (stateCode && !validateStateCode(stateCode)) throw new AppError("Invalid customer state code", 400);
+  if (placeOfSupplyCode && !validateStateCode(placeOfSupplyCode)) throw new AppError("Invalid place of supply code", 400);
+  if (gstNumber && stateCode && gstNumber.slice(0, 2) !== stateCode) throw new AppError("GSTIN and state code do not match", 400);
+  return { externalId, source, name, email, phone, billingAddress: cleanText(payload.billingAddress || payload.address, 500), gstNumber, stateCode, placeOfSupplyCode };
+};
+
+const customerUpdates = (input, supplied = {}) => Object.fromEntries(
+  ["name", "phone", "email", "billingAddress", "gstNumber", "stateCode", "placeOfSupplyCode"]
+    .filter((field) => input[field] || Object.prototype.hasOwnProperty.call(supplied, field))
+    .map((field) => [field, input[field]])
+);
+
+const findCustomerIdentityMatches = async ({ businessId, input, session }) => {
+  const matches = new Map();
+  const identifiers = [
+    input.gstNumber && { gstNumber: input.gstNumber },
+    input.phone && { phone: { $regex: new RegExp(`^\\D*${input.phone.split("").join("\\D*")}\\D*$`) } },
+    input.email && { email: input.email },
+  ].filter(Boolean);
+  for (const identifier of identifiers) {
+    const rows = await Customer.find({ businessId, ...identifier }).limit(2).session(session);
+    rows.forEach((row) => matches.set(row._id.toString(), row));
+  }
+  if (matches.size > 1) throw new AppError("Customer identifiers match different existing customers", 409);
+  return matches.values().next().value || null;
+};
+
+const syncExternalCustomer = async ({ credential, payload }) => {
+  const input = normalizeCustomerSyncPayload(payload, credential);
+  const session = await mongoose.startSession();
+  let result;
+  try {
+    await session.withTransaction(async () => {
+      const mapping = await IntegrationCustomerMapping.findOne({ businessId: credential.businessId, source: input.source, externalId: input.externalId }).session(session);
+      if (mapping) {
+        const customer = await Customer.findOne({ _id: mapping.customerId, businessId: credential.businessId }).session(session);
+        if (!customer) throw new AppError("Linked customer no longer exists", 409);
+        const identityMatch = await findCustomerIdentityMatches({ businessId: credential.businessId, input, session });
+        if (identityMatch && identityMatch._id.toString() !== customer._id.toString()) throw new AppError("Customer identifiers conflict with another existing customer", 409);
+        // Explicit blank attributes clear this established mapping's fields.
+        // Omitted fields and initial linking retain the existing behavior.
+        const updates = customerUpdates(input, payload);
+        const changed = Object.entries(updates).some(([field, value]) => String(customer[field] || "") !== String(value));
+        if (changed) { Object.assign(customer, updates); await customer.save({ session }); }
+        mapping.lastSyncedAt = new Date();
+        await mapping.save({ session });
+        result = { customer, mapping, outcome: changed ? "updated" : "already_synced" };
+        return;
+      }
+      let customer = await findCustomerIdentityMatches({ businessId: credential.businessId, input, session });
+      const outcome = customer ? "linked" : "created";
+      if (customer) { Object.assign(customer, customerUpdates(input)); await customer.save({ session }); }
+      else [customer] = await Customer.create([{ businessId: credential.businessId, ...customerUpdates(input) }], { session });
+      const [createdMapping] = await IntegrationCustomerMapping.create([{
+        businessId: credential.businessId, credentialId: credential._id, source: input.source,
+        externalId: input.externalId, customerId: customer._id, lastSyncedAt: new Date(),
+      }], { session });
+      result = { customer, mapping: createdMapping, outcome };
+    });
+    return result;
+  } catch (error) {
+    if (error?.code === 11000) {
+      const mapping = await IntegrationCustomerMapping.findOne({ businessId: credential.businessId, source: input.source, externalId: input.externalId });
+      if (mapping) return { customer: await Customer.findOne({ _id: mapping.customerId, businessId: credential.businessId }), mapping, outcome: "already_synced" };
+    }
+    throw error;
+  } finally { session.endSession(); }
+};
+
+const allowedReturnUrl = (value) => {
+  if (!value) return "";
+  let parsed;
+  try { parsed = new URL(value); } catch (_error) { throw new AppError("Invalid returnUrl", 400); }
+  const allowed = String(process.env.CRM_RETURN_URLS || "").split(",").map((item) => item.trim()).filter(Boolean);
+  if (!allowed.some((entry) => { try { return new URL(entry).origin === parsed.origin; } catch (_error) { return false; } })) throw new AppError("returnUrl origin is not allowed", 400);
+  return parsed.toString();
+};
+
+const createInvoiceHandoff = async ({ credential, payload }) => {
+  if (!mongoose.isValidObjectId(payload.customerId)) throw new AppError("Valid customerId is required", 400);
+  const customer = await Customer.findOne({ _id: payload.customerId, businessId: credential.businessId });
+  if (!customer) throw new AppError("Customer not found for this integration", 404);
+  const rawToken = crypto.randomBytes(32).toString("base64url");
+  const expiresAt = new Date(Date.now() + 3 * 60 * 1000);
+  await IntegrationHandoff.create({ businessId: credential.businessId, credentialId: credential._id, customerId: customer._id, tokenHash: hashValue(rawToken), purpose: "INVOICE_CREATE", returnUrl: allowedReturnUrl(payload.returnUrl), expiresAt });
+  const clientUrl = String(process.env.CLIENT_URL || "http://localhost:5173").split(",")[0].trim().replace(/\/$/, "");
+  return { handoffUrl: `${clientUrl}/integration/invoice-handoff?token=${encodeURIComponent(rawToken)}`, expiresAt };
+};
+
+const resolveInvoiceHandoff = async ({ token, businessId, userId }) => {
+  if (!token || String(token).length > 256) throw new AppError("Invalid handoff token", 400);
+  const handoff = await IntegrationHandoff.findOneAndUpdate(
+    { tokenHash: hashValue(token), businessId, purpose: "INVOICE_CREATE", usedAt: null, expiresAt: { $gt: new Date() } },
+    { $set: { usedAt: new Date(), usedBy: userId } },
+    { new: true }
+  ).populate("customerId", "name email phone billingAddress gstNumber stateCode placeOfSupplyCode");
+  if (!handoff) throw new AppError("Handoff token is invalid, expired, used, or belongs to another workspace", 410);
+  return { purpose: handoff.purpose, customer: handoff.customerId, returnUrl: handoff.returnUrl || "" };
+};
 
 const generateApiKey = () => {
   const prefix = crypto.randomBytes(4).toString("hex");
@@ -300,9 +420,13 @@ const ingestExternalOrder = async ({ credential, payload }) => {
 
 module.exports = {
   authenticateIntegrationKey,
+  createInvoiceHandoff,
   createCredential,
   hashValue,
   ingestExternalOrder,
   listCredentials,
+  normalizeCustomerSyncPayload,
+  resolveInvoiceHandoff,
   revokeCredential,
+  syncExternalCustomer,
 };

@@ -15,6 +15,12 @@ export const useAuth = () => {
 
   const resolvePostAuthRoute = (businessPayload) =>
     businessPayload?.deploymentMode === "SELF_HOSTED" || businessPayload?.onboardingCompleted ? "/dashboard" : "/onboarding";
+  const postAuthRoute = (businessPayload) => {
+    const handoffToken = sessionStorage.getItem("billstack-invoice-handoff-token");
+    return handoffToken
+      ? `/integration/invoice-handoff?token=${encodeURIComponent(handoffToken)}`
+      : resolvePostAuthRoute(businessPayload);
+  };
 
   const syncSession = async () => {
     const data = await currentSessionRequest();
@@ -33,7 +39,7 @@ export const useAuth = () => {
       title: "Account created",
       message: "Your business owner account is ready.",
     });
-    navigate(resolvePostAuthRoute(data.business));
+    navigate(postAuthRoute(data.business));
   };
 
   const login = async (payload) => {
@@ -44,7 +50,7 @@ export const useAuth = () => {
       title: "Welcome back",
       message: "You are signed in to BillStack.",
     });
-    navigate(resolvePostAuthRoute(data.business));
+    navigate(postAuthRoute(data.business));
   };
 
   const googleAuth = async (payload) => {
@@ -55,7 +61,7 @@ export const useAuth = () => {
       title: payload.mode === "signup" ? "Account created" : "Welcome back",
       message: "Google sign-in completed securely.",
     });
-    navigate(resolvePostAuthRoute(data.business));
+    navigate(postAuthRoute(data.business));
   };
 
   const logout = async () => {

@@ -50,6 +50,7 @@ const jsonParser = express.json({
 const corsMiddleware = cors(buildCorsOptions());
 
 morgan.token("requestId", (req) => req.requestId);
+morgan.token('safeUrl', require('./utils/integrationLogUrl').integrationLogUrl);
 
 app.use(
   helmet({
@@ -78,7 +79,7 @@ app.use((req, res, next) => {
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(mongoSanitize());
 app.use(
-  morgan(":method :url :status :response-time ms req=:requestId", {
+  morgan(":method :safeUrl :status :response-time ms req=:requestId", {
     stream: {
       write: (message) => log("info", message.trim()),
     },

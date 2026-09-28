@@ -569,6 +569,11 @@ export const deleteRecurringProfileRequest = async (profileId) => {
   return response.data.data;
 };
 
+export const resolveInvoiceHandoffRequest = async (token) => {
+  const response = await api.get(`/integrations/handoffs/invoice/${encodeURIComponent(token)}`);
+  return response.data.data;
+};
+
 export const listAppointmentsRequest = async (params) => {
   const response = await api.get("/workflows/appointments", { params });
   return response.data.data;

@@ -22,6 +22,7 @@ const DashboardHomePage = lazy(() => import("../features/dashboard/pages/Dashboa
 const ExpensesPage = lazy(() => import("../features/dashboard/pages/ExpensesPage"));
 const InvoicesPage = lazy(() => import("../features/dashboard/pages/InvoicesPage"));
 const InvoiceDetailPage = lazy(() => import("../features/dashboard/pages/InvoiceDetailPage"));
+const InvoiceHandoffPage = lazy(() => import("../features/integrations/InvoiceHandoffPage"));
 const ProductsPage = lazy(() => import("../features/dashboard/pages/ProductsPage"));
 const PurchasesPage = lazy(() => import("../features/dashboard/pages/PurchasesPage"));
 const ReportsPage = lazy(() => import("../features/dashboard/pages/ReportsPage"));
@@ -50,6 +51,7 @@ export const router = createBrowserRouter([
         index: true,
         element: <Navigate to="/login" replace />,
       },
+      { path: "integration/invoice-handoff", element: lazyElement(<InvoiceHandoffPage />, "Preparing invoice") },
       {
         element: <GuestRoute />,
         children: [

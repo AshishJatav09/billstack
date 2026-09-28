@@ -3,9 +3,12 @@ const asyncHandler = require("../utils/asyncHandler");
 const { writeAuditLog } = require("../services/audit.service");
 const {
   createCredential,
+  createInvoiceHandoff,
   ingestExternalOrder,
   listCredentials,
+  resolveInvoiceHandoff,
   revokeCredential,
+  syncExternalCustomer,
 } = require("../services/integration.service");
 
 const listIntegrationCredentials = asyncHandler(async (req, res) => {
@@ -39,6 +42,22 @@ const ingestOrder = asyncHandler(async (req, res) => {
   res.status(result.idempotent ? 200 : 201).json({ data: result });
 });
 
+const upsertCustomer = asyncHandler(async (req, res) => {
+  const result = await syncExternalCustomer({ credential: req.integrationCredential, payload: req.body });
+  await writeAuditLog({ req, businessId: req.integrationCredential.businessId, action: "INTEGRATION_CUSTOMER_SYNCED", entityType: "CUSTOMER", entityId: result.customer._id, metadata: { source: result.mapping.source, externalId: result.mapping.externalId, outcome: result.outcome } });
+  res.status(result.outcome === "created" ? 201 : 200).json({ data: { outcome: result.outcome, customer: result.customer, externalReference: { source: result.mapping.source, externalId: result.mapping.externalId } } });
+});
+
+const requestInvoiceHandoff = asyncHandler(async (req, res) => {
+  const result = await createInvoiceHandoff({ credential: req.integrationCredential, payload: req.body });
+  res.status(201).json({ data: result });
+});
+
+const consumeInvoiceHandoff = asyncHandler(async (req, res) => {
+  const result = await resolveInvoiceHandoff({ token: req.params.token, businessId: req.tenant.businessId, userId: req.user._id });
+  res.json({ data: result });
+});
+
 const listIntegrationEvents = asyncHandler(async (req, res) => {
   res.json({
     data: await IntegrationEvent.find({ businessId: req.tenant.businessId })
@@ -50,9 +69,12 @@ const listIntegrationEvents = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  consumeInvoiceHandoff,
   createIntegrationCredential,
   ingestOrder,
   listIntegrationCredentials,
   listIntegrationEvents,
+  requestInvoiceHandoff,
   revokeIntegrationCredential,
+  upsertCustomer,
 };

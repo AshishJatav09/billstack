@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { clearHandoffRequests } from '../features/integrations/handoffRequest';
 
 const persistedSession = (() => {
   if (typeof window === "undefined") {
@@ -39,6 +40,7 @@ export const authStore = create((set) => ({
     });
   },
   clearAuth: () => {
+    clearHandoffRequests();
     localStorage.removeItem("billstack-auth");
     set({
       accessToken: "",

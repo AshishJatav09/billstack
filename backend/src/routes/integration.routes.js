@@ -1,11 +1,14 @@
 const express = require("express");
 
 const {
+  consumeInvoiceHandoff,
   createIntegrationCredential,
   ingestOrder,
   listIntegrationCredentials,
   listIntegrationEvents,
+  requestInvoiceHandoff,
   revokeIntegrationCredential,
+  upsertCustomer,
 } = require("../controllers/integration.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
 const integrationAuthMiddleware = require("../middlewares/integration-auth.middleware");
@@ -15,6 +18,9 @@ const tenantMiddleware = require("../middlewares/tenant.middleware");
 const router = express.Router();
 
 router.post("/orders", integrationAuthMiddleware, ingestOrder);
+router.post("/customers/upsert", integrationAuthMiddleware, upsertCustomer);
+router.post("/handoffs/invoice", integrationAuthMiddleware, requestInvoiceHandoff);
+router.get("/handoffs/invoice/:token", authMiddleware, tenantMiddleware, permit("owner", "admin", "staff", "accountant"), consumeInvoiceHandoff);
 
 router.use(authMiddleware, tenantMiddleware, permit("owner", "admin"));
 router.get("/credentials", listIntegrationCredentials);

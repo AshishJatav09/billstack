@@ -1,4 +1,5 @@
 const { log } = require("../utils/logger");
+const { integrationLogUrl } = require('../utils/integrationLogUrl');
 
 const notFound = (req, _res, next) => {
   const error = new Error(`Route not found: ${req.originalUrl}`);
@@ -16,11 +17,11 @@ const errorHandler = (error, req, res, _next) => {
   const requestId = req.requestId || "unknown";
 
   if (statusCode >= 500) {
-    log("error", error.message || "Unhandled server error", {
+    log("error", integrationLogUrl({ url: error.message || 'Unhandled server error' }), {
       requestId,
-      path: req.originalUrl,
+      path: integrationLogUrl(req),
       method: req.method,
-      stack: error.stack,
+      stack: error.stack ? integrationLogUrl({ url: error.stack }) : undefined,
     });
   }
 
