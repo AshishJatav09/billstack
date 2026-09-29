@@ -44,7 +44,10 @@ const GuestRoute = () => {
     return <Outlet />;
   }
 
-  if (sessionStatus === "checking") {
+  // A login handler may navigate to a saved handoff immediately after setting
+  // the session. Keep the guest outlet mounted until session validation has
+  // completed so this guard cannot race that explicit post-login destination.
+  if (sessionStatus !== "ready") {
     return <RouteFallback title="Loading session" />;
   }
 

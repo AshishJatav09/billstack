@@ -63,6 +63,27 @@ test('logged-out handoff survives normal login then consumes exactly once', asyn
   assert.equal(h.storage.has('billstack-invoice-handoff-token'), false); h.cache.clearHandoffRequests();
 });
 
+test('GuestRoute does not redirect a newly authenticated login before its handoff destination', async () => {
+  let session = { accessToken: '', business: null }, status = 'anonymous';
+  const effects = [], redirects = [], Outlet = () => null, Navigate = () => null, RouteFallback = () => null;
+  const { default: GuestRoute } = load('components/ui/GuestRoute.jsx', {
+    react: { useEffect: effect => effects.push(effect), useState: initial => [status, next => { status = next; }] },
+    'react-router-dom': { Navigate: props => { redirects.push(props.to); return 'redirect'; }, Outlet },
+    '../../store/authStore': { authStore: () => ({ ...session, clearAuth() {}, setSession() {} }) },
+    '../../features/auth/api': { currentSessionRequest: async () => ({ user: {}, business: { onboardingCompleted: true } }) },
+    './RouteFallback': RouteFallback,
+  });
+  assert.equal(GuestRoute().type, Outlet);
+  session = { accessToken: 'just-signed-in', business: { onboardingCompleted: true } };
+  assert.equal(GuestRoute().type, RouteFallback);
+  assert.equal(redirects.length, 0, 'dashboard redirect must wait until session validation completes');
+  effects.at(-1)();
+  await flush();
+  assert.equal(status, 'ready');
+  assert.equal(GuestRoute().type.name, 'Navigate');
+  assert.deepEqual(redirects, [], 'JSX redirect renders with /dashboard after the validated session');
+});
+
 test('expired/used token shows an error without replaying consumption or redirecting to editor', async () => {
   const h = harness(true, true); const effect = h.render(); effect()(); effect(); await flush();
   assert.equal(h.calls(), 1); assert.equal(h.errors[0], 'Expired or used'); assert.equal(h.navigations.length, 0);
