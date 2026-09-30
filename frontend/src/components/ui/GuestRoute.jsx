@@ -44,7 +44,9 @@ const GuestRoute = () => {
     return <Outlet />;
   }
 
-  if (sessionStatus === "checking") {
+  // A newly issued token can render before the validation effect runs.
+  // Wait for validation so this guard cannot override the login destination.
+  if (sessionStatus !== "ready") {
     return <RouteFallback title="Loading session" />;
   }
 

@@ -157,7 +157,7 @@ test("stale persisted frontend business cannot decide onboarding before fresh se
 
   assert.match(protectedRoute, /sessionStatus === "checking"/);
   assert.match(protectedRoute, /setSession\(\{\s*accessToken,\s*user: data\.user,\s*business: data\.business/s);
-  assert.match(guestRoute, /sessionStatus === "checking"/);
+  assert.match(guestRoute, /sessionStatus !== "ready"/);
   assert.match(guestRoute, /setSession\(\{\s*accessToken,\s*user: data\.user,\s*business: data\.business/s);
 });
 

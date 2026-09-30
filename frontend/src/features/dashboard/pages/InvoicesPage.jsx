@@ -13,6 +13,8 @@ import gstStates from "../../../../../shared/indian-gst-states.json";
 import { previewInvoiceTaxRequest } from "../../auth/api";
 import { gstStates as customerGstStates, stateCodeFromGstin, updateCustomerGstFields, validateOptionalGstin } from "../gstIdentity";
 
+import { isInvoicePreviewReady } from "../invoicePreview";
+
 const today = () => new Date().toISOString().slice(0, 10);
 const makeLine = () => ({ productId: "", productName: "", quantity: 1, rate: "", taxRate: 0, hsnSac: "", gstClassification: "TAXABLE", discountType: "percent", discountValue: 0, saveForFuture: false });
 const makeForm = () => ({ customerId: "", invoiceDate: today(), dueDate: today(), shippingCharges: 0, roundOff: 0, notes: "", termsAndConditions: "", paymentMode: "unpaid", upfrontPaymentAmount: "", upfrontPaymentMethod: "BANK_TRANSFER", upfrontPaymentReference: "", lineItems: [makeLine()] });
@@ -118,7 +120,7 @@ const InvoicesPage = () => {
   useEffect(() => {
     let cancelled = false;
     setGstPreview(null); setGstPreviewError("");
-    if (!form.customerId || !showEditor) return;
+    if (!showEditor || !isInvoicePreviewReady(form)) return;
     const timer = setTimeout(() => previewInvoiceTaxRequest({ ...form, lineItems: form.lineItems.map(item => ({ ...item, productId: item.productId || undefined })) }).then(data => { if (!cancelled) { setGstPreview(data?.gstSnapshot || null); setGstPreviewError(""); } }).catch(error => { if (cancelled || error.response?.status === 404) return; setGstPreviewError(error.response?.data?.message || "GST preview unavailable"); }), 350);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [form, showEditor]);
